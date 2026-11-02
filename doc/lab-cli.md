@@ -260,7 +260,86 @@ per area mengikuti urutan di §2 — selalu kembali ke jangkar antar
 tahap. Lisensi CHR gratis membatasi throughput 1 Mbps, jadi fokuskan
 pada kebenaran fungsi.
 
-## 4. Yang belum terbukti — jangan diklaim
+## 4. Terapan dari panduan CLI — set IP /31, model PtP, dan hasil ping
+
+Bagian ini adalah bentuk terapan dari `panduan-cli.md`: sintaks yang
+benar-benar dipakai di lab, bukan contoh karangan. Modelnya: **PtP /31
+(RFC 3021)** — satu link hanya memakai 2 alamat, tanpa alamat network
+dan broadcast — dipadukan dengan **model PtP custom gaya MikroTik/PPP**:
+alamat lokal dan peer boleh sembarang, tidak harus satu subnet. Pasangan
+lab memakai model custom ini: lokal `203.0.113.77` dengan peer
+`10.44.55.66` (beda subnet), di atas link PtP terisolasi Debian↔CHR.
+
+### 4.1 Sesi CLI di Debian (sisi Titian)
+
+```
+sudo /usr/local/bin/titian
+show interfaces terse
+configure terminal
+interface ethernet enp9s0
+description "PtP ke CHR"
+ip address 203.0.113.77/31 peer 10.44.55.66
+exit
+end
+save
+```
+
+Penjelasan per baris:
+
+- `show interfaces terse` — pastikan `enp9s0` ada dan kenali namanya
+  sebelum dikonfigurasi.
+- `configure terminal` — masuk mode configure (bare `configure` saja
+  = Incompleted command).
+- `interface ethernet enp9s0` — masuk view interface tersebut.
+- `ip address 203.0.113.77/31 peer 10.44.55.66` — pasang alamat lokal
+  /31 + peer. Perintah ini langsung live; belum persisten sebelum `save`.
+- `exit` → keluar dari view interface; `end` → kembali ke exec;
+  `save` → tulis running-config ke startup-config (di exec, bukan di
+  dalam configure).
+
+Di sisi CHR (lawan), ether2 memegang alamat peer `10.44.55.66` sebagai
+pasangan dari `203.0.113.77` — pasangan bersilangan inilah yang membuat
+link PtP hidup.
+
+### 4.2 Perilaku per-OS di balik sintaks yang sama
+
+Sintaks yang diketik pengguna sama di kedua OS, tetapi implementasi di
+belakangnya berbeda — dan perbedaan ini ditemukan dari lab, bukan dari
+dokumen:
+
+- **Linux:** PtP diterapkan sebagai link point-to-point dengan peer
+  tersebut.
+- **FreeBSD:** PtP TIDAK memakai `dstaddr` (ifconfig mengabaikannya di
+  interface Ethernet broadcast → ping loss 100%). Bentuk yang benar dan
+  sudah diterapkan Titian: alamat lokal `/32` + route host ke peer via
+  interface, dengan persistensi yang sama di rc.conf.
+
+Jadi bila mengulang di FreeBSD, ketik sintaks `peer` yang sama — jangan
+coba meniru `dstaddr` manual.
+
+### 4.3 Verifikasi dan hasil ping lab
+
+```
+show interfaces ethernet enp9s0 detail
+show ip neighbor
+ping 10.44.55.66 repeat 4
+```
+
+Hasil yang tercatat di lab:
+
+- **Ping IPv4 Debian → CHR dan sebaliknya: 0% loss** (4/4 balasan pada
+  uji penghitung; ping lawan CHR 0% loss dua arah).
+- **Ping IPv6 ke CHR: dua arah 0% loss** untuk prefix `/127`, `/126`,
+  `/56`, dan `/64`.
+- Verifikasi dilakukan dari kedua sisi (guest Titian dan CHR), bukan
+  hanya dari satu sisi.
+
+Catatan kejujuran: hasil di atas adalah ringkasan hasil uji (jumlah
+balasan dan persentase loss), bukan salinan mentah output ping — nilai
+RTT per paket tidak dicatat sebagai bukti lab, sehingga tidak ditulis
+di sini.
+
+## 5. Yang belum terbukti — jangan diklaim
 
 - VXLAN multicast end-to-end.
 - BFD-over-BGP single-hop di atas interface management.
