@@ -1,0 +1,17 @@
+# TITIAN — rotasi log BIRD (Debian/logrotate).
+# Default: harian, simpan 3 arsip terkompresi (gzip) + file aktif.
+# Ubah sesuai keinginan: "daily" -> "weekly" untuk mingguan,
+# "rotate 3" -> jumlah arsip yang disimpan.
+/var/log/bird/bird.log {
+    daily
+    rotate 3
+    compress
+    missingok
+    notifempty
+    create 0644 bird bird
+    sharedscripts
+    postrotate
+        # BIRD membuka ulang file log saat reconfigure.
+        /usr/sbin/birdc configure >/dev/null 2>&1 || true
+    endscript
+}

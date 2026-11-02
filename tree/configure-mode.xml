@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+
+<VIEW name="configure-view"
+	prompt="cli-${SYSTEM_NAME}(config)# "
+	restore="depth">
+
+	<COMMAND name="end"
+            help="force return to enable-mode"
+            view="enable-view"
+            lock="false">
+      <CONFIG priority="0x9999"/>
+<!--        <ACTION>
+            echo "cmd: ${__cmd}"
+            echo "orig: ${__orig_cmd}"
+            echo "line: ${__line}"
+            echo "param: ${__params}"
+        </ACTION> -->
+	</COMMAND>
+
+<COMMAND name="exit"
+       help="Exit from configure mode"
+       view="enable-view">
+</COMMAND>
+
+<!-- Inheritance -->
+	<NAMESPACE ref="enable-view"
+		prefix="do"
+		help="true"
+		completion="true"/>
+
+	<COMMAND name="do"
+		help="To run exec commands in config mode"/>
+
+<!-- Virtual commands -->
+	<COMMAND name="no"
+		help="Negate a command or set its defaults"/>
+
+	<COMMAND name="interface"
+		help="Select an interface to configure"/>
+
+	<COMMAND name="ip"
+		help="Global IP configuration subcommands"/>
+
+	<COMMAND name="no ip"
+		help="Global IP configuration subcommands"/>
+
+	<COMMAND name="no interface"
+		help="Global no Interface conf subcommand"/>
+
+<!-- shortcut/alias cmd -->
+<HOTKEY key="^Z" cmd="end"/>
+
+
+</VIEW>
+
+</CLISH_MODULE>

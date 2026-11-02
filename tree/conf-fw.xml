@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                        http://clish.sourceforge.net/XMLSchema/clish.xsd">
+
+<!-- Firewall + NAT terpadu (Linux nftables + FreeBSD pf anchor titian).
+     Model: satu file netstate firewall.rules = sumber kebenaran; setiap
+     perubahan = tulis netstate + rebuild backend PENUH (flush + generate).
+     Rule diidentifikasi ISI (bukan ID): `no` form = sintaks lengkap yang
+     sama; duplikat = "sudah ada" (replay-safe). Semua field filter/snats
+     ditulis eksplisit (pakai `any` bila tidak peduli) agar baris
+     running-config KANONIS — `no` form hanya cocok bila barisnya sama.
+     SEMANTIK (baca sebelum pakai — lengkap di panduan §20):
+     - IPv4 SAJA v1. NAT first-match (nft) / quick (pf).
+     - Forward default DENY (nft policy drop + established/related;
+       pf trailing block per in-iface). Input/output default ACCEPT.
+     - Filter cocok pre-NAT untuk sumber, post-NAT untuk tujuan DNAT —
+       jadi DNAT selalu butuh forward permit ke tujuan TERJEMAHAN.
+     - Batas FreeBSD yang DITOLAK LANTANG: filter out-iface; filter
+       tanpa in/out iface; snat tanpa out; masquerade tanpa out;
+       dnat proto selain tcp/udp.
+     - Guard mgmt/PtP: iface rute default + daftar protected-ifaces
+       ditolak sebagai in/out (diisi uji lab; kosong default produk).
+     - Konflik NAT ditolak (snat (srcnet,out) / dnat (proto,in,dport)
+       sama target beda). Filter overlap diizinkan (urutan menang). -->
+
+<VIEW name="configure-view">
+    <COMMAND name="firewall"
+        help="Firewall + NAT (filter forward/input/output, snat, dnat) — IPv4 saja v1; forward default DENY, input/output default ACCEPT"
+        view="configure-firewall-view">
+        <CONFIG priority="0x2001" pattern="^${__line}$"/>
+    </COMMAND>
+    <COMMAND name="no firewall"
+        help="hapus SELURUH konfigurasi firewall (semua rule)">
+        <CONFIG operation="unset" pattern="^firewall$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh flush
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show firewall"
+        help="Daftar rule firewall/NAT (urutan = prioritas) + dump backend live + status forwarding">
+        <ACTION>${RT_SBIN}/titian-fw.sh show</ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-firewall-view"
+    prompt="${SYSTEM_NAME}(config-firewall)# "
+    depth="1">
+    <NAMESPACE ref="configure-view">
+        <COMMAND name="exit"
+            help="kembali ke configure-view"
+            view="configure-view"/>
+        <COMMAND name="end"
+            help="kembali ke enable-view"
+            view="enable-view"/>
+    </NAMESPACE>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="filter"
+        help="Aturan filter: chain + aksi + proto + src + dst + sport + dport + in + out (semua field wajib, pakai any bila tidak peduli; urutan dibuat = prioritas, pertama cocok menang)">
+        <PARAM name="chain"
+            help="forward (transit) | input (ke guest) | output (dari guest)"
+            ptype="FW_CHAIN"/>
+        <PARAM name="action"
+            help="permit (lolos) | deny (buang)"
+            ptype="FW_ACTION"/>
+        <PARAM name="proto"
+            help="proto"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="proto_val"
+                help="tcp | udp | icmp | all (all/icmp tidak memakai port)"
+                ptype="FW_PROTO"/>
+        </PARAM>
+        <PARAM name="src"
+            help="src"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="src_val"
+                help="sumber CIDR (contoh 198.51.100.0/24) atau any"
+                ptype="FW_CIDR_OR_ANY"/>
+        </PARAM>
+        <PARAM name="dst"
+            help="dst"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dst_val"
+                help="tujuan CIDR atau any"
+                ptype="FW_CIDR_OR_ANY"/>
+        </PARAM>
+        <PARAM name="sport"
+            help="sport"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="sport_val"
+                help="port sumber 1-65535 atau any (hanya tcp/udp)"
+                ptype="FW_PORT_OR_ANY"/>
+        </PARAM>
+        <PARAM name="dport"
+            help="dport"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dport_val"
+                help="port tujuan 1-65535 atau any (hanya tcp/udp)"
+                ptype="FW_PORT_OR_ANY"/>
+        </PARAM>
+        <PARAM name="in"
+            help="in"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="in_val"
+                help="interface masuk atau any (FreeBSD: WAJIB iface, any ditolak)"
+                ptype="FW_IFACE_OR_ANY"/>
+        </PARAM>
+        <PARAM name="out"
+            help="out"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="out_val"
+                help="interface keluar atau any (FreeBSD: WAJIB any, iface ditolak)"
+                ptype="FW_IFACE_OR_ANY"/>
+        </PARAM>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh add-filter "${chain}" "${action}" "${proto_val}" "${src_val}" "${dst_val}" "${sport_val}" "${dport_val}" "${in_val}" "${out_val}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no filter"
+        help="hapus aturan filter (sintaks lengkap sama dengan pembuatnya)">
+        <PARAM name="chain"
+            help="forward | input | output"
+            ptype="FW_CHAIN"/>
+        <PARAM name="action"
+            help="permit | deny"
+            ptype="FW_ACTION"/>
+        <PARAM name="proto"
+            help="proto"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="proto_val"
+                help="tcp | udp | icmp | all"
+                ptype="FW_PROTO"/>
+        </PARAM>
+        <PARAM name="src"
+            help="src"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="src_val"
+                help="sumber CIDR atau any"
+                ptype="FW_CIDR_OR_ANY"/>
+        </PARAM>
+        <PARAM name="dst"
+            help="dst"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dst_val"
+                help="tujuan CIDR atau any"
+                ptype="FW_CIDR_OR_ANY"/>
+        </PARAM>
+        <PARAM name="sport"
+            help="sport"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="sport_val"
+                help="port sumber atau any"
+                ptype="FW_PORT_OR_ANY"/>
+        </PARAM>
+        <PARAM name="dport"
+            help="dport"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dport_val"
+                help="port tujuan atau any"
+                ptype="FW_PORT_OR_ANY"/>
+        </PARAM>
+        <PARAM name="in"
+            help="in"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="in_val"
+                help="interface masuk atau any"
+                ptype="FW_IFACE_OR_ANY"/>
+        </PARAM>
+        <PARAM name="out"
+            help="out"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="out_val"
+                help="interface keluar atau any"
+                ptype="FW_IFACE_OR_ANY"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="^filter ${chain} ${action} proto ${proto_val} src ${src_val} dst ${dst_val} sport ${sport_val} dport ${dport_val} in ${in_val} out ${out_val}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh del-filter "${chain}" "${action}" "${proto_val}" "${src_val}" "${dst_val}" "${sport_val}" "${dport_val}" "${in_val}" "${out_val}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="snat"
+        help="Source NAT: trafik dari srcnet yang keluar via out diubah sumbernya ke target (alamat eksplisit atau masquerade = alamat iface keluar)">
+        <PARAM name="srcnet"
+            help="jaringan sumber CIDR (contoh 198.51.100.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="to"
+            help="to"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="to_val"
+                help="alamat IPv4 hasil NAT atau masquerade"
+                ptype="FW_SNAT_TARGET"/>
+        </PARAM>
+        <PARAM name="out"
+            help="out"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="out_val"
+                help="interface keluar atau any (FreeBSD: WAJIB iface; masquerade FreeBSD juga wajib iface)"
+                ptype="FW_IFACE_OR_ANY"/>
+        </PARAM>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh add-snat "${srcnet}" "${to_val}" "${out_val}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no snat"
+        help="hapus aturan snat (sintaks lengkap sama dengan pembuatnya)">
+        <PARAM name="srcnet"
+            help="jaringan sumber CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="to"
+            help="to"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="to_val"
+                help="alamat IPv4 hasil NAT atau masquerade"
+                ptype="FW_SNAT_TARGET"/>
+        </PARAM>
+        <PARAM name="out"
+            help="out"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="out_val"
+                help="interface keluar atau any"
+                ptype="FW_IFACE_OR_ANY"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="^snat ${srcnet} to ${to_val} out ${out_val}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh del-snat "${srcnet}" "${to_val}" "${out_val}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dnat"
+        help="Destination NAT / port forwarding: trafik masuk via in ke dport dialihkan ke alamat (+port) tujuan. BUTUH forward permit ke tujuan TERJEMAHAN agar lolos (filter melihat paket post-DNAT)">
+        <PARAM name="proto"
+            help="tcp | udp (icmp tidak memakai port, tidak didukung dnat)"
+            ptype="FW_DNAT_PROTO"/>
+        <PARAM name="in"
+            help="in"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="in_val"
+                help="interface masuk (wajib; dnat selalu terikat iface)"
+                ptype="IFACE_SYS"/>
+        </PARAM>
+        <PARAM name="dport"
+            help="dport"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dport_val"
+                help="port publik 1-65535"
+                ptype="DSTPORT"/>
+        </PARAM>
+        <PARAM name="to"
+            help="to"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="to_val"
+                help="alamat IPv4 tujuan"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <PARAM name="port"
+            help="port"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="toport_val"
+                help="port tujuan 1-65535 atau same (= port publik)"
+                ptype="FW_PORT_OR_SAME"/>
+        </PARAM>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh add-dnat "${proto}" "${in_val}" "${dport_val}" "${to_val}" "${toport_val}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dnat"
+        help="hapus aturan dnat (sintaks lengkap sama dengan pembuatnya)">
+        <PARAM name="proto"
+            help="tcp | udp"
+            ptype="FW_DNAT_PROTO"/>
+        <PARAM name="in"
+            help="in"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="in_val"
+                help="interface masuk"
+                ptype="IFACE_SYS"/>
+        </PARAM>
+        <PARAM name="dport"
+            help="dport"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dport_val"
+                help="port publik"
+                ptype="DSTPORT"/>
+        </PARAM>
+        <PARAM name="to"
+            help="to"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="to_val"
+                help="alamat IPv4 tujuan"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <PARAM name="port"
+            help="port"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="toport_val"
+                help="port tujuan atau same"
+                ptype="FW_PORT_OR_SAME"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="^dnat ${proto} in ${in_val} dport ${dport_val} to ${to_val} port ${toport_val}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-fw.sh del-dnat "${proto}" "${in_val}" "${dport_val}" "${to_val}" "${toport_val}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

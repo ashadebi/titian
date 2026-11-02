@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                        http://clish.sourceforge.net/XMLSchema/clish.xsd">
+
+<!-- show interfaces vxlan (Linux): status + VNI + local/remote atau
+     group + dstport + alamat + FDB ringkas, format seragam dengan
+     varian FreeBSD meski perintah asli beda (Linux: ip -d link show
+     + bridge fdb show; FreeBSD: ifconfig + sysctl ftable.dump). -->
+
+<VIEW name="enable-view">
+    <COMMAND name="show interfaces vxlan"
+        help="status VXLAN + VNI + local/remote + FDB"
+        lock="false"
+        interrupt="true">
+        <PARAM name="iface"
+            help="VXLAN interface (kosong = semua)"
+            completion="${Get_if_vxlan}"
+            optional="true"
+            ptype="IFACE_VXLAN"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh show "${iface}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

@@ -1,0 +1,5 @@
+#!/bin/sh
+# TITIAN — dibuka ulang file log BIRD sesudah newsyslog merotasi.
+# Dijalankan newsyslog sebagai root (flag R di titian-bird.conf).
+# BIRD membuka ulang file log saat reconfigure.
+/usr/local/sbin/birdc configure >/dev/null 2>&1 || true

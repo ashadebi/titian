@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- TITIAN Fase 1: dipisah dari en-show.xml (file ini hanya
+         diinstal di Linux; padanan FreeBSD di en-show-if-vlan-fbsd.xml
+         dan en-show-if-lagg.xml) -->
+
+<VIEW name="enable-view">
+<COMMAND name="show interfaces bonding"
+            help="Bonding status and configuration" 
+            lock="false"
+            interrupt="true">
+        <PARAM name="iface"
+                help="Interface bond"
+                completion="${Get_if_bond}"
+                ptype="IFACE_BOND"/>
+        <PARAM name="detail"
+                help="Detail information"
+                ptype="SUBCOMMAND"
+                mode="subcommand"
+                optional="true"
+                order="true"/>
+        <ACTION>
+            if test ! -z "${detail}"; then
+                cmd="cat /proc/net/bonding/${iface}"
+            else
+               Show_if(){
+                    printf "\n"
+                    ip -d link show ${iface}
+                    ip -d addr show ${iface} |grep inet |egrep -v "inet6"
+                    printf "\n"
+                }
+                cmd="Show_if"
+            fi
+                if test "x${iface}" != "x"; then
+                    if test -d "/sys/class/net/${iface}"; then
+                        $cmd
+                    fi
+                fi
+        </ACTION>
+     </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

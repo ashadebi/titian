@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+
+<VIEW name="info-view"
+      prompt="cli-${SYSTEM_NAME}> ">
+
+<!-- Inheritance -->
+
+	<NAMESPACE ref="ping-view"
+		help="true"
+		completion="true"/>
+
+<!-- Non-priveledged mode commands -->
+
+	<COMMAND name="enable"
+		help="Turn on privileged commands"
+		lock="false"
+		interrupt="true">
+		<ACTION>
+                    if test -f "/usr/bin/sudo"; then
+                        sudo /opt/titian/bin/clish -l -x /opt/titian/etc/clish-en
+                    else
+                        echo "sudo not installed.."
+                    fi
+                </ACTION>
+	</COMMAND>
+
+	<COMMAND name="logout"
+		help="Exit commands"
+            	lock="false">
+		<ACTION builtin="clish_close"/>
+	</COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

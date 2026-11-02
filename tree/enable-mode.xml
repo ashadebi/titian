@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+  <!--=======================================================-->
+<VIEW name="enable-view"
+     prompt="cli-${SYSTEM_NAME}# ">
+
+<!--//
+  bawa cmd-cmd dari NAMESPACE ref *, ke sini
+//-->
+  <NAMESPACE ref="ping-view" help="true" completion="true"/>
+  <NAMESPACE ref="syshw-view" help="true" completion="true"/>
+
+    <COMMAND name="help"
+             help="Display an overview of the RTCLI syntax">
+        <ACTION builtin="clish_overview"/>
+    </COMMAND>
+
+<!-- enable mode commands -->
+  <COMMAND name="logout"
+          help="Turn off privileged / Exit commands">
+  <ACTION builtin="clish_close"/>
+  </COMMAND>
+ <HOTKEY key="^Z" cmd="logout"/>
+
+  <!-- reboot -->
+  <COMMAND name="reboot"
+          help="Halt and perform a cold restart">
+    <ACTION>echo reboot</ACTION>
+  </COMMAND>
+
+<!--Enter configure mode-->
+  <COMMAND name="configure"
+          help="Enter configuration mode"/>
+  <COMMAND name="configure terminal"
+          help="Configure from the terminal"
+          view="configure-view">
+  </COMMAND>
+
+<!--// save running config, insert ver + track commit //-->
+  <COMMAND name="save"
+          help="Save running-config to startup-config">
+    <CONFIG operation="dump" file="/opt/titian/etc/startup-config"/>
+      <ACTION>
+            if test ! -S "${RT_SOCK}"; then
+                echo "error: socket not ready.."
+                echo "${RT_SOCK}"
+                exit 33
+            elif test -S "${RT_SOCK}"; then
+                ${RT_BIN}/konf -s "${RT_SOCK}" -- -s -l "! version ${RT_CONF_VER}" -r "^! version"
+                ${RT_BIN}/konf -s "${RT_SOCK}" -- -s -l "! last commit: `date`" -r "^! last" "! version ${RT_CONF_VER}"
+            fi
+            echo "Save running-config to startup-config.."; sleep 0.35
+            # Titik tersembunyi .last-save untuk `rollback` polos
+            # (kembali ke startup-config dengan fidelitas penuh:
+            # bird.conf + bird.d + netstate + sysctl ikut dipotret,
+            # karena `save` sendiri tidak memotretnya). Best-effort:
+            # gagal memotret TIDAK PERNAH menggagalkan save.
+            ${RT_SBIN}/titian-checkpoint.sh snapshot-last-save 2>/dev/null || echo "peringatan: snapshot .last-save gagal (save tetap berhasil)"
+      </ACTION>
+  </COMMAND>
+
+<!-- Bird view: diaktifkan kembali (dulu dikomentari di rtcli) -->
+    <COMMAND name="bird"
+               help="Enter bird"/>
+    <COMMAND name="bird terminal"
+               help="Enter bird terminal"
+               view="bird-view">
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

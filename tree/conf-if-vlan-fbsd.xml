@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- TITIAN Fase 1: padanan FreeBSD dari conf-if-vlan.xml.
+         FreeBSD menamai vlan sebagai vlan<N> (bukan parent.tag);
+         perintah: interface vlan <id> <parent>. -->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="interface vlan"
+        help="vlan interface"
+        view="configure-vlan-view"
+        viewid="iface=vlan${vlan_id}">
+        <PARAM name="vlan_id"
+            help="VLAN id 1-4094"
+            ptype="VLAN_ID"/>
+        <PARAM name="parent"
+            help="Parent interface"
+            completion="${Get_if_eth}"
+            ptype="IFACE_SYS"/>
+        <CONFIG priority="0x2200" pattern="^${__line}$"/>
+        <ACTION>
+            if ! ifconfig "${parent}" >/dev/null 2>&amp;1; then
+                printf "%s \n" "Error: interface ${parent} tidak ditemukan di sistem (lihat 'show interfaces' untuk daftar)."
+                exit 33
+            fi
+            if ! ifconfig "vlan${vlan_id}" >/dev/null 2>&amp;1; then
+                if ! ifconfig "vlan${vlan_id}" create vlan ${vlan_id} vlandev ${parent}; then
+                    printf "%s \n" "Error: gagal membuat vlan${vlan_id} pada ${parent}.."
+                    exit 33
+                fi
+                ${RT_SBIN}/titian-persist.sh mark-if "vlan${vlan_id}"
+            fi
+        </ACTION>
+    </COMMAND>
+
+<!-- no vlan config-->
+    <COMMAND name="no interface vlan"
+            help="delete vlan interface">
+            <PARAM name="vlan_id"
+                help="VLAN id 1-4094"
+                ptype="VLAN_ID"/>
+        <CONFIG operation="unset" pattern="interface vlan ${vlan_id} "/>
+        <ACTION>
+            if ifconfig "vlan${vlan_id}" >/dev/null 2>&amp;1; then
+                ifconfig "vlan${vlan_id}" destroy
+                ${RT_SBIN}/titian-persist.sh drop-if "vlan${vlan_id}"
+            else
+                printf "%s \n" "vlan${vlan_id} not found.."
+                exit 0
+            fi
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+<VIEW name="configure-vlan-view"
+    prompt="${SYSTEM_NAME}(config-vlan-${iface})# "
+    depth="1">
+    <COMMAND name="ipv6"
+        help="Interface IPv6 config commands"/>
+
+    <COMMAND name="no ipv6"
+        help="Negate IPv6 commands"/>
+
+
+<!-- Inheritance -->
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+<!-- configure-vlan-view commands -->
+    <COMMAND name="exit"
+        help="Exit from interface configuration mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="ip"
+        help="Interface Internet Protocol config commands"/>
+
+    <COMMAND name="no ip"
+        help="Interface Internet Protocol config commands"/>
+
+<!-- Enable/Disable -->
+    <COMMAND name="disable"
+          help="Disable the selected interface">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ifconfig ${iface} down
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable"
+        help="Enable the selected interface">
+        <CONFIG/>
+        <ACTION>
+            ifconfig ${iface} up
+        </ACTION>
+    </COMMAND>
+
+<!-- IP address -->
+    <COMMAND name="ip address"
+            help="Set the IP address of an interface">
+            <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ip address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ip address"
+           help="Delete IP address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="ip address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!-- IPv6 address (TITIAN Fase 1; tanpa peer di FreeBSD — gated) -->
+    <COMMAND name="ipv6 address"
+            help="Set the IPv6 address of an interface">
+            <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <CONFIG pattern="ipv6 address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-add "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ipv6 address"
+           help="Delete IPv6 address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <CONFIG operation="unset" pattern="ipv6 address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-del "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+            help="human-readable Alias link description">
+        <PARAM name="desc"
+              help="Description/Alias"
+              ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ifconfig ${iface} description "${desc}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mtu"
+              help="MTU: ukuran paket terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path.">
+            <PARAM name="mtu"
+                help="range 68-9000"
+                ptype="MTU"/>
+        <CONFIG pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu "${iface}" "${mtu}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no mtu"
+              help="Hapus setelan MTU Titian (kembali ke nilai sebelum di-set Titian (umumnya 1500); cermin bersih)">
+        <CONFIG operation="unset" pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu-del "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!-- Depth2 options FreeBSD (tso/lro/rx/tx via ifconfig) -->
+    <COMMAND name="options"
+            help="Offload parameter (tso/lro/rx/tx via ifconfig)"
+            view="configure-if-options-fbsd"
+            viewid="iface=${iface}">
+            <CONFIG pattern="^${__line}$"/>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

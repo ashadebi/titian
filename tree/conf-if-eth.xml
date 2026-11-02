@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="interface ethernet"
+        help="Ethernet IEEE 802.3"
+        view="configure-if-view"
+        viewid="iface=${iface_dev}">
+        <PARAM name="iface_dev"
+            help="Ethernet interface"
+            completion="${Get_if_eth}"
+            ptype="IFACE_SYS"/>
+        <CONFIG priority="0x2001" pattern="^${__line}$"/>
+            <ACTION>
+                # force check interface (keberadaan diperiksa di sini,
+                # bukan di PTYPE — PTYPE IFACE_SYS hanya memeriksa bentuk
+                # nama, sehingga interface hasil rename lolos validator
+                # dan ditolak di sini bila memang tidak ada di sistem).
+                if test ! -d "/sys/class/net/${iface_dev}"; then
+                    printf "%s \n" "Error: interface ${iface_dev} tidak ditemukan di sistem (lihat 'show interfaces' untuk daftar)."
+                    exit 33
+                fi
+                ${RT_SBIN}/titian-persist.sh mark-if "${iface_dev}"
+            </ACTION>
+    </COMMAND>
+</VIEW>
+
+
+<VIEW name="configure-if-view"
+	prompt="${SYSTEM_NAME}(config-if-${iface})# "
+	depth="1">
+    <COMMAND name="ipv6"
+        help="Interface IPv6 config commands"/>
+
+    <COMMAND name="no ipv6"
+        help="Negate IPv6 commands"/>
+
+<!-- Inheritance -->
+	<NAMESPACE ref="configure-view"
+		help="false"
+		completion="true"/>
+
+<!-- configure-if-view commands -->
+	<COMMAND name="exit"
+		help="Exit from interface configuration mode"
+		lock="false">
+		<ACTION builtin="clish_nested_up"/>
+	</COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+    
+	<COMMAND name="no"
+		help="Negate a command or set its defaults"/>
+
+	<COMMAND name="ip"
+		help="Interface Internet Protocol config commands"/>
+
+	<COMMAND name="no ip"
+		help="Interface Internet Protocol config commands"/>
+
+<!-- Enable/Disable -->
+    <COMMAND name="disable"
+            help="Disable the selected interface">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ip link set ${iface} down
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="enable"
+             help="Enable the selected interface">
+        <CONFIG/>
+        <ACTION>
+            ip link set ${iface} up
+        </ACTION>
+    </COMMAND>
+
+<!-- IP address -->
+    <COMMAND name="ip address"
+            help="Set the IP address of an interface">
+            <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ip address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ip address"
+           help="Delete IP address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="ip address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!-- IPv6 address (TITIAN Fase 1) -->
+    <COMMAND name="ipv6 address"
+            help="Set the IPv6 address of an interface">
+            <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IPv6 address"
+                ptype="IP6_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ipv6 address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ipv6 address"
+           help="Delete IPv6 address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IPv6 address"
+                ptype="IP6_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="ipv6 address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-del "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+            help="human-readable Alias link description">
+        <PARAM name="desc"
+              help="Description/Alias"
+              ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ip link set dev ${iface} alias "${desc}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mtu"
+              help="MTU: ukuran paket terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path (kalau tidak, paket besar di-drop/difragmentasi).">
+            <PARAM name="mtu"
+                help="range 68-9000"
+                ptype="MTU"/>
+        <CONFIG pattern="^mtu"/>
+        <ACTION>
+            if test -d "/sys/class/net/${iface}/master"; then
+                printf "%s \n" "Error: ${iface} mode is bond-group."
+                exit 33
+            else
+                ${RT_SBIN}/titian-tune.sh mtu "${iface}" "${mtu}"
+            fi
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no mtu"
+              help="Hapus setelan MTU Titian (kembali ke nilai sebelum di-set Titian (umumnya 1500); cermin bersih)">
+        <CONFIG operation="unset" pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu-del "${iface}"
+        </ACTION>
+    </COMMAND>
+
+
+    <COMMAND name="qlen"
+        help="Transmit Queue Length: panjang antrean kirim (live + persisten). Antrean besar menahan burst tapi menambah latensi antre (bufferbloat). Default 1000 (1G), 10000 (10G).">
+        <PARAM name="qlen_method"
+            help="Method qlen"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="1Gbit"
+                help="qlen 1000 for 1Gbe"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="10Gbit"
+                help="qlen 10000 for 10Gbe"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^qlen"/>
+        <ACTION>
+            if test "${qlen_method}" = "1Gbit"; then
+                ${RT_SBIN}/titian-tune.sh qlen "${iface}" 1000
+            elif test "${qlen_method}" = "10Gbit"; then
+                ${RT_SBIN}/titian-tune.sh qlen "${iface}" 10000
+            fi
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no qlen"
+        help="Hapus setelan qlen Titian (kembali ke nilai sebelum di-set Titian (umumnya 1000); cermin bersih)">
+        <CONFIG operation="unset" pattern="^qlen"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh qlen-del "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="speed"
+              help="Link speed + duplex yang dilaporkan driver (live + persisten). WAJIB untuk bonding 802.3ad di atas virtio: driver bonding butuh speed/duplex non-nol untuk kalkulasi LACP port key — tanpa ini slave MII down dan tidak ada LACPDU yang dikirim (log: failed to get link speed/duplex). Nilai arbitrer untuk link virtual, tapi HARUS sama di semua slave satu bond. Duplex default full bila tidak disebut.">
+            <PARAM name="speed_val"
+                help="speed Mb/s: 10, 100, 1000, 2500, 5000, 10000, 25000, 40000, 50000, 100000"
+                ptype="SPEED"/>
+        <PARAM name="duplex"
+                help="Duplex (default full)"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="duplex_val"
+                help="full atau half"
+                ptype="SUBCOMMAND"/>
+        </PARAM>
+        <CONFIG pattern="^speed"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh speed "${iface}" "${speed_val}" "${duplex_val}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no speed"
+              help="Hapus setelan speed Titian (persistensi dihapus; nilai live bertahan sampai reboot karena driver tidak punya operasi unset — lihat panduan)">
+        <CONFIG operation="unset" pattern="^speed"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh speed-del "${iface}"
+        </ACTION>
+    </COMMAND>
+
+
+    <COMMAND name="bond-group"
+            help="Assign interface to bonding group">
+        <PARAM name="bond_group"
+              help="Description/Alias"
+              completion="${Get_if_bond}"
+              ptype="IFACE_BOND"/>
+        <!-- recorded: replay must re-attach slaves after reboot (was CONFIG-empty: bond came back with no slaves) -->
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            if test ! -d "/sys/class/net/${bond_group}"; then
+                printf "%s \n" "Error: ${bond_group} not exist.."
+                exit 33
+            elif test -d "/sys/class/net/${bond_group}/lower_${iface}"; then
+                printf "%s \n" ${iface} already in group..
+                exit 33
+            else
+                ip link set ${bond_group} down
+                ip link set ${iface} down
+                echo "+${iface}" > "/sys/class/net/${bond_group}/bonding/slaves"
+                ip link set ${iface} up
+                ip link set ${bond_group} up
+                ${RT_SBIN}/titian-persist.sh bond-if "${iface}" "${bond_group}"
+            fi
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bond-group"
+            help="remove interface to bonding group">        
+    <PARAM name="bond_group"
+              help=""
+              completion="${Get_if_bond}"
+              ptype="IFACE_BOND"/>
+        <CONFIG operation="unset" pattern="^bond-group"/>
+        <ACTION>
+            if test ! -d "/sys/class/net/${bond_group}"; then
+                printf "%s \n" "Error: ${bond_group} not exist.."
+                exit 33
+            elif test ! -d "/sys/class/net/${bond_group}/lower_${iface}"; then
+                printf "%s \n" "Error: ${iface} not in group.."
+                exit 33
+            else
+                echo "-${iface}" > /sys/class/net/${bond_group}/bonding/slaves
+                ${RT_SBIN}/titian-persist.sh unbond-if "${iface}"
+            fi
+        </ACTION>
+    </COMMAND>
+
+<!-- Depth2 options, file: conf-if-eth-opt.xml -->
+    <COMMAND name="options"
+            help="Depth Coalesce and Features parameter"
+            view="configure-if-options"
+            viewid="iface=${iface}">
+            <CONFIG pattern="^${__line}$"/>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

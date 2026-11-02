@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- View options FreeBSD (padanan conf-if-eth-opt.xml Linux).
+         Hanya fitur yang punya padanan ifconfig: tso/lro/rx/tx.
+         gro/gso/sg/coalesce/qlen TIDAK punya padanan generik di
+         FreeBSD sehingga tidak dibuat perintahnya (ditolak bersih
+         bila dicoba lewat helper). Semua perintah lewat
+         titian-tune.sh: live + tercatat di netstate/<iface>.tuning
+         + cermin rc.conf (blok #-TITIAN-#). Bentuk `no <fitur>`
+         mengembalikan default konvensional dan membersihkan cermin.
+         Hanya diinstal di FreeBSD. -->
+
+<VIEW name="configure-if-options-fbsd"
+    prompt="${SYSTEM_NAME}(config-if-${iface}-options)# "
+    depth="2">
+
+<!-- Inheritance -->
+    <NAMESPACE ref="configure-if-view"
+        help="false"
+        completion="true"/>
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Exit from interface configuration mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+
+    <COMMAND name="tso"
+        help="TSO (TCP segmentation offload, ifconfig tso/-tso): NIC memotong segmen TCP besar jadi paket MTU. Efek: hemat CPU untuk trafik yang berasal dari box ini; tidak memengaruhi paket yang di-forward. Tradeoff: off hanya bila dicurigai bug driver/NIC. Default: on (bila didukung driver).">
+        <PARAM name="tso_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^tso"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" tso "${tso_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no tso"
+        help="Hapus setelan TSO Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^tso"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" tso
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="lro"
+        help="LRO (large receive offload, ifconfig lro/-lro): HARDWARE menggabung paket receive. Efek: hemat CPU receive. Tradeoff: HARUS off di router/bridge — agregasi hardware bisa merusak semantik forwarding. Default: off.">
+        <PARAM name="lro_method"
+            help="on = aktif | off = nonaktif (default untuk router)"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="Default off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^lro"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" lro "${lro_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no lro"
+        help="Hapus setelan LRO Titian (kembali ke nilai sebelum di-set Titian (umumnya off); cermin bersih)">
+        <CONFIG operation="unset" pattern="^lro"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" lro
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rx"
+        help="RX checksumming (ifconfig rxcsum/-rxcsum): NIC menghitung checksum paket masuk. Efek: hemat CPU receive. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug checksum driver. Default: on (bila didukung driver).">
+        <PARAM name="rx_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <!-- pola pakai spasi akhir agar tidak menyentuh baris lain -->
+        <CONFIG pattern="^rx "/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" rx "${rx_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no rx"
+        help="Hapus setelan RX checksumming Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^rx "/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" rx
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tx"
+        help="TX checksumming (ifconfig txcsum/-txcsum): NIC menghitung checksum paket keluar. Efek: hemat CPU transmit. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug checksum driver. Default: on (bila didukung driver).">
+        <PARAM name="tx_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^tx"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" tx "${tx_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no tx"
+        help="Hapus setelan TX checksumming Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^tx"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" tx
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

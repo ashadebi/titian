@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+<!--=======================================================
+TITIAN — rename interface sistem (view exec, bukan configure view,
+karena ini operasi, bukan konfigurasi — mengikuti pola save /
+checkpoint / rollback).
+
+`rename <lama> <baru>` mengganti nama interface sistem di OS +
+memigrasikan seluruh state Titian yang keyed by name (netstate,
+cermin networkd/rc.conf, section + referensi di startup-config),
+lalu restart service (replay) — PERSISTEN seperti rollback:
+startup-config ditulis ulang + aturan boot ditulis (Linux: .link
+berdasarkan MAC; FreeBSD: ifconfig_<asal>_name di rc.conf), jadi
+rename bertahan melewati reboot untuk interface persisten (NIC
+nyata, MAC stabil). Objek runtime (dummy/epair/vlan) hilang saat
+reboot bersama objeknya — itu sifat objeknya, bukan rename.
+
+ATURAN AMAN (lihat header titian-rename.sh untuk detail):
+  - lama harus ada di sistem; baru belum dipakai sistem;
+    baru lolos charset IFACE_SYS; lama != baru.
+  - DITOLAK: objek Titian (bond/vxlan/lagg/vlan), loopback
+    (lo/lo0/lo[N]), nama bertitik — hapus + buat ulang, bukan rename.
+  - DITOLAK bila startup-config tidak ada (jalankan `save` dulu).
+  - DIIZINKAN: interface UP beralamat (siklus down -> rename -> up;
+    alamat/route melekat ke ifindex, selamat), slave bond, member
+    lagg, parent vlan (referensi ditulis ulang; perangkat vlan Linux
+    TIDAK mengikuti rename parent — link-nya ifindex, bukan nama).
+  - JANGAN rename interface mgmt/produksi: perintah ini tidak tahu
+    interface mana yang mgmt; interupsi down/up sesaat + salah nama
+    bisa memutus akses remote. Itu tanggung jawab operator.
+  - Sesi CLI terputus saat restart (sama seperti rollback): sambung
+    lagi, verifikasi dengan `show interfaces` / `show running-config`.
+  - bird.conf tidak disentuh; checkpoint lama tidak ditulis ulang.
+=======================================================-->
+
+<VIEW name="enable-view">
+
+    <COMMAND name="rename"
+             help="Rename interface sistem + migrasi state Titian (PERSISTEN + restart service). Contoh: rename wan0 xxve9. JANGAN rename interface mgmt/produksi">
+        <PARAM name="old"
+               help="Nama interface sekarang (lihat 'show interfaces'; Tab/? untuk daftar)"
+               completion="${Get_if_eth}"
+               ptype="IFACE_SYS"/>
+        <PARAM name="new"
+               help="Nama baru (charset IFACE_SYS; belum dipakai sistem; bukan bond/vxlan/lagg/vlan/lo)"
+               ptype="IFACE_SYS"/>
+        <ACTION>${RT_SBIN}/titian-rename.sh "${old}" "${new}"</ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

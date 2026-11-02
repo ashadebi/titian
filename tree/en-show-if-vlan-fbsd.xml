@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- TITIAN Fase 1: padanan FreeBSD dari en-show-if-vlan.xml
+         (nama vlan<N>). Hanya diinstal di FreeBSD. -->
+
+<VIEW name="enable-view">
+
+    <COMMAND name="show interfaces vlan"
+            help="Vlan status and configuration"
+            lock="false"
+            interrupt="true">
+        <PARAM name="iface"
+                help="Interface vlan"
+                completion="${Get_if_vlan}"
+                ptype="IFACE_VLAN_FBSD"/>
+        <PARAM name="detail"
+                help="Detail information"
+                ptype="SUBCOMMAND"
+                mode="subcommand"
+                optional="true"
+                order="true"/>
+        <ACTION>
+            if test ! -z "${detail}"; then
+                ${RT_SBIN}/titian-show.sh if-detail "${iface}" detail
+            else
+                ${RT_SBIN}/titian-show.sh if-detail "${iface}"
+            fi
+        </ACTION>
+     </COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

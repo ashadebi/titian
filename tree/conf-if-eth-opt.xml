@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- View options (Linux saja, warisan rtcli). Semua perintah
+         tuning di sini lewat titian-tune.sh: live + tercatat di
+         netstate/<iface>.tuning + cermin persistensi (replay
+         startup-config + apply-all boot). Bentuk `no <fitur>`
+         mengembalikan default konvensional (lihat help tiap
+         perintah) dan membersihkan cermin.
+         PERBAIKAN dari versi lama: (1) perintah `tx` dulu memakai
+         PARAM rx_method tapi ACTION membaca tx_method sehingga
+         selalu no-op diam-diam — kini param konsisten; (2) rx-usecs
+         dulu memakai SEQ (menolak 0 padahal help bilang 0=no limit)
+         — kini UINT + validasi 0-1000 di helper. -->
+
+<VIEW name="configure-if-options"
+    prompt="${SYSTEM_NAME}(config-if-${iface}-options)# "
+    depth="2">
+
+<!-- Inheritance -->
+    <NAMESPACE ref="configure-if-view"
+        help="false"
+        completion="true"/>
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Exit from interface configuration mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+<!--
+    <HOTKEY key="^Z" cmd="exit"/>
+ -->
+
+<!--// config disable reset
+    <COMMAND name="no smp_affinity"
+            help="Disable the selected interface">
+        <CONFIG operation="unset" pattern="^smp_affinity"/>
+        <ACTION></ACTION>
+    </COMMAND>
+//-->
+
+    <COMMAND name="smp_affinity_XPS"
+        help="Set CPU interrupt affinity XPS enable">
+        <PARAM name="aff_method"
+            help="Method affinity"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="auto"
+                help="Automatic CPU affinity XPS Enable"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="core"
+                help="Ex: 4 | 0-3 | 12-19 w/ XPS Enable"
+                ptype="CPU_CORE"/>
+        </PARAM>
+        <CONFIG pattern="^smp_affinity"/>
+        <ACTION>
+            if test "${aff_method}" = "auto"; then
+                ${RT_SBIN}/set_irq_affinity.sh -x local ${iface}
+            elif test "${aff_method}" = "core"; then
+                ${RT_SBIN}/set_irq_affinity.sh -x ${core} ${iface}
+            fi
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="smp_affinity"
+        help="Set CPU interrupt affinity mask">
+        <PARAM name="aff_method"
+            help="Method affinity"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="auto"
+                help="Automatic CPU affinity XPS Disable"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="core"
+                help="Ex: 4 | 0-3 | 12-19 w/ XPS Disable"
+                ptype="CPU_CORE"/>
+        </PARAM>
+        <CONFIG pattern="^smp_affinity"/>
+        <ACTION>
+            if test "${aff_method}" = "auto"; then
+                ${RT_SBIN}/set_irq_affinity.sh local ${iface}
+            elif test "${aff_method}" = "core"; then
+                ${RT_SBIN}/set_irq_affinity.sh ${core} ${iface}
+            fi
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tso"
+        help="TSO (TCP segmentation offload): NIC memotong segmen TCP besar jadi paket MTU. Efek: hemat CPU untuk trafik yang berasal dari box ini; tidak memengaruhi paket yang di-forward. Tradeoff: hampir tidak ada untuk router; off hanya bila dicurigai bug driver/NIC. Default: on.">
+        <PARAM name="tso_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^tso"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" tso "${tso_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no tso"
+        help="Hapus setelan TSO Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^tso"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" tso
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="gro"
+        help="GRO (generic receive offload): kernel menggabung paket-paket receive searah jadi satu segmen besar. Efek: hemat CPU receive. Tradeoff: aman untuk router (software, berbeda dengan LRO hardware). Default: on.">
+        <PARAM name="gro_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^gro"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" gro "${gro_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no gro"
+        help="Hapus setelan GRO Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^gro"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" gro
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="lro"
+        help="LRO (large receive offload): HARDWARE menggabung paket receive. Efek: hemat CPU receive. Tradeoff: HARUS off di router/bridge — agregasi hardware bisa merusak semantik forwarding (paket yang harus diteruskan apa adanya ikut digabung). Pakai GRO sebagai gantinya. Default: off.">
+        <PARAM name="lro_method"
+            help="on = aktif | off = nonaktif (default untuk router)"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="Default off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^lro"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" lro "${lro_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no lro"
+        help="Hapus setelan LRO Titian (kembali ke nilai sebelum di-set Titian (umumnya off); cermin bersih)">
+        <CONFIG operation="unset" pattern="^lro"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" lro
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="gso"
+        help="GSO (generic segmentation offload): versi software dari TSO di kernel. Efek: hemat CPU untuk trafik yang berasal dari box ini. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug. Default: on.">
+        <PARAM name="gso_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^gso"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" gso "${gso_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no gso"
+        help="Hapus setelan GSO Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^gso"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" gso
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rx"
+        help="RX checksumming: NIC menghitung checksum paket masuk. Efek: hemat CPU receive. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug checksum driver. Default: on.">
+        <PARAM name="rx_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <!-- pola pakai spasi akhir (^rx ) agar tidak ikut menghapus
+             baris rx-usecs -->
+        <CONFIG pattern="^rx "/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" rx "${rx_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no rx"
+        help="Hapus setelan RX checksumming Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^rx "/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" rx
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tx"
+        help="TX checksumming: NIC menghitung checksum paket keluar. Efek: hemat CPU transmit. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug checksum driver. Default: on.">
+        <PARAM name="tx_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^tx"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" tx "${tx_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no tx"
+        help="Hapus setelan TX checksumming Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^tx"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" tx
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="sg"
+        help="Scatter-gather: NIC mengirim dari banyak buffer memori sekaligus. Efek: prasyarat TSO/GSO; tanpa ini offload segmentasi tidak jalan. Tradeoff: hampir tidak ada. Default: on.">
+        <PARAM name="sg_method"
+            help="on = aktif (default) | off = nonaktif"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="Default on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^sg"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload "${iface}" sg "${sg_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no sg"
+        help="Hapus setelan scatter-gather Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        <CONFIG operation="unset" pattern="^sg"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh offload-del "${iface}" sg
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rx-usecs"
+            help="RX-usecs: jeda tunda interupsi receive dalam mikrodetik (coalescing). Efek: nilai besar = interupsi lebih jarang (hemat CPU, latensi naik); 0 = interupsi segera (latensi terendah, CPU tertinggi). Tradeoff: throughput vs latensi. Umum: 125. Default driver (biasanya 0-125 tergantung driver).">
+        <PARAM name="rx-usecval"
+            help="range: 0 - 1000, best: 125"
+            ptype="UINT"/>
+        <CONFIG pattern="^rx-usecs"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh coalesce "${iface}" rx-usecs "${rx-usecval}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no rx-usecs"
+        help="Hapus setelan rx-usecs Titian (kembali ke nilai sebelum di-set Titian (umumnya 0 = interupsi segera); cermin bersih)">
+        <CONFIG operation="unset" pattern="^rx-usecs"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh coalesce-del "${iface}" rx-usecs
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="adaptive-rx"
+        help="Adaptive RX: driver menyesuaikan rx-usecs otomatis mengikuti beban (naik saat sibuk, turun saat sepi). Efek: kompromi otomatis throughput vs latensi. Tradeoff: latensi jadi tidak deterministik — matikan bila latensi harus stabil. Default: off.">
+        <PARAM name="arx_method"
+            help="on = aktif | off = nonaktif (default)"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="on"
+                help="on"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="off"
+                help="default off"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG pattern="^adaptive-rx"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh coalesce "${iface}" adaptive-rx "${arx_method}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no adaptive-rx"
+        help="Hapus setelan adaptive-rx Titian (kembali ke nilai sebelum di-set Titian (umumnya off); cermin bersih)">
+        <CONFIG operation="unset" pattern="^adaptive-rx"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh coalesce-del "${iface}" adaptive-rx
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

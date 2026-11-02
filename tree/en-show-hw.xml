@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+        <!--=======================================================-->
+
+<VIEW name="syshw-view"
+        prompt="${SYSTEM_NAME}# ">
+
+<!-- virtual commands (show system di bawah ini BUKAN virtual lagi:
+     punya ACTION ringkasan, sekaligus tetap jadi induk subcommand) -->
+        <COMMAND name="show system"
+                help="Show system information"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh summary
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show hardware"
+                help="Show system hardware details"/>
+        
+<!--sys commands-->
+        <COMMAND name="show system sysctl"
+                help="Sysctl values managed by Titian + meaning"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sysctl.sh show
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show system date"
+                help="Display system date/time"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    date
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show system process"
+                help="Display system process"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh process
+                </ACTION>
+		</COMMAND>
+        <COMMAND name="show system memory"
+                help="Display system memory usage"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh memory
+                </ACTION>
+        </COMMAND>
+                <COMMAND name="show system uptime"
+                help="Show how long the system has been up"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    uptime
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show system top"
+                help="just Top command w/ pattern"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    top -b -n 1 |sed -n "/^top/,/Mem$/p"
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show system login"
+                help="Show users login information"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    w -h
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show system connections"
+                help="Show active network connections on the system"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh connections
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show system storage"
+                help="Show filesystem usage"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    df -h
+                </ACTION>
+        </COMMAND>
+
+<!--hw commands-->
+        <COMMAND name="show hardware cpu"
+                help="Show CPU info"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh cpu
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show hardware pci"
+                help="Show system PCI bus details"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh pci
+                </ACTION>
+        </COMMAND>
+        <COMMAND name="show hardware dmi"
+                help="Show system DMI details"
+                lock="false"
+                interrupt="true">
+                <ACTION>
+                    ${RT_SBIN}/titian-sys.sh dmi
+                </ACTION>
+        </COMMAND>
+
+
+</VIEW>
+</CLISH_MODULE>

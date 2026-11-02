@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="/opt/titian/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="/opt/titian/XMLSchema/clish.xsd">
+<!--=======================================================-->
+	<OVERVIEW>
+CONTEXT SENSITIVE HELP
+[?] - Display context sensitive help. This is either a list of possible
+
+HOTKEYS
+[CTRL-z] - Logout of the current session.
+    </OVERVIEW>
+	<STARTUP timeout="1800" view="enable-view">
+		<DETAIL>
+	    </DETAIL>
+		<ACTION>
+			${RT_SBIN}/titian-sysinfo.sh
+		</ACTION>
+	</STARTUP>
+
+<!--#######################################################################-->
+<!-- Get hostname -->
+<VAR name="SYSTEM_NAME" help="Get hostname" dynamic="true">
+	<ACTION>printf "%s" $(hostname)</ACTION>
+</VAR>
+<!--#######################################################################-->
+<VAR name="Get_nameservers" help="Get hostname" dynamic="true">
+	<ACTION>grep nameserver /etc/resolv.conf 2>/dev/null |awk '{print $2}'; grep -h '^DNS=' /etc/systemd/resolved.conf.d/titian.conf 2>/dev/null |cut -d= -f2- |tr ' ' '\n' |grep -v '^$'</ACTION>
+</VAR>
+<!--#######################################################################-->
+<!--Get ethX aja (per OS lewat helper: Linux /sys, FreeBSD ifconfig) -->
+<VAR name="Get_if_eth" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh eth
+	</ACTION>
+</VAR>
+
+<!--Get Vlan aja -->
+<VAR name="Get_if_vlan" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh vlan
+	</ACTION>
+</VAR>
+
+<!--Get dummy aja-->
+<VAR name="Get_if_dummy" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh dummy
+	</ACTION>
+</VAR>
+
+<!--Get bonding interface -->
+<VAR name="Get_if_bond" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh bond
+	</ACTION>
+</VAR>
+
+<!--Get lagg interface (FreeBSD) -->
+<VAR name="Get_if_lagg" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh lagg
+	</ACTION>
+</VAR>
+
+<!--Get vxlan interface -->
+<VAR name="Get_if_vxlan" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh vxlan
+	</ACTION>
+</VAR>
+
+<!--Get all interface -->
+<VAR name="Get_if_all" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh all
+	</ACTION>
+</VAR>
+
+<!--// 
+	var var an.
+//-->
+
+<VAR name="RT_ROOT" help="root dir install" dynamic="false">
+	<ACTION>printf "%s" "/opt/titian"</ACTION>
+</VAR>
+<VAR name="RT_DB" help="debug dir prosessing scripts" dynamic="false">
+	<ACTION>printf "%s" "/opt/titian/etc/db"</ACTION>
+</VAR>
+<VAR name="RT_BIN" help="binary dir (klish)" dynamic="false">
+	<ACTION>printf "%s" "/opt/titian/bin"</ACTION>
+</VAR>
+<VAR name="RT_SBIN" help="scripts dir" dynamic="false">
+	<ACTION>printf "%s" "/opt/titian/sbin"</ACTION>
+</VAR>
+<VAR name="RT_SOCK" help="konfd socks file" dynamic="false">
+	<ACTION>printf "%s" "/tmp/konfd.socket"</ACTION>
+</VAR>
+
+<!--// Get klish core version //-->
+<VAR name="RT_CONF_VER" help="static ver" dynamic="false">
+	<ACTION>printf "%s" "core: $(${RT_BIN}/konf -v)"</ACTION>
+</VAR>
+
+</CLISH_MODULE>

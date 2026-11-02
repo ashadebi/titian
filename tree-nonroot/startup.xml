@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+
+<STARTUP view="info-view">
+		<DETAIL>
+*********************************************
+*                                           *
+*      WARNING: Authorised Access Only      *
+*                                           *
+*********************************************
+        </DETAIL>
+		<ACTION>
+                        echo "Welcome `whoami` it is `date`"
+			echo 
+			lastlog -u `whoami` 2>/dev/null || last `whoami` 2>/dev/null | head -5
+		</ACTION>
+	</STARTUP>
+
+<!-- coba coba -->
+<VAR name="SYSTEM_NAME" help="Get hostname" dynamic="true">
+<ACTION>echo -n `hostname`</ACTION>
+</VAR>
+
+</CLISH_MODULE>

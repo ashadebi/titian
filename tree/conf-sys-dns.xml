@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="system domain-name"
+        help="Set system domain name">
+        <PARAM name="domain"
+            help="ex: gmedia.net.id"
+            ptype="STRING"/>
+        <CONFIG priority="0x1010" splitter="true"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh dns-domain "${domain}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no system domain-name"
+        help="Remove system domain name">
+        <CONFIG operation="unset" pattern="^system domain-name"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh dns-domain-clear
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="system name-servers"
+            help="Domain Name Server (resolvers)"
+            view="configure-ns-view"
+            viewid="sysview=ns"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <CONFIG priority="0x1011" pattern="^${__line}$"/>
+    </COMMAND>
+</VIEW>
+
+
+<VIEW name="configure-ns-view"
+    prompt="${SYSTEM_NAME}(config-system-${sysview})# "
+    depth="1">
+
+<!-- Inheritance -->
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Exit configuration mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+<!-- IP resolvers -->
+    <COMMAND name="nameserver"
+            help="resolvers ip address">
+            <PARAM name="ip"
+                  help="IP address"
+                  ptype="IP_ADDR"/>
+        <CONFIG pattern="nameserver ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh dns-ns-add "${ip}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no nameserver"
+            help="">
+            <PARAM name="ip"
+                  help="IP address"
+                  completion="${Get_nameservers}"
+                  ptype="IP_ADDR"/>
+        <CONFIG operation="unset" pattern="nameserver ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh dns-ns-del "${ip}"
+        </ACTION>
+    </COMMAND>
+
+
+</VIEW>
+
+</CLISH_MODULE>

@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--===========================
+http://backdrift.org/manage-linux-bonding-without-ifenslave-using-sysfs
+echo "+${iface_bon}" >  /sys/class/net/bonding_masters
+echo "-${iface_bon}" >  /sys/class/net/bonding_masters
+
+# mode terkunci jika masih ada slave yg aktif, (remove slaves)
+    ============================-->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="interface bonding"
+        help="Link aggregation"
+        view="configure-bond-view"
+        viewid="iface=${iface_bon}">
+        <PARAM name="iface_bon"
+            help="Bonding interface"
+            completion="${Get_if_bond}"
+            ptype="IFACE_BOND"/>
+        <CONFIG priority="0x2001" pattern="^${__line}$"/>
+        <ACTION>
+            # force check interface.
+            if test ! -f "/sys/class/net/bonding_masters"; then
+                printf "%s \n" "[loading modules]"
+                modprobe bonding max_bonds=0 mode=4 miimon=100 lacp_rate=0
+            fi
+            if test ! -d "/sys/class/net/${iface_bon}"; then
+                ip link add name ${iface_bon} type bond
+                ip link set ${iface_bon} down
+                ${RT_SBIN}/titian-persist.sh mark-if "${iface_bon}"
+            fi
+        </ACTION>
+    </COMMAND>
+
+        <COMMAND name="no interface bonding"
+                help="delete interface loopback">
+                <PARAM name="iface_bon"
+                        help=""
+                        completion="${Get_if_bond}"
+                        ptype="IFACE_BOND"/>
+                <CONFIG operation="unset" pattern="interface bonding ${iface_bon}$"/>
+                <ACTION>
+                    # Real running config
+                    if test -f "/proc/net/bonding/${iface_bon}"; then
+                        egrep "^Slave In" /proc/net/bonding/${iface_bon}
+                        Rval=$?
+                        if [ "$Rval" -eq 0 ]; then
+                            printf "%s \n" "Error: [slave lock]"
+                            exit 33
+                        fi
+                    fi
+
+                    # pass.
+                    if test -d "/sys/class/net/${iface_bon}"; then
+                        ip link del dev ${iface_bon}
+                        ${RT_SBIN}/titian-persist.sh drop-if "${iface_bon}"
+                    else
+                        printf "%s \n" "${iface_bon} not found."
+                    fi
+                </ACTION>
+        </COMMAND>
+
+</VIEW>
+
+
+<VIEW name="configure-bond-view"
+    prompt="${SYSTEM_NAME}(config-bonding-${iface})# "
+    depth="1">
+    <COMMAND name="ipv6"
+        help="Interface IPv6 config commands"/>
+
+    <COMMAND name="no ipv6"
+        help="Negate IPv6 commands"/>
+
+
+<!-- Inheritance -->
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+<!-- configure-if-view commands -->
+    <COMMAND name="exit"
+        help="Exit from interface configuration mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="ip"
+        help="Interface Internet Protocol config commands"/>
+
+    <COMMAND name="no ip"
+        help="Interface Internet Protocol config commands"/>
+
+<!-- Enable/Disable -->
+    <COMMAND name="disable"
+            help="Disable the selected interface">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ip link set ${iface} down
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="enable"
+             help="Enable the selected interface">
+        <CONFIG/>
+        <ACTION>
+            ip link set ${iface} up
+        </ACTION>
+    </COMMAND>
+
+<!-- IP address -->
+    <COMMAND name="ip address"
+            help="Set the IP address of an interface">
+            <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ip address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ip address"
+           help="Delete IP address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="ip address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!-- IPv6 address (TITIAN Fase 1) -->
+    <COMMAND name="ipv6 address"
+            help="Set the IPv6 address of an interface">
+            <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IPv6 address"
+                ptype="IP6_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ipv6 address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ipv6 address"
+           help="Delete IPv6 address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IPv6 address"
+                ptype="IP6_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="ipv6 address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-del "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+            help="human-readable Alias link description">
+        <PARAM name="desc"
+              help="Description/Alias"
+              ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ip link set dev ${iface} alias "${desc}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mtu"
+              help="MTU: ukuran paket terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path.">
+            <PARAM name="mtu"
+                help="range 68-9000"
+                ptype="MTU"/>
+        <CONFIG pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu "${iface}" "${mtu}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no mtu"
+              help="Hapus setelan MTU Titian (kembali ke nilai sebelum di-set Titian (umumnya 1500); cermin bersih)">
+        <CONFIG operation="unset" pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu-del "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!-- Depth2 options, view yang sama dengan ethernet (offload/coalesce
+     lewat ethtool juga berlaku untuk device bonding) -->
+    <COMMAND name="options"
+            help="Depth Coalesce and Features parameter"
+            view="configure-if-options"
+            viewid="iface=${iface}">
+            <CONFIG pattern="^${__line}$"/>
+    </COMMAND>
+
+    <COMMAND name="mode"
+              help="Bonding mode">
+        <PARAM name="mode_method"
+            help=""
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="802.3ad"
+                    help="IEEE 802.3ad Dynamic link aggregation (LACP)"
+                    mode="subcommand"
+                    ptype="SUBCOMMAND"/>
+            <PARAM name="balance-rr"
+                    help="Round-robin policy"
+                    mode="subcommand"
+                    ptype="SUBCOMMAND"/>
+            </PARAM>
+        <!-- recorded: replay must restore the mode after reboot (was CONFIG-empty) -->
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+           # stat  slaves trap.
+            Cur_stat=`ip -o -d link show ${iface} |grep UP`
+            Ret_val=$?
+                if [ "$Ret_val" -eq 0 ]; then
+                    ip link set ${iface} down
+                fi
+            Cur_slave=`cat /sys/class/net/${iface}/bonding/slaves`
+                if [ ! -z "$Cur_slave" ]; then
+                    printf "%s \n" "Error: ${iface} slave exist: $Cur_slave"
+                    exit 33
+                fi
+
+            # pass
+            if test "${mode_method}" = "802.3ad"; then
+                echo 4 > /sys/class/net/${iface}/bonding/mode
+            elif test "${mode_method}" = "balance-rr"; then
+                echo 0 > /sys/class/net/${iface}/bonding/mode
+            fi
+            ip link set ${iface} up
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="hash-policy"
+              help="Bonding transmit hash policy">
+            <PARAM name="layer2"
+                help="use MAC addresses to generate the hash (802.3ad)"
+                mode="subcommand"
+                ptype="SUBCOMMAND"/>
+        <!-- recorded: replay must restore the hash policy after reboot (was CONFIG-empty) -->
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+           # stat  slaves trap.
+            Cur_slave=`cat /sys/class/net/${iface}/bonding/slaves`
+                if [ ! -z "$Cur_slave" ]; then
+                    printf "%s \n" "Error: ${iface} slave exist: $Cur_slave"
+                    exit 33
+                fi
+            # pass
+            Cur_stat=`ip -o -d link show ${iface} |grep UP`
+            Ret_val=$?
+                if [ "$Ret_val" -eq 0 ]; then
+                    ip link set ${iface} down
+                    echo 0 > /sys/class/net/${iface}/bonding/xmit_hash_policy
+                    ip link set ${iface} up
+                else
+                    echo 0 > /sys/class/net/${iface}/bonding/xmit_hash_policy
+                fi
+        </ACTION>
+    </COMMAND>
+
+
+
+</VIEW>
+</CLISH_MODULE>
