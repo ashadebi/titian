@@ -392,7 +392,7 @@ atas interface virtual (virtio) — tanpa itu LACP tidak nego dengan benar.
 ### 3.4 View options — tuning lanjutan (perintah `options`)
 
 Dari view interface, `options` membuka view tuning. Semua setelan di sini
-live + persisten (disimpan di netstate `.tuning` + cermin, diterapkan ulang
+live + persisten (disimpan di netstate `.tuning` + *mirror*, diterapkan ulang
 saat boot lewat apply-all). `no <setelan>` menghapus setelan Titian dan
 mengembalikan nilai pra-Titian.
 
@@ -823,7 +823,7 @@ show interfaces terse
 rename enp1s0 wan0
 ```
 
-Rename memigrasi netstate + startup-config + cermin + referensi
+Rename memigrasi netstate + startup-config + *mirror* + referensi
 (laggport, parent VLAN FreeBSD) dan persisten melewati reboot: Linux
 memakai systemd `.link` (MACAddress), FreeBSD memakai blok
 `#-TITIAN-RENAME-#` di rc.conf. Perintah ini me-restart service dan punya
@@ -952,7 +952,7 @@ driver tidak mengembalikan nilai lama.
 | Rename persisten | systemd `.link` | blok `#-TITIAN-RENAME-#` rc.conf |
 | Persistensi sysctl | `sysctl.d/99-titian.conf` | blok `#-TITIAN-#` sysctl.conf |
 
-Batasan yang diketahui (jujur, bukan janji):
+Batasan yang diketahui (Notes: bukan janji):
 
 - PTY Tab/`?` belum terverifikasi di semua terminal SSH nyata.
 - Kreasi VLAN FreeBSD intermiten gagal (`SIOCIFCREATE2`, akar belum
