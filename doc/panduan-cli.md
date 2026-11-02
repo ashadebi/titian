@@ -442,7 +442,7 @@ show interfaces tuning <iface>   # mode exec
 ```
 
 Tool bantu read-only (di luar CLI, di host): `titian-tune-recommend`
-memberi rekomendasi tuning tanpa mengubah apa pun. Catatan jujur: sukses
+memberi rekomendasi tuning tanpa mengubah apa pun. Notes: sukses
 live coalesce (rx-usecs) belum terbukti di NIC lab; "dso" ditafsirkan
 sebagai keluarga TSO/GSO.
 
@@ -629,7 +629,7 @@ generate <section>          # render + cek sintaks + backup + terapkan satu sect
 Section: `function`, `filter`, `protocol`, `static`, `bgp`, `ospf`,
 `direct`, `bfd`, `pipe`. Alur yang benar: `generate check` dulu, bila
 bersih baru `generate`. `generate` tidak bisa mereproduksi bird.conf
-jangkar dari nol — untuk kembali ke keadaan awal, restore salinan file
+*anchor* dari nol — untuk kembali ke keadaan awal, restore salinan file
 bird.conf + `birdc configure` (atau rollback checkpoint, §9).
 
 ### 7.3 Community BGP

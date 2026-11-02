@@ -49,7 +49,7 @@ Keterangan bagan:
 - **Link PtP terisolasi** hanya menghubungkan Debian dan CHR — inilah
   jalur yang dipakai untuk uji point-to-point, BGP, dan ping dua arah.
   FreeBSD tidak punya alamat IPv4 di interface PtP-nya pada kondisi awal
-  (jangkar); sesi FreeBSD↔CHR dibangun lewat jalur management/multihop
+  (*anchor*); sesi FreeBSD↔CHR dibangun lewat jalur management/multihop
   (lihat §4).
 - CHR pada lab ini memakai lisensi gratis (limit throughput 1 Mbps).
   Uji lab fokus pada kebenaran fungsi, bukan benchmark throughput.
@@ -68,11 +68,11 @@ Keterangan bagan:
 Setiap tahap lab mengikuti pola yang sama, dan pola ini yang membuat
 hasilnya bisa diikuti ulang:
 
-1. **Jangkar dulu.** Sebelum tahap dimulai, sidik jari file konfigurasi
+1. **Catat *anchor* dulu.** Sebelum tahap dimulai, *fingerprint* file konfigurasi
    (`startup-config` dan `bird.conf` kedua guest) dicatat.
 2. **Uji.** Tahap dijalankan, hasil dicatat (lulus/gagal + bukti).
-3. **Bersih ke jangkar.** Setelah tahap selesai, konfigurasi
-   dikembalikan dan sidik jari dicocokkan lagi — tahap berikutnya selalu
+3. **Bersih ke *anchor*.** Setelah tahap selesai, konfigurasi
+   dikembalikan dan *fingerprint* dicocokkan lagi — tahap berikutnya selalu
    mulai dari keadaan bersih yang sama.
 4. **Satu perubahan dalam satu waktu.** Tidak ada dua tahap yang
    menyentuh guest secara paralel.
@@ -230,7 +230,7 @@ untuk interface yang disebut filter-forward/dnat. Detail lengkap ada di
 
 ```
    ┌──────────────┐
-   │ Catat jangkar │  sidik jari startup-config + bird.conf
+   │ Catat *anchor* │  *fingerprint* startup-config + bird.conf
    └──────┬───────┘
           ▼
    ┌──────────────┐
@@ -246,17 +246,17 @@ untuk interface yang disebut filter-forward/dnat. Detail lengkap ada di
    └──────┬───────┘
           ▼
    ┌──────────────┐
-   │ Bersihkan     │  restore + restart; sidik jari = jangkar lagi
+   │ Bersihkan     │  restore + restart; *fingerprint* kembali sama dengan *anchor*
    └──────┬───────┘
           ▼
-     Tahap berikutnya (mulai dari jangkar yang sama)
+     Tahap berikutnya (mulai dari *anchor* yang sama)
 ```
 
 Untuk mereplikasi lab ini secara garis besar: siapkan tiga VM (Debian
 13, FreeBSD 15, CHR RouterOS) di satu jaringan management, tambahkan
 satu link PtP terisolasi antara guest Titian dan CHR, pasang paket
 Titian 0.1.0 (atau build dari source repo ini), lalu jalankan skenario
-per area mengikuti urutan di §2 — selalu kembali ke jangkar antar
+per area mengikuti urutan di §2 — selalu kembali ke *anchor* antar
 tahap. Lisensi CHR gratis membatasi throughput 1 Mbps, jadi fokuskan
 pada kebenaran fungsi.
 
@@ -334,7 +334,7 @@ Hasil yang tercatat di lab:
 - Verifikasi dilakukan dari kedua sisi (guest Titian dan CHR), bukan
   hanya dari satu sisi.
 
-Catatan kejujuran: hasil di atas adalah ringkasan hasil uji (jumlah
+Notes: hasil di atas adalah ringkasan hasil uji (jumlah
 balasan dan persentase loss), bukan salinan mentah output ping — nilai
 RTT per paket tidak dicatat sebagai bukti lab, sehingga tidak ditulis
 di sini.
@@ -526,7 +526,7 @@ view: `show protocol summary` (sesi RTR) dan `show route` + efek filter
 yang teramati (localpref/reject). Untuk perintah birdc mentah, pakai
 `bird terminal` lalu perintah birdc langsung.
 
-**Batas jujur:** trust anchor lab ini lab-lokal (file JSON statis,
+**Notes:** trust anchor lab ini lab-lokal (file JSON statis,
 bukan hierarki RPKI global). "Valid" di sini berarti
 valid-terhadap-VRP-lab — jangan klaim ROA ini berlaku terhadap ROA
 global di internet.
