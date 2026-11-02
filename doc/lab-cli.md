@@ -339,7 +339,274 @@ balasan dan persentase loss), bukan salinan mentah output ping — nilai
 RTT per paket tidak dicatat sebagai bukti lab, sehingga tidak ditulis
 di sini.
 
-## 5. Yang belum terbukti — jangan diklaim
+## 5. Terapan lanjutan — BGP, OSPF, RPKI, dan lainnya
+
+Prinsip mekanisme yang wajib dipahami dulu: **definisi protokol dan
+filter BIRD tidak dibuat lewat satu perintah khusus**. Definisi section
+hidup di file staging (`bird.d/`), lalu diterapkan dari bird view dengan
+alur wajib `generate check <section>` → `generate <section>` (generate
+selalu membackup `bird.conf` sebelum apply, lalu `bird -p -c` +
+`birdc configure`). Perintah CLI di bird view mengelola show, community,
+redistribusi, dan kontrol protokol di atas section tersebut. Bagian ini
+menampilkan isi lab yang tercatat: sisi Titian dan sisi CHR.
+
+### 5.1 BGP melawan CHR — sisi Titian
+
+ASN global berasal dari header `bird.conf` (`define TITIAN_ASN`,
+diatur saat install; default 64512). Blok section yang teruji:
+
+```bird
+# Debian ↔ CHR via PtP (teruji)
+protocol bgp bgp_chr {
+    local as TITIAN_ASN;
+    neighbor 10.44.55.66 as 64513;
+    ipv4 {
+        import filter bgp_import_comm;
+        export filter bgp_export_attr;
+    };
+    ipv6 { import none; export none; };
+}
+```
+
+```bird
+# FreeBSD ↔ CHR via PtP (teruji) — multihop WAJIB
+protocol bgp bgp_chr {
+    multihop 2;
+    bfd on;
+    source address 203.0.113.90;
+    local as TITIAN_ASN;
+    neighbor 10.44.55.99 as 64513;
+    ipv4 {
+        import filter rpki_import;
+        export none;
+    };
+    ipv6 { import none; export none; };
+}
+```
+
+Mengapa FreeBSD wajib `multihop 2` + static peer route: alamat /32
+FreeBSD tidak directly-connected di pandangan device protocol BIRD,
+sehingga tanpa multihop sesi stuck Idle (`Waiting for <peer-ip> to
+become my neighbor`) meski route kernel ke peer ada dan ping jalan.
+Tambahan wajib: static peer route + `generate static`, supaya next-hop
+route BGP ter-resolve jadi unicast (tanpa itu route hasil BGP bertipe
+`unreachable`). Sesi lewat jaringan management yang memang connected
+tidak butuh multihop.
+
+Menerapkan dan memverifikasi (bird view):
+
+```
+generate check bgp
+generate bgp
+show protocol summary
+show protocol neighbors bgp_chr
+show route protocol bgp
+show route export bgp_chr
+```
+
+Community (bird view) — contoh yang teruji di lab:
+
+```
+community list add PEER-AS 64513:100
+community list show
+community export add 64512:100
+community export show
+community import add 64513:200 localpref:300
+community import show
+```
+
+Yang teruji dua arah lawan CHR: standard, well-known (no-export,
+no-advertise, no-peer, blackhole), extended, large; lewat filter export
+juga teruji ORIGIN, AS_PATH, NEXT_HOP, LOCAL_PREF, MED, prepend.
+ATOMIC_AGGREGATE/AGGREGATOR bersifat read-only (dihasilkan sistem saat
+agregasi) dan tidak applicable di lab ini.
+
+Redistribusi (bird view):
+
+```
+redistribute static enable
+redistribute direct enable
+redistribute show
+```
+
+Semantik direct berbeda per OS (keduanya benar): Debian mengumumkan
+alamat peer /32, FreeBSD mengumumkan alamat lokal /32.
+
+Hasil demo 30 Okt (Debian ↔ CHR via PtP): peer `bgp_chr` Established
+dalam 8 detik; `community export add 64512:100` → route export membawa
+`BGP.community: (64512,100)`; CHR mengiklankan 198.51.100.0/24 via
+filter-chain → `community import add 64513:200 localpref:300` → route
+tampil `BGP.local_pref: 300` + community (64513,200); CHR menerima
+`DAb 203.0.113.0/24 via 203.0.113.77`. Kontrol negatif: setelah kedua
+rule dihapus, community export hilang dan localpref kembali 100, sesi
+tetap Established.
+
+Kaki IPv6 (`bgp_chr6`, 1 Nov, kedua kaki lalu cleanup total): Debian
+(local 64512, neighbor CHR 2001:db8:1::3 as 64513) dan FreeBSD (local
+64514, neighbor CHR 2001:db8:11::3 as 64513, `multihop 2` + static peer
+route — kunci yang sama seperti IPv4 FreeBSD). Debian impor
+2001:db8:200::/48 localpref 300 + community (64513,200), ekspor
+2001:db8:100::/48 community (64512,100); FreeBSD impor
+2001:db8:210::/48 localpref 300 + community (64513,200), ekspor
+2001:db8:110::/48 community (64514,100); CHR menerima dengan distance
+20 dan prefix-count=1 di kedua sesi. Kontrol negatif kedua kaki:
+localpref impor kembali 100, community ekspor hilang, sesi tetap
+Established.
+
+Menghapus peer (urutan penting): hapus blok `protocol bgp ...` dulu,
+lalu `generate check bgp` → `generate bgp` — kebalikan urutan pasang.
+Bila filter dihapus dulu sementara bgp masih merujuknya, render
+bird.conf gagal parse. Verifikasi: `show protocol summary` (protokol
+hilang) + `show route` (route BGP hilang). Hapus juga sisi CHR dan
+peer route statik bila tidak dipakai lagi.
+
+### 5.2 BGP — sisi CHR (RouterOS 7.25, tercatat live)
+
+```routeros
+# AS milik INSTANCE, bukan connection (local.as di connection DITOLAK ROS 7.25)
+/routing bgp instance add name=default as=64513 router-id=192.168.122.219
+
+# connection wajib instance + local.role=ebgp (tanpa keduanya: error/prompt)
+/routing bgp connection add name=to-debian-ptp instance=default \
+    remote.address=203.0.113.77 remote.as=64512 local.role=ebgp \
+    local.address=10.44.55.66
+
+# alamat PtP CHR (mirror Debian)
+/ip address add address=10.44.55.66/32 network=203.0.113.77 interface=ether2
+```
+
+Koreksi sintaks ROS 7.25 yang ditemukan live: connection memakai
+`output.filter-chain`, **bukan** `output.filter` (yang terakhir ditolak
+`bad parameter`; `output.filter` adalah properti template). Default CHR:
+tanpa `output.redistribute`/filter, CHR **tidak mengiklankan apa pun**.
+Menghapus: `/routing bgp connection remove`. Temuan CHR lain untuk
+IPv6: TIDAK ada parameter `address-families` (AF IPv6 ternegosiasi
+otomatis dari alamat neighbor); `/ipv6 route` TIDAK ada `type=blackhole`
+(dipakai device route via ether2).
+
+### 5.3 OSPF — sisi Titian dan catatan lawan
+
+OSPF dikelola sama seperti BGP: definisi section + `generate check
+ospf` → `generate ospf`, verifikasi `show protocol summary` dan
+`show route protocol ospf`. Yang teruji: Full, area stub/NSSA,
+autentikasi, dan virtual-link di sisi BIRD. Catatan lab yang wajib
+diingat:
+
+- Area range: sintaksnya `networks { ...; }` di blok area, **bukan**
+  `range` (parser menolak `range`). Varian `hidden` menyembunyikan
+  summary dari peer.
+- Virtual link: sintaksnya `virtual link <router-id>` di area transit,
+  dan router harus multi-area. **CHR RouterOS 7.25 tidak mendukung
+  virtual link** (menunya tidak ada) — itu batas CHR, bukan Titian.
+- Autentikasi OSPF: interop MD5 mensyaratkan key-id 0 di sisi BIRD.
+- Sisi CHR untuk OSPF tidak meninggalkan transkrip perintah di catatan
+  lab selain butir-butir di atas; yang tercatat adalah perilaku
+  interopnya (Full tercapai, virtual-link tidak tersedia di CHR).
+
+### 5.4 RPKI — cache StayRTR + filter import BGP
+
+| Item | Nilai lab |
+|---|---|
+| Cache | StayRTR v0.6.4 (container di host lab, restart `unless-stopped`) |
+| Alamat RTR | `192.168.122.1:3323` (lewat gateway NAT) |
+| VRP | file JSON lab-lokal (edit VRP lalu restart container, atau tunggu refresh 60 detik) |
+
+VRP lab (contoh, bukan ROA global):
+
+| Prefix | ASN | Status uji |
+|---|---|---|
+| `198.51.100.0/24` | AS64513 (AS CHR) | VALID → localpref 500 |
+| `198.51.101.0/24` | AS64501 | INVALID → di-reject |
+| `198.51.102.0/24` | (tanpa VRP) | UNKNOWN → localpref 100 |
+
+Cara kerja di BIRD: protokol `rpki` menunjuk ke RTR, lalu `roa check`
+di filter import BGP memilah tiga status di atas (contoh blok FreeBSD
+di §5.1 memakai `import filter rpki_import`). Verifikasi dari bird
+view: `show protocol summary` (sesi RTR) dan `show route` + efek filter
+yang teramati (localpref/reject). Untuk perintah birdc mentah, pakai
+`bird terminal` lalu perintah birdc langsung.
+
+**Batas jujur:** trust anchor lab ini lab-lokal (file JSON statis,
+bukan hierarki RPKI global). "Valid" di sini berarti
+valid-terhadap-VRP-lab — jangan klaim ROA ini berlaku terhadap ROA
+global di internet.
+
+### 5.5 BFD — sisi Titian dan sisi CHR
+
+BFD diikat ke sesi lewat section BFD (`bfd on` di blok protokol, lihat
+blok FreeBSD §5.1) + `generate check bfd` → `generate bfd`. Yang
+teruji: BFD via OSPF direct (UP). Dua catatan lawan:
+
+```
+# CHR: BFD HARUS didaftarkan dulu, kalau tidak sesi berstatus forbidden
+/routing bfd configuration add interfaces=<iface>
+```
+
+- BFD-over-BGP-multihop tidak jalan karena beda port (BIRD UDP 4784
+  vs CHR UDP 3784) — pakai BFD via OSPF (direct) atau single-hop.
+- BFD-over-BGP single-hop di atas interface management belum diuji
+  (lihat §6).
+
+### 5.6 VXLAN — guest dan CHR sebagai VTEP learning
+
+Perintah guest (view `configure-vxlan-view`, masuk lewat
+`interface vxlan <nama>`):
+
+```
+configure terminal
+interface vxlan vxlan110
+vni 110
+local 192.168.122.50
+remote 192.168.122.116
+dstport 4789
+mtu 1450
+ip address 198.51.110.1/24
+ipv6 address 2001:db8:310::1/64
+enable
+end
+show interfaces vxlan vxlan110
+```
+
+Sisi CHR sebagai VTEP ketiga — TERBUKTI via model learning (PtP/mgmt
+tidak disentuh): RouterOS 7.25 **tidak punya** parameter
+`remote-address` di `/interface/vxlan` (terbukti: `bad parameter
+remote-address`) maupun di submenu vtep — CHR TIDAK BISA di-set unicast
+statis seperti Linux/FreeBSD. Model CHR: learning (tanpa grup, VTEP
+dipelajari dari trafik yang diterima). Parameter CHR yang tercatat:
+vxlan111, vni 111, local 192.168.122.219, port 4789, mtu 1450, IP
+198.51.111.3/24 + 2001:db8:311::3/64; Debian vxlan111 unicast ke CHR
+(vni 111, remote 192.168.122.219, overlay 198.51.111.1/24 +
+2001:db8:311::1/64). Hasil: Debian→CHR v4+v6 4/4 0% loss dan CHR→Debian
+v4+v6 4/4 0% loss (CHR mempelajari Debian dari trafik yang diterima,
+lalu dua arah jalan; FDB Debian mempelajari MAC CHR → 192.168.122.219).
+Cleanup CHR terverifikasi: IP + interface vxlan111 dihapus, print
+vxlan kosong, PtP/mgmt tidak berubah.
+
+Catatan MTU: batas berguna overlay 1450 untuk overhead VXLAN ~50 byte
+— dibuktikan uji DF (`ping -M do -s 1422` = 1450 byte), bukan dari
+dokumen. Multicast end-to-end tetap tidak terbukti (FreeBSD tidak
+join grup).
+
+### 5.7 Lainnya — firewall, tuning, checkpoint, rename (terapan singkat)
+
+- **Firewall/NAT:** sintaks lengkap ada di `panduan-cli.md` §8
+  (filter/snat/dnat + `no` bersintaks lengkap). Bukti lab bukan dari
+  konfigurasi saja: tcpdump membuktikan alamat benar-benar berubah
+  untuk SNAT. Angka: srcnat 14/14, dnat 8/8, filter 10/10, persistensi
+  reboot 4/4, negatif 38/38, regresi 10/10.
+- **Tuning:** `system sysctl` + mtu/qlen/offload/coalesce persisten
+  kedua OS; periksa dengan `show interfaces tuning <iface>`. Coalesce
+  live belum terbukti di NIC lab.
+- **Checkpoint/rollback:** alur lab yang dipakai sebelum setiap
+  perubahan berisiko: `checkpoint save pra-ubah` → ubah → bila gagal
+  `rollback pra-ubah`, bila berhasil `save`. Rollback persisten +
+  restart service, termasuk bird.conf, netstate, dan sysctl.
+- **Rename:** `rename <lama> <baru>` persisten melewati reboot kedua
+  OS (12/12 lulus). Pengujian memakai NIC tambahan yang persisten —
+  interface dummy/epair tidak bertahan melewati reboot sehingga tidak
+  bisa dipakai untuk uji ini.
+
+## 6. Yang belum terbukti — jangan diklaim
 
 - VXLAN multicast end-to-end.
 - BFD-over-BGP single-hop di atas interface management.
