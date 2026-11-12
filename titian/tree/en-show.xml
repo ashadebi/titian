@@ -14,15 +14,29 @@
         help="IPv6 information"/>
 
     <COMMAND name="show running-config"
-        help="Current operating configuration">
-        <CONFIG operation="dump"/>
+        help="Current operating configuration (paged; add no-more to dump all at once)">
+        <PARAM name="no-more"
+            help="Disable pager for this command (dump all at once)"
+            mode="subcommand"
+            optional="true"
+            ptype="SUBCOMMAND"/>
+        <CONFIG operation="dump" file="/tmp/titian-show-run.conf"/>
         <ACTION>
+            ${RT_SBIN}/titian-pager.sh /tmp/titian-show-run.conf ${no-more}
+            rm -f /tmp/titian-show-run.conf
         </ACTION>
     </COMMAND>
 
     <COMMAND name="show startup-config"
-        help="Contents of startup configuration">
-        <ACTION>cat ${RT_ROOT}/etc/startup-config</ACTION>
+        help="Contents of startup configuration (paged; add no-more to dump all at once)">
+        <PARAM name="no-more"
+            help="Disable pager for this command (dump all at once)"
+            mode="subcommand"
+            optional="true"
+            ptype="SUBCOMMAND"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pager.sh ${RT_ROOT}/etc/startup-config ${no-more}
+        </ACTION>
     </COMMAND>
 
     <COMMAND name="show history"

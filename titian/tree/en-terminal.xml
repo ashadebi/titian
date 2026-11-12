@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+
+<VIEW name="enable-view">
+<!-- Terminal display controls (Cisco-style pager) -->
+    <COMMAND name="terminal"
+        help="Terminal display controls"/>
+
+    <COMMAND name="terminal length"
+        help="Set lines per page for paged output (0 = paging off, dump all)">
+        <PARAM name="lines"
+            help="Lines per page (0-512; 0 disables the pager)"
+            ptype="UINT"/>
+        <ACTION>
+            mkdir -p /etc/titian
+            echo "${lines}" > /etc/titian/terminal-length
+            if [ "${lines}" = "0" ]; then echo "Terminal pager disabled (length 0)"; else echo "Terminal length set to ${lines} lines"; fi
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="terminal no-more"
+        help="Disable the pager for this session (same as terminal length 0)">
+        <ACTION>
+            mkdir -p /etc/titian
+            echo "0" > /etc/titian/terminal-length
+            echo "Terminal pager disabled (length 0)"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="terminal more"
+        help="Re-enable the pager for this session (default length 24)">
+        <ACTION>
+            mkdir -p /etc/titian
+            echo "24" > /etc/titian/terminal-length
+            echo "Terminal pager enabled (length 24)"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

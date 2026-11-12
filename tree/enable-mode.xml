@@ -14,7 +14,7 @@
   <NAMESPACE ref="syshw-view" help="true" completion="true"/>
 
     <COMMAND name="help"
-             help="Display an overview of the RTCLI syntax">
+             help="Display an overview of the titian syntax">
         <ACTION builtin="clish_overview"/>
     </COMMAND>
 

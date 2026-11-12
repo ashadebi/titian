@@ -5,7 +5,7 @@
                      http://clish.sourceforge.net/XMLSchema/clish.xsd">
         <!--=======================================================-->
 <VIEW name="bird-view"
-	prompt="rtcli-${SYSTEM_NAME}(birdc)# "
+	prompt="cli-${SYSTEM_NAME}(birdc)# "
 	restore="depth">
  	<COMMAND name="show"
                 help="Show BIRD information"/>

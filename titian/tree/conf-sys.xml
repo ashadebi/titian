@@ -52,7 +52,7 @@
 		</ACTION>
 	</COMMAND>
 
-<!-- sysctl (fitur baru, bukan restorasi rtcli: tree lama tidak punya
+<!-- sysctl (fitur baru, bukan restorasi titian: tree lama tidak punya
      perintah sysctl). Berlaku SEGERA system-wide (live) + persisten
      (cermin OS-native: /etc/sysctl.d/99-titian.conf di Linux,
      blok #-TITIAN-# di /etc/sysctl.conf FreeBSD; plus baris
