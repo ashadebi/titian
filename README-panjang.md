@@ -8,7 +8,7 @@ principle: web queries and executions run as batch clish, never as a bypass).
 ## Layout
 
 - `tree/` — klish command-tree XML (the CLI definition; adapted from a
-  working rtcli-conf tree, not rebuilt from scratch).
+  working titian-conf tree, not rebuilt from scratch).
 - `tree-nonroot/` — non-root view XML (info-mode, overview, ping, startup).
 - `sbin/` — POSIX helper scripts backing the tree's ACTIONs
   (interfaces, bonding/LAGG, VLAN, VXLAN, tuning, firewall/NAT,

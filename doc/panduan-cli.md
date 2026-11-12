@@ -31,7 +31,7 @@ bantuan interaktif (`?` dan Tab) hanya bekerja di sesi interaktif (PTY).
 | Configure | `configure terminal` | `cli-...(config)#` | `exit` atau `end` |
 | Interface | `interface <tipe> <nama>` dari configure | `...(config-if-<nama>)#` | `exit` |
 | Firewall | `firewall` dari configure | `...(config-firewall)#` | `exit` |
-| BIRD | `bird` atau `bird terminal` dari exec | `rtcli-...(birdc)#` | `exit` |
+| BIRD | `bird` atau `bird terminal` dari exec | `titian-...(birdc)#` | `exit` |
 | SSH service | `service ssh` dari configure | `...(config-system-...)#` | `exit` |
 | Name-server | `system name-servers` dari configure | `...(config-system-...)#` | `exit` |
 | Options (tuning) | `options` dari view interface | `...(config-if-<nama>-options)#` | `exit` |
@@ -171,8 +171,29 @@ save                 # simpan running-config ke startup-config
 logout               # keluar dari CLI
 reboot               # PERHATIAN: perintah ini hanya mencetak teks,
                      # TIDAK me-reboot mesin. Jangan diandalkan untuk reboot.
-help                 # gambaran sintaks RTCLI
+help                 # gambaran sintaks titian
 ```
+
+### 1.8 Pager — output panjang ditampilkan bertahap (less)
+
+Output panjang (`show running-config`, `show startup-config`) ditampilkan
+bertahap lewat pager `less` (bukan langsung tercurah semua). Di dalam pager:
+`SPACE` = halaman berikut, `ENTER` = baris berikut, `q` = keluar, `/teks`
+= cari. Bila output muat satu layar, pager langsung selesai tanpa jeda.
+
+```
+show running-config          # bertahap (pager)
+show running-config no-more  # tanpa pager, curah semua sekaligus
+show startup-config no-more  # sama untuk startup-config
+terminal length 24           # pager aktif (default 24 baris)
+terminal length 0            # pager mati (semua output tercurah)
+terminal no-more             # sama dengan terminal length 0
+terminal more                # pager aktif lagi (length 24)
+```
+
+Catatan: pager hanya aktif bila output ke terminal interaktif (TTY).
+Bila output di-pipe atau di-script (bukan TTY), pager otomatis nonaktif
+dan output tercurah penuh — aman untuk automation.
 
 ---
 
@@ -816,11 +837,22 @@ gagal `rollback pra-ubah`, bila berhasil `save`.
 rename <nama-lama> <nama-baru>
 ```
 
-Contoh:
+**Perintah ini di mode exec (enable-view), BUKAN di `configure terminal`.**
+Jalankan dari prompt `cli-...#`, bukan dari `(config)#`.
+
+Contoh (Linux):
 
 ```
 show interfaces terse
 rename enp1s0 wan0
+```
+
+Contoh (FreeBSD, gaya Junos — ge untuk 1G, xe untuk 10G):
+
+```
+show interfaces terse
+rename igb1 ge1
+rename ixl3 xe3
 ```
 
 Rename memigrasi netstate + startup-config + *mirror* + referensi
@@ -828,6 +860,14 @@ Rename memigrasi netstate + startup-config + *mirror* + referensi
 memakai systemd `.link` (MACAddress), FreeBSD memakai blok
 `#-TITIAN-RENAME-#` di rc.conf. Perintah ini me-restart service dan punya
 fail-rollback pra-restart.
+
+**Peringatan:** rename me-restart service titian, dan restart service
+mengosongkan running-config. Sesudah rename, jalankan
+`show running-config` — bila kosong atau ada seksi hilang (mis. interface
+yang baru di-rename atau VLAN yang parent-nya di-rename), rebuild seksi
+tersebut lewat CLI, lalu `commit` + `save`. (Contoh nyata: rename
+`ixl3`→`xe3` membuat `interface ethernet xe3` + `interface vlan 99 ge3`
+hilang dari running-config; keduanya harus dibuat ulang manual.)
 
 Batasan:
 
@@ -839,6 +879,65 @@ Batasan:
   live-only) — jalankan `save`, lalu ulangi `rename`.
 - Rename TIDAK mengubah nama interface di dalam bird.conf mentah; yang
   dimigrasi adalah state Titian dan referensinya.
+
+---
+
+## 9a. IPoE — DHCP client & server
+
+**Catatan penting:** mpd5 TIDAK mendukung IPoE. mpd5 adalah daemon PPP
+(PPPoE/PPTP/L2TP). IPoE adalah IP polos di atas Ethernet, alias DHCP —
+tanpa sesi PPP, tanpa username/password. Titian mengimplementasikan IPoE
+via DHCP: `dhclient` (client) dan `isc-dhcpd` (server), keduanya sudah
+ada di image.
+
+### 9a.1 IPoE client — WAN via DHCP
+
+```
+configure terminal
+interface ethernet ge1
+ip address dhcp
+commit
+save
+```
+
+Interface mendapat IP + gateway + DNS dari DHCP server di ujung sana.
+Untuk berhenti:
+
+```
+configure terminal
+interface ethernet ge1
+no ip address dhcp
+commit
+```
+
+### 9a.2 IPoE server — DHCP untuk subscriber
+
+```
+configure terminal
+ipoe-server
+interface bridge0
+pool 10.99.40.0/24 10.99.40.100 10.99.40.200 10.99.40.1 8.8.8.8
+enable
+end
+configure terminal
+commit
+save
+```
+
+Format pool: `pool <subnet>/<prefix> <awal> <akhir> <gateway> <dns>
+[lease-detik]`. Lease default 86400 detik (1 hari). `commit` men-generate
+`/usr/local/etc/dhcpd.conf` dan menjalankan `dhcpd` pada interface yang
+dipilih. Syarat: interface harus punya IP di subnet pool yang sama
+(mis. pool 10.99.40.0/24 butuh interface ber-IP 10.99.40.x) — kalau tidak,
+`dhcpd` menolak start.
+
+Hapus seluruh konfigurasi IPoE server:
+
+```
+configure terminal
+no ipoe-server
+commit
+```
 
 ---
 

@@ -66,7 +66,7 @@ else
         cp "$SRC/tree/$f" "$ROOT/etc/clish-en/$f" || { echo "Error: copy $f" >&2; exit 33; }
     done
 fi
-# tree non-root (subset rtcli, path sudah disesuaikan)
+# tree non-root (subset titian, path sudah disesuaikan)
 for f in "$SRC"/tree-nonroot/*.xml; do
     cp "$f" "$ROOT/etc/clish/" || { echo "Error: copy $f" >&2; exit 33; }
 done

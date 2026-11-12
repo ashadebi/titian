@@ -135,7 +135,7 @@ Perbedaan paket BSDRP dengan paket 0.1.0 biasa:
 - Loopback hanya `lo1`–`lo9` (pattern `lo([1-9])$`); `lo0` DITOLAK
   "Illegal parameter".
 - Loopback pakai `addr-set` (REPLACE semua alamat IPv4 interface —
-  by design rtcli): di loopback, hanya alamat terakhir yang live,
+  by design titian): di loopback, hanya alamat terakhir yang live,
   sementara running-config mengakumulasi semua baris (divergensi
   loopback, bukan bug jalur ethernet yang pakai `addr-add`).
 - `/31` di loopback JALAN (netmask `0xfffffffe`, tanpa broadcast).
