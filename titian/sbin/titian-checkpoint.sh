@@ -76,7 +76,10 @@ CKPT_DIR=$STATE_ROOT/checkpoints
 SOCKFILE=/tmp/konfd.socket
 
 err() { echo "Error: $*" >&2; exit 33; }
-warn() { echo "Warning(checkpoint): $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(checkpoint):\033[0m %s\n' "$*" >&2
+    else echo "Warning(checkpoint): $*" >&2; fi
+}
 
 valid_name() {
     # $1=nama -> 0 bila valid: [A-Za-z0-9][A-Za-z0-9_-]*, maks 64

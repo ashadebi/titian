@@ -171,11 +171,15 @@
     </COMMAND>
 
     <COMMAND name="show monitoring bandwidth"
-        help="Bandwidth live per interface (bwm-ng, snapshot 1 detik)"
+        help="Bandwidth live per interface (bwm-ng, bps). Tanpa angka = 1 snapshot; beri detik untuk live (q = berhenti)"
         lock="false"
         interrupt="true">
+        <PARAM name="seconds"
+            help="durasi detik 1-3600 (live, q = berhenti)"
+            ptype="BW_SECONDS"
+            optional="true"/>
         <ACTION>
-            ${RT_SBIN}/titian-monitoring.sh bandwidth
+            ${RT_SBIN}/titian-monitoring.sh bandwidth "${seconds}"
         </ACTION>
     </COMMAND>
 </VIEW>

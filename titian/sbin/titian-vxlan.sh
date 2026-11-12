@@ -26,7 +26,10 @@ SBIN=$ROOT/sbin
 STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 
 err() { echo "Error: $*" >&2; exit 33; }
-warn() { echo "Warning(vxlan): $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(vxlan):\033[0m %s\n' "$*" >&2
+    else echo "Warning(vxlan): $*" >&2; fi
+}
 
 valid_v4() {
     # $1 = dotted quad; return 0 bila valid (salinan titian-if.sh)

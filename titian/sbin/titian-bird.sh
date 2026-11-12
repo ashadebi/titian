@@ -27,6 +27,11 @@ BIRD_SH="$SBIN_DIR/titian-bird.sh"
 INTENT="$STATE_ROOT/netstate/routing.intent"
 DIRTY=/var/run/routing.dirty
 err() { echo "Error: $*" >&2; exit 33; }
+warn_bird() {
+    # $* = pesan. "Warning" oranye (kuning) bila stderr terminal.
+    if [ -t 2 ]; then printf '%% \033[33mWarning:\033[0m %s\n' "$*" >&2
+    else echo "% Warning: $*" >&2; fi
+}
 
 conf_path() {
     if [ "$OS" = "FreeBSD" ]; then
@@ -73,7 +78,7 @@ detect_variant() {
         [ -n "$bver" ] || bver="unknown"
     fi
     if [ -n "$variant" ] && [ -n "$vb" ] && [ "$variant" != "$vb" ]; then
-        echo "% Warning: bird on disk is ${bver} but this image was built with bird${vb}" >&2
+        warn_bird "bird on disk is ${bver} but this image was built with bird${vb}"
     fi
     if [ -z "$variant" ]; then
         if [ -n "$vb" ]; then
@@ -171,8 +176,8 @@ check_exclusion() {
     case "$want" in
         bird)
             if frr_enabled || frr_running || [ "$(intent_val frr)" = "yes" ]; then
-                [ -n "$zpid" ] && echo "% Warning: FRR is currently running (zebra pid $zpid, frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))" >&2
-                [ -z "$zpid" ] && echo "% Warning: FRR is enabled (frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))" >&2
+                [ -n "$zpid" ] && warn_bird "FRR is currently running (zebra pid $zpid, frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))"
+                [ -z "$zpid" ] && warn_bird "FRR is enabled (frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))"
                 echo "% Bird and FRR cannot run at the same time." >&2
                 exit 33
             fi
@@ -180,9 +185,9 @@ check_exclusion() {
         frr)
             if bird_enabled || bird_running || [ "$(intent_val bird)" = "yes" ]; then
                 if [ "$variant" = "none" ]; then
-                    echo "% Warning: BIRD is enabled/running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))" >&2
+                    warn_bird "BIRD is enabled/running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))"
                 else
-                    echo "% Warning: BIRD $bver is enabled/running (bird${variant}, bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO)${bpid:+, pid $bpid})" >&2
+                    warn_bird "BIRD $bver is enabled/running (bird${variant}, bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO)${bpid:+, pid $bpid})"
                 fi
                 echo "% Bird and FRR cannot run at the same time." >&2
                 exit 33

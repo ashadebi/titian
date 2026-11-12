@@ -5,6 +5,32 @@
 # POSIX sh.
 OS=$(uname -s)
 
+# --- warna status (hanya bila stdout terminal; bila di-pipe, polos) ---
+# Pola: kode warna dicetak sebagai argumen printf TERPISAH sebelum field
+# status, reset sesudahnya — jadi lebar kolom printf tetap benar.
+if [ -t 1 ]; then _SHOW_COLOR=1; else _SHOW_COLOR=0; fi
+# _ESC = byte ESC asli (printf '%s' tidak menafsir \033, jadi konstanta
+# harus berisi byte ESC, bukan string literal "\033").
+_ESC=$(printf '\033')
+_C_RED="${_ESC}[31m"; _C_GREEN="${_ESC}[32m"; _C_YELLOW="${_ESC}[33m"; _C_CYAN="${_ESC}[36m"; _C_RESET="${_ESC}[0m"
+# Kembalikan kode warna untuk sebuah status (kosong bila bukan tty).
+# up/u -> hijau, down/D/disabled -> merah, L (loopback) -> cyan, warning -> kuning/oranye.
+status_color() {
+    if [ "$_SHOW_COLOR" -eq 0 ]; then printf ''; return 0; fi
+    case "$1" in
+        up|u|UP) printf '%s' "$_C_GREEN" ;;
+        down|D|DOWN|disabled) printf '%s' "$_C_RED" ;;
+        L) printf '%s' "$_C_CYAN" ;;
+        warning|WARNING) printf '%s' "$_C_YELLOW" ;;
+        *) printf '' ;;
+    esac
+    return 0
+}
+status_reset() {
+    if [ "$_SHOW_COLOR" -eq 0 ]; then printf ''; else printf '%s' "$_C_RESET"; fi
+    return 0
+}
+
 interfaces_linux() {
     printf "\n"
     printf "Codes: State, u - Up, D - Down, L - Loopback. \n"
@@ -26,12 +52,12 @@ interfaces_linux() {
         esac
         addrs=$(ip -o addr show dev "$dev" 2>/dev/null | awk '{if ($5=="peer") print $4 " peer " $6; else print $4}')
         if [ -z "$addrs" ]; then
-            printf "  %-11s%-19s%8s    %s\n" "$dev" "-" "$operstate" "$alias"
+            printf "  %-11s%-19s%s%8s%s    %s\n" "$dev" "-" "$(status_color "$operstate")" "$operstate" "$(status_reset)" "$alias"
         else
             first=1
             for a in $addrs; do
                 if [ "$first" -eq 1 ]; then
-                    printf "  %-11s%-19s%8s    %s\n" "$dev" "$a" "$operstate" "$alias"
+                    printf "  %-11s%-19s%s%8s%s    %s\n" "$dev" "$a" "$(status_color "$operstate")" "$operstate" "$(status_reset)" "$alias"
                     first=0
                 else
                     printf "  %-11s%-19s\n" "" "$a"
@@ -47,7 +73,7 @@ interfaces_fbsd() {
     printf "Codes: State, u - Up, D - Down, L - Loopback. \n"
     printf "  %-11s%-19s%8s    %s\n" "Interface" "IP Address" "state" "Description"
     printf "  %-11s%-19s%8s    %s\n" "---------" "----------" "-----" "-----------"
-    ifconfig -a 2>/dev/null | awk '
+    ifconfig -a 2>/dev/null | awk -v C_UP="$_C_GREEN" -v C_DOWN="$_C_RED" -v C_LOOP="$_C_CYAN" -v C_RESET="$_C_RESET" -v USE_COLOR="$_SHOW_COLOR" '
         /^[a-z0-9]+:/ {
             if (dev != "") { flush() }
             split($1, n, ":"); dev = n[1]
@@ -68,11 +94,20 @@ interfaces_fbsd() {
         }
         /^[[:space:]]*description: / { desc = substr($0, index($0, ":") + 2) }
         function flush() {
+            # warna state: u=hijau, D=merah, L=cyan (hanya bila tty).
+            # Kode warna sebagai argumen printf terpisah (sebelum/sesudah
+            # field) supaya lebar kolom %8s tetap benar.
+            if (USE_COLOR == 1) {
+                if (state == "u") sc = C_UP
+                else if (state == "D") sc = C_DOWN
+                else sc = C_LOOP
+                sr = C_RESET
+            } else { sc = ""; sr = "" }
             if (naddr == 0) {
-                printf("  %-11s%-19s%8s    %s\n", dev, "-", state, desc)
+                printf("  %-11s%-19s%s%8s%s    %s\n", dev, "-", sc, state, sr, desc)
             } else {
                 for (i = 1; i <= naddr; i++) {
-                    if (i == 1) printf("  %-11s%-19s%8s    %s\n", dev, addrs[i], state, desc)
+                    if (i == 1) printf("  %-11s%-19s%s%8s%s    %s\n", dev, addrs[i], sc, state, sr, desc)
                     else printf("  %-11s%-19s\n", "", addrs[i])
                 }
             }
@@ -105,7 +140,7 @@ terse_linux() {
         fi
         addrs=$(ip -o addr show dev "$dev" 2>/dev/null | awk '{if ($5=="peer") print $4 " peer " $6; else print $4}' | paste -sd ", " -)
         [ -z "$addrs" ] && addrs="-"
-        printf "  %-11s %-9s %-6s %s\n" "$dev" "$admin" "$link" "$addrs"
+        printf "  %-11s %s%-9s%s %s%-6s%s %s\n" "$dev" "$(status_color "$admin")" "$admin" "$(status_reset)" "$(status_color "$link")" "$link" "$(status_reset)" "$addrs"
     done
     printf "\n"
 }
@@ -114,7 +149,7 @@ terse_fbsd() {
     printf "\n"
     printf "  %-11s %-9s %-6s %s\n" "Interface" "Admin" "Link" "IP Address"
     printf "  %-11s %-9s %-6s %s\n" "---------" "-----" "----" "----------"
-    ifconfig -a 2>/dev/null | awk '
+    ifconfig -a 2>/dev/null | awk -v C_UP="$_C_GREEN" -v C_DOWN="$_C_RED" -v C_RESET="$_C_RESET" -v USE_COLOR="$_SHOW_COLOR" '
         /^[a-z0-9]+:/ {
             if (dev != "") flush()
             split($1, n, ":"); dev = n[1]
@@ -133,9 +168,16 @@ terse_fbsd() {
             }
         }
         function flush() {
+            # warna: up=hijau, down/disabled=merah (hanya bila tty).
+            # Kode warna sebagai argumen printf terpisah supaya lebar
+            # kolom %-9s / %-6s tetap benar.
+            if (USE_COLOR == 1) {
+                ac = (admin == "up") ? C_UP : C_DOWN; ar = C_RESET
+                lc = (link == "up") ? C_UP : C_DOWN; lr = C_RESET
+            } else { ac = ""; ar = ""; lc = ""; lr = "" }
             a = "-"
             for (i = 1; i <= naddr; i++) a = (i == 1) ? addrs[i] : a ", " addrs[i]
-            printf("  %-11s %-9s %-6s %s\n", dev, admin, link, a)
+            printf("  %-11s %s%-9s%s %s%-6s%s %s\n", dev, ac, admin, ar, lc, link, lr, a)
         }
         END { if (dev != "") flush() }
     '
@@ -162,7 +204,7 @@ all_linux() {
         mtu=$(cat /sys/class/net/$dev/mtu 2>/dev/null)
         mac=$(cat /sys/class/net/$dev/address 2>/dev/null)
         alias=$(cat /sys/class/net/$dev/ifalias 2>/dev/null)
-        printf "Interface %s: admin %s, link %s, mtu %s, mac %s" "$dev" "$admin" "$link" "$mtu" "$mac"
+        printf "Interface %s: admin %s%s%s, link %s%s%s, mtu %s, mac %s" "$dev" "$(status_color "$admin")" "$admin" "$(status_reset)" "$(status_color "$link")" "$link" "$(status_reset)" "$mtu" "$mac"
         [ -n "$alias" ] && printf ", description \"%s\"" "$alias"
         printf "\n"
         ip -o addr show dev "$dev" 2>/dev/null | awk '{if ($5=="peer") print "    " $3 " " $4 " peer " $6; else print "    " $3 " " $4}'
@@ -182,7 +224,7 @@ all_fbsd() {
             lo*) link="up" ;;
             *) link=$(printf "%s\n" "$out" | awk '/^[[:space:]]*status: / {print ($2 == "active") ? "up" : "down"; exit}'); [ -z "$link" ] && link="down" ;;
         esac
-        printf "Interface %s: admin %s, link %s\n" "$dev" "$admin" "$link"
+        printf "Interface %s: admin %s%s%s, link %s%s%s\n" "$dev" "$(status_color "$admin")" "$admin" "$(status_reset)" "$(status_color "$link")" "$link" "$(status_reset)"
         printf "%s\n" "$out" | sed 's/^/    /'
         netstat -I "$dev" -b 2>/dev/null | awk 'NR > 1 && $3 ~ /^<Link/ {printf("    counters: RX %s packets, %s bytes; TX %s packets, %s bytes\n", $5, $8, $9, $11); exit}'
         printf "\n"

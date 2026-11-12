@@ -489,7 +489,10 @@ cmd_del_rule() {
 ANCHOR_FILE=/etc/pf-traffic-shape.conf
 ANCHOR=traffic-shape
 
-warn() { echo "$PROG: warning: $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '%s: \033[33mwarning:\033[0m %s\n' "$PROG" "$*" >&2
+    else echo "$PROG: warning: $*" >&2; fi
+}
 
 pf_enabled() {
     pfctl -s info 2>/dev/null | grep -q "Status: Enabled"

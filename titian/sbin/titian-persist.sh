@@ -15,7 +15,10 @@ OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 STATE_DIR="$STATE_ROOT/netstate"
-warn() { echo "Warning(persist): $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(persist):\033[0m %s\n' "$*" >&2
+    else echo "Warning(persist): $*" >&2; fi
+}
 
 mark_if() {
     mkdir -p "$STATE_DIR" 2>/dev/null || return 0

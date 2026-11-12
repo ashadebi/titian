@@ -106,6 +106,16 @@ cmd_show() {
 }
 
 # --- bandwidth (bwm-ng) ---
+# Warna ANSI (hanya bila stdout terminal; bila di-pipe, output polos).
+# _ESC = byte ESC asli (printf '%s' tidak menafsir \033, jadi konstanta
+# harus berisi byte ESC, bukan string literal "\033").
+_ESC=$(printf '\033')
+_C_RED="${_ESC}[31m"; _C_GREEN="${_ESC}[32m"; _C_YELLOW="${_ESC}[33m"; _C_BOLD="${_ESC}[1m"; _C_RESET="${_ESC}[0m"
+_bw_color() {
+    # $1 = kode warna, $2 = teks. Cetak berwarna bila tty, polos bila bukan.
+    if [ -t 1 ]; then printf '%s%s%s' "$1" "$2" "$_C_RESET"; else printf '%s' "$2"; fi
+}
+
 fmt_bps() {
     # $1 = bytes/detik (dari bwm-ng) -> bit/detik, tampil bps/Kbps/Mbps/Gbps (desimal, 1000)
     _v=${1:-0}
@@ -118,19 +128,106 @@ fmt_bps() {
     }'
 }
 
+_print_bw_table() {
+    # $1 = judul. Data CSV bwm-ng dibaca dari stdin.
+    # Baris selang-seling: ganjil merah, genap default; baris total tebal.
+    _title=$1
+    printf '%s\n' "$_title"
+    printf '  %-12s %-12s %-12s %-12s\n' "Interface" "RX" "TX" "Total"
+    _row=0
+    while IFS=';' read -r _ts _iface _rx _tx _tot _rest; do
+        [ -n "$_iface" ] || continue
+        _row=$((_row + 1))
+        _line=$(printf '  %-12s %-12s %-12s %-12s' "$_iface" "$(fmt_bps "$_rx")" "$(fmt_bps "$_tx")" "$(fmt_bps "$_tot")")
+        if [ "$_iface" = "total" ]; then
+            _bw_color "$_C_BOLD" "$_line"; printf '\n'
+        elif [ $((_row % 2)) -eq 1 ]; then
+            _bw_color "$_C_RED" "$_line"; printf '\n'
+        else
+            printf '%s\n' "$_line"
+        fi
+    done
+    return 0
+}
+
+_last_bw_snapshot() {
+    # $1 = file output bwm-ng. Cetak baris snapshot terakhir.
+    # Timestamp bwm-ng per baris beda mikrodetik dalam satu snapshot,
+    # jadi kelompokkan berdasarkan detik (bagian integer timestamp).
+    _f=$1
+    [ -s "$_f" ] || return 1
+    _last_sec=$(tail -n 1 "$_f" 2>/dev/null | cut -d';' -f1 | cut -d'.' -f1)
+    [ -n "$_last_sec" ] || return 1
+    grep -F "${_last_sec}." "$_f" 2>/dev/null
+    return 0
+}
+
+_live_bandwidth() {
+    # $1 = durasi detik. Update tiap detik, q = berhenti lebih awal.
+    _secs=$1
+    _tmp=$(mktemp /tmp/titian-bwm.XXXXXX) || die "gagal buat temp file"
+    _bwm_pid=""
+    _saved_stty=""
+    _is_tty=0
+    [ -t 1 ] && _is_tty=1
+    _cleanup_live() {
+        [ -n "$_bwm_pid" ] && kill "$_bwm_pid" 2>/dev/null
+        if [ -n "$_saved_stty" ]; then stty "$_saved_stty" < /dev/tty 2>/dev/null; fi
+        rm -f "$_tmp"
+    }
+    trap _cleanup_live EXIT INT TERM
+    bwm-ng -o csv -c 0 -t 1000 > "$_tmp" 2>/dev/null &
+    _bwm_pid=$!
+    # terminal ke mode non-canonical supaya 'q' terbaca tanpa Enter (hanya bila ada tty).
+    # Bila tidak ada controlling terminal (/dev/tty tak bisa dibuka), lewati diam-diam.
+    _saved_stty=$(stty -g < /dev/tty 2>/dev/null) 2>/dev/null || _saved_stty=""
+    if [ -n "$_saved_stty" ]; then
+        stty -icanon min 0 time 0 < /dev/tty 2>/dev/null
+    fi
+    _elapsed=0
+    _stopped=""
+    while [ "$_elapsed" -lt "$_secs" ]; do
+        sleep 1
+        _elapsed=$((_elapsed + 1))
+        # cek tombol q (non-blocking, dari terminal; abaikan bila tidak ada tty)
+        if [ -n "$_saved_stty" ]; then
+            _ch=$(dd bs=1 count=1 < /dev/tty 2>/dev/null)
+            case "$_ch" in
+                q|Q) _stopped="q"; break ;;
+            esac
+        fi
+        _snap=$(_last_bw_snapshot "$_tmp")
+        if [ -n "$_snap" ]; then
+            if [ "$_is_tty" -eq 1 ]; then printf '\033[2J\033[H'; fi
+            printf '%s\n' "$_snap" | _print_bw_table "Bandwidth (bwm-ng, live, bps) — detik $_elapsed/$_secs (q = berhenti):"
+        fi
+    done
+    _cleanup_live
+    trap - EXIT INT TERM
+    if [ -n "$_stopped" ]; then
+        printf '\nBerhenti (q ditekan) setelah %s detik.\n' "$_elapsed"
+    fi
+    exit 0
+}
+
 cmd_bandwidth() {
+    # $1 = durasi detik (opsional, default 1 = satu snapshot)
+    _secs=${1:-1}
+    case "$_secs" in
+        ''|*[!0-9]*) die "waktu harus angka detik (>= 1), contoh: show monitoring bandwidth 10" ;;
+    esac
+    if [ "$_secs" -lt 1 ]; then die "waktu harus >= 1 detik"; fi
+    if [ "$_secs" -gt 3600 ]; then die "waktu maksimal 3600 detik (1 jam)"; fi
     if ! command -v bwm-ng >/dev/null 2>&1; then
         die "bwm-ng tidak terpasang (FreeBSD: pkg install net-mgmt/bwm-ng; Debian: apt install bwm-ng)"
     fi
-    _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
-    if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
-    printf 'Bandwidth (bwm-ng, snapshot 1 detik, bps):\n'
-    printf '  %-12s %-12s %-12s %-12s\n' "Interface" "RX" "TX" "Total"
-    printf '%s\n' "$_out" | while IFS=';' read -r _ts _iface _rx _tx _tot _rest; do
-        [ -n "$_iface" ] || continue
-        printf '  %-12s %-12s %-12s %-12s\n' "$_iface" "$(fmt_bps "$_rx")" "$(fmt_bps "$_tx")" "$(fmt_bps "$_tot")"
-    done
-    exit 0
+    if [ "$_secs" -eq 1 ]; then
+        _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
+        if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
+        printf '%s\n' "$_out" | _print_bw_table "Bandwidth (bwm-ng, snapshot 1 detik, bps):"
+        exit 0
+    fi
+    _live_bandwidth "$_secs"
 }
 
 # --- mutations ---
@@ -193,10 +290,10 @@ cmd_apply() {
 case "${1:-}" in
     check) cmd_check ;;
     show) cmd_show "${2:-}" ;;
-    bandwidth) cmd_bandwidth ;;
+    bandwidth) cmd_bandwidth "${2:-}" ;;
     set) cmd_set "${2:-}" "${3:-}" ;;
     set-community) cmd_set_community "${2:-}" ;;
     apply) cmd_apply ;;
     apply-all) cmd_apply ;;
-    *) echo "Usage: $0 {check|show [service]|bandwidth|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {check|show [service]|bandwidth [detik]|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
 esac

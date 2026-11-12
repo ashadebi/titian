@@ -344,7 +344,10 @@ PF_CONF="${PF_CONF:-/etc/pf.conf}"
 FW_FILE="${PF_FW_FILE:-/etc/pf-firewall.conf}"
 NAT_FILE="${PF_NAT_FILE:-/etc/pf-nat.conf}"
 
-warn() { echo "$PROG: warning: $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '%s: \033[33mwarning:\033[0m %s\n' "$PROG" "$*" >&2
+    else echo "$PROG: warning: $*" >&2; fi
+}
 
 pf_enabled() {
     pfctl -s info 2>/dev/null | grep -q "Status: Enabled"

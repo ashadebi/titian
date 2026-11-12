@@ -32,7 +32,10 @@ STATE="$STATE_ROOT/sysctl.titian"
 PREV="$STATE_ROOT/sysctl.titian.prev"
 
 err() { echo "Error: $*" >&2; exit 33; }
-warn() { echo "Warning(sysctl): $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(sysctl):\033[0m %s\n' "$*" >&2
+    else echo "Warning(sysctl): $*" >&2; fi
+}
 
 valid_key() {
     # MIB bertitik: segmen alfanumerik/underscore, minimal satu titik

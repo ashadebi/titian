@@ -461,7 +461,7 @@ X
 Xrun_rc_command "$1"
 4b1d54a73151e108ee1f21ef05eba0e0
 echo x - net/titian/files/sbin/titian-bird.sh
-sed 's/^X//' >net/titian/files/sbin/titian-bird.sh << 'a58b662331094dd8dba5455f298a0b05'
+sed 's/^X//' >net/titian/files/sbin/titian-bird.sh << '1d1965aca87f7f406d8b009073d9d000'
 X#!/bin/sh
 X# TITIAN BSDRP — BIRD per-section generator + deteksi varian bird2/bird3
 X# + mutual exclusion bird vs FRR.
@@ -491,6 +491,11 @@ XBIRD_SH="$SBIN_DIR/titian-bird.sh"
 XINTENT="$STATE_ROOT/netstate/routing.intent"
 XDIRTY=/var/run/routing.dirty
 Xerr() { echo "Error: $*" >&2; exit 33; }
+Xwarn_bird() {
+X    # $* = pesan. "Warning" oranye (kuning) bila stderr terminal.
+X    if [ -t 2 ]; then printf '%% \033[33mWarning:\033[0m %s\n' "$*" >&2
+X    else echo "% Warning: $*" >&2; fi
+X}
 X
 Xconf_path() {
 X    if [ "$OS" = "FreeBSD" ]; then
@@ -537,7 +542,7 @@ X        esac
 X        [ -n "$bver" ] || bver="unknown"
 X    fi
 X    if [ -n "$variant" ] && [ -n "$vb" ] && [ "$variant" != "$vb" ]; then
-X        echo "% Warning: bird on disk is ${bver} but this image was built with bird${vb}" >&2
+X        warn_bird "bird on disk is ${bver} but this image was built with bird${vb}"
 X    fi
 X    if [ -z "$variant" ]; then
 X        if [ -n "$vb" ]; then
@@ -635,8 +640,8 @@ X    variant=$(bird_variant); bver=$(bird_version); zpid=$(zebra_pid); bpid=$(bi
 X    case "$want" in
 X        bird)
 X            if frr_enabled || frr_running || [ "$(intent_val frr)" = "yes" ]; then
-X                [ -n "$zpid" ] && echo "% Warning: FRR is currently running (zebra pid $zpid, frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))" >&2
-X                [ -z "$zpid" ] && echo "% Warning: FRR is enabled (frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))" >&2
+X                [ -n "$zpid" ] && warn_bird "FRR is currently running (zebra pid $zpid, frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))"
+X                [ -z "$zpid" ] && warn_bird "FRR is enabled (frr_enable=$(sysrc_val frr_enable 2>/dev/null || echo NO))"
 X                echo "% Bird and FRR cannot run at the same time." >&2
 X                exit 33
 X            fi
@@ -644,9 +649,9 @@ X            ;;
 X        frr)
 X            if bird_enabled || bird_running || [ "$(intent_val bird)" = "yes" ]; then
 X                if [ "$variant" = "none" ]; then
-X                    echo "% Warning: BIRD is enabled/running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))" >&2
+X                    warn_bird "BIRD is enabled/running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))"
 X                else
-X                    echo "% Warning: BIRD $bver is enabled/running (bird${variant}, bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO)${bpid:+, pid $bpid})" >&2
+X                    warn_bird "BIRD $bver is enabled/running (bird${variant}, bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO)${bpid:+, pid $bpid})"
 X                fi
 X                echo "% Bird and FRR cannot run at the same time." >&2
 X                exit 33
@@ -930,7 +935,7 @@ X    show-routing) do_show_routing ;;
 X    show-version) do_show_version ;;
 X    *) echo "Usage: $0 {conf-path|detect|check|generate|reload-filters|set-threads N|bird-enable|bird-disable|check-exclusion bird|frr|commit|show-routing|show-version} [section]" >&2; exit 2 ;;
 Xesac
-a58b662331094dd8dba5455f298a0b05
+1d1965aca87f7f406d8b009073d9d000
 echo x - net/titian/files/sbin/titian-boot.sh
 sed 's/^X//' >net/titian/files/sbin/titian-boot.sh << 'c0014d811ca525b442086d07eff8f132'
 X#!/bin/sh
@@ -1039,7 +1044,7 @@ Xfi
 Xexit 0
 c0014d811ca525b442086d07eff8f132
 echo x - net/titian/files/sbin/titian-checkpoint.sh
-sed 's/^X//' >net/titian/files/sbin/titian-checkpoint.sh << 'cd6125caeb19fa0f1428455ffc46eba4'
+sed 's/^X//' >net/titian/files/sbin/titian-checkpoint.sh << 'c95d55b6fe1a2871c38e28ef920e26d2'
 X#!/bin/sh
 X# TITIAN — checkpoint + rollback.
 X# Checkpoint = TITIK SIMPAN BERNAMA dari konfigurasi. User membuat
@@ -1118,7 +1123,10 @@ XCKPT_DIR=$STATE_ROOT/checkpoints
 XSOCKFILE=/tmp/konfd.socket
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
-Xwarn() { echo "Warning(checkpoint): $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '\033[33mWarning(checkpoint):\033[0m %s\n' "$*" >&2
+X    else echo "Warning(checkpoint): $*" >&2; fi
+X}
 X
 Xvalid_name() {
 X    # $1=nama -> 0 bila valid: [A-Za-z0-9][A-Za-z0-9_-]*, maks 64
@@ -1643,7 +1651,7 @@ X    rollback) cmd_rollback "${2:-}" ;;
 X    dump-running) dump_running "${2:-/dev/stdout}" ;;
 X    *) echo "Usage: $0 {save <nama>|snapshot-last-save|list|delete <nama>|rollback [nama]|dump-running <file>}" >&2; exit 2 ;;
 Xesac
-cd6125caeb19fa0f1428455ffc46eba4
+c95d55b6fe1a2871c38e28ef920e26d2
 echo x - net/titian/files/sbin/titian-comm.sh
 sed 's/^X//' >net/titian/files/sbin/titian-comm.sh << '23a974ecc59f8dfd247435854540a23e'
 X#!/bin/sh
@@ -2492,7 +2500,7 @@ X    *) echo "Usage: $0 {check|frr-enable|frr-disable|frr-apply|set-router-id IP
 Xesac
 36ca47f45615e6251e0216b63a1899b8
 echo x - net/titian/files/sbin/titian-fw.sh
-sed 's/^X//' >net/titian/files/sbin/titian-fw.sh << '2e7410561deaf0cb316d03d10a75e32b'
+sed 's/^X//' >net/titian/files/sbin/titian-fw.sh << 'ced38815a3c12fbf7234e78b57a31394'
 X#!/bin/sh
 X# titian-fw.sh — klish helper: edit + apply /usr/local/etc/firewall.conf (pf only)
 X# BSDRP_klish, prepared 2026-11-08 ~19:15 WIB.
@@ -2839,7 +2847,10 @@ XPF_CONF="${PF_CONF:-/etc/pf.conf}"
 XFW_FILE="${PF_FW_FILE:-/etc/pf-firewall.conf}"
 XNAT_FILE="${PF_NAT_FILE:-/etc/pf-nat.conf}"
 X
-Xwarn() { echo "$PROG: warning: $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '%s: \033[33mwarning:\033[0m %s\n' "$PROG" "$*" >&2
+X    else echo "$PROG: warning: $*" >&2; fi
+X}
 X
 Xpf_enabled() {
 X    pfctl -s info 2>/dev/null | grep -q "Status: Enabled"
@@ -3032,7 +3043,7 @@ X    apply)         cmd_apply "$@" ;;
 X    apply-all)     cmd_apply ;;
 X    *) echo "usage: $PROG <check|set-enable|add-filter|del-filter|add-snat|del-snat|add-dnat|del-dnat|add-protected|del-protected|flush|show|show-filter|show-nat|status|apply|apply-all> ..." >&2; exit 2 ;;
 Xesac
-2e7410561deaf0cb316d03d10a75e32b
+ced38815a3c12fbf7234e78b57a31394
 echo x - net/titian/files/sbin/titian-if-list.sh
 sed 's/^X//' >net/titian/files/sbin/titian-if-list.sh << '0af7efe8cac198c42d578df1c0f2be19'
 X#!/bin/sh
@@ -3373,7 +3384,7 @@ X    *) echo "Usage: $0 {addr-add|addr-set|addr-del|addr6-add|addr6-del} <iface>
 Xesac
 2b9cc0312f0ed87b98a174b9081e15a1
 echo x - net/titian/files/sbin/titian-monitoring.sh
-sed 's/^X//' >net/titian/files/sbin/titian-monitoring.sh << '727083b5db7a517affc5dc4ce29b0924'
+sed 's/^X//' >net/titian/files/sbin/titian-monitoring.sh << 'c90bb26839bbde42d19e3ddb79e4c97c'
 X#!/bin/sh
 X# TITIAN BSDRP — monitoring: snmpd / node_exporter / bird_exporter / nfacctd.
 X# Semua OFF by default (feature-list §9). `set` hanya mencatat niat di
@@ -3482,6 +3493,16 @@ X    exit 0
 X}
 X
 X# --- bandwidth (bwm-ng) ---
+X# Warna ANSI (hanya bila stdout terminal; bila di-pipe, output polos).
+X# _ESC = byte ESC asli (printf '%s' tidak menafsir \033, jadi konstanta
+X# harus berisi byte ESC, bukan string literal "\033").
+X_ESC=$(printf '\033')
+X_C_RED="${_ESC}[31m"; _C_GREEN="${_ESC}[32m"; _C_YELLOW="${_ESC}[33m"; _C_BOLD="${_ESC}[1m"; _C_RESET="${_ESC}[0m"
+X_bw_color() {
+X    # $1 = kode warna, $2 = teks. Cetak berwarna bila tty, polos bila bukan.
+X    if [ -t 1 ]; then printf '%s%s%s' "$1" "$2" "$_C_RESET"; else printf '%s' "$2"; fi
+X}
+X
 Xfmt_bps() {
 X    # $1 = bytes/detik (dari bwm-ng) -> bit/detik, tampil bps/Kbps/Mbps/Gbps (desimal, 1000)
 X    _v=${1:-0}
@@ -3494,19 +3515,106 @@ X        else printf "%.0f bps", b
 X    }'
 X}
 X
+X_print_bw_table() {
+X    # $1 = judul. Data CSV bwm-ng dibaca dari stdin.
+X    # Baris selang-seling: ganjil merah, genap default; baris total tebal.
+X    _title=$1
+X    printf '%s\n' "$_title"
+X    printf '  %-12s %-12s %-12s %-12s\n' "Interface" "RX" "TX" "Total"
+X    _row=0
+X    while IFS=';' read -r _ts _iface _rx _tx _tot _rest; do
+X        [ -n "$_iface" ] || continue
+X        _row=$((_row + 1))
+X        _line=$(printf '  %-12s %-12s %-12s %-12s' "$_iface" "$(fmt_bps "$_rx")" "$(fmt_bps "$_tx")" "$(fmt_bps "$_tot")")
+X        if [ "$_iface" = "total" ]; then
+X            _bw_color "$_C_BOLD" "$_line"; printf '\n'
+X        elif [ $((_row % 2)) -eq 1 ]; then
+X            _bw_color "$_C_RED" "$_line"; printf '\n'
+X        else
+X            printf '%s\n' "$_line"
+X        fi
+X    done
+X    return 0
+X}
+X
+X_last_bw_snapshot() {
+X    # $1 = file output bwm-ng. Cetak baris snapshot terakhir.
+X    # Timestamp bwm-ng per baris beda mikrodetik dalam satu snapshot,
+X    # jadi kelompokkan berdasarkan detik (bagian integer timestamp).
+X    _f=$1
+X    [ -s "$_f" ] || return 1
+X    _last_sec=$(tail -n 1 "$_f" 2>/dev/null | cut -d';' -f1 | cut -d'.' -f1)
+X    [ -n "$_last_sec" ] || return 1
+X    grep -F "${_last_sec}." "$_f" 2>/dev/null
+X    return 0
+X}
+X
+X_live_bandwidth() {
+X    # $1 = durasi detik. Update tiap detik, q = berhenti lebih awal.
+X    _secs=$1
+X    _tmp=$(mktemp /tmp/titian-bwm.XXXXXX) || die "gagal buat temp file"
+X    _bwm_pid=""
+X    _saved_stty=""
+X    _is_tty=0
+X    [ -t 1 ] && _is_tty=1
+X    _cleanup_live() {
+X        [ -n "$_bwm_pid" ] && kill "$_bwm_pid" 2>/dev/null
+X        if [ -n "$_saved_stty" ]; then stty "$_saved_stty" < /dev/tty 2>/dev/null; fi
+X        rm -f "$_tmp"
+X    }
+X    trap _cleanup_live EXIT INT TERM
+X    bwm-ng -o csv -c 0 -t 1000 > "$_tmp" 2>/dev/null &
+X    _bwm_pid=$!
+X    # terminal ke mode non-canonical supaya 'q' terbaca tanpa Enter (hanya bila ada tty).
+X    # Bila tidak ada controlling terminal (/dev/tty tak bisa dibuka), lewati diam-diam.
+X    _saved_stty=$(stty -g < /dev/tty 2>/dev/null) 2>/dev/null || _saved_stty=""
+X    if [ -n "$_saved_stty" ]; then
+X        stty -icanon min 0 time 0 < /dev/tty 2>/dev/null
+X    fi
+X    _elapsed=0
+X    _stopped=""
+X    while [ "$_elapsed" -lt "$_secs" ]; do
+X        sleep 1
+X        _elapsed=$((_elapsed + 1))
+X        # cek tombol q (non-blocking, dari terminal; abaikan bila tidak ada tty)
+X        if [ -n "$_saved_stty" ]; then
+X            _ch=$(dd bs=1 count=1 < /dev/tty 2>/dev/null)
+X            case "$_ch" in
+X                q|Q) _stopped="q"; break ;;
+X            esac
+X        fi
+X        _snap=$(_last_bw_snapshot "$_tmp")
+X        if [ -n "$_snap" ]; then
+X            if [ "$_is_tty" -eq 1 ]; then printf '\033[2J\033[H'; fi
+X            printf '%s\n' "$_snap" | _print_bw_table "Bandwidth (bwm-ng, live, bps) — detik $_elapsed/$_secs (q = berhenti):"
+X        fi
+X    done
+X    _cleanup_live
+X    trap - EXIT INT TERM
+X    if [ -n "$_stopped" ]; then
+X        printf '\nBerhenti (q ditekan) setelah %s detik.\n' "$_elapsed"
+X    fi
+X    exit 0
+X}
+X
 Xcmd_bandwidth() {
+X    # $1 = durasi detik (opsional, default 1 = satu snapshot)
+X    _secs=${1:-1}
+X    case "$_secs" in
+X        ''|*[!0-9]*) die "waktu harus angka detik (>= 1), contoh: show monitoring bandwidth 10" ;;
+X    esac
+X    if [ "$_secs" -lt 1 ]; then die "waktu harus >= 1 detik"; fi
+X    if [ "$_secs" -gt 3600 ]; then die "waktu maksimal 3600 detik (1 jam)"; fi
 X    if ! command -v bwm-ng >/dev/null 2>&1; then
 X        die "bwm-ng tidak terpasang (FreeBSD: pkg install net-mgmt/bwm-ng; Debian: apt install bwm-ng)"
 X    fi
-X    _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
-X    if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
-X    printf 'Bandwidth (bwm-ng, snapshot 1 detik, bps):\n'
-X    printf '  %-12s %-12s %-12s %-12s\n' "Interface" "RX" "TX" "Total"
-X    printf '%s\n' "$_out" | while IFS=';' read -r _ts _iface _rx _tx _tot _rest; do
-X        [ -n "$_iface" ] || continue
-X        printf '  %-12s %-12s %-12s %-12s\n' "$_iface" "$(fmt_bps "$_rx")" "$(fmt_bps "$_tx")" "$(fmt_bps "$_tot")"
-X    done
-X    exit 0
+X    if [ "$_secs" -eq 1 ]; then
+X        _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
+X        if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
+X        printf '%s\n' "$_out" | _print_bw_table "Bandwidth (bwm-ng, snapshot 1 detik, bps):"
+X        exit 0
+X    fi
+X    _live_bandwidth "$_secs"
 X}
 X
 X# --- mutations ---
@@ -3569,16 +3677,16 @@ X
 Xcase "${1:-}" in
 X    check) cmd_check ;;
 X    show) cmd_show "${2:-}" ;;
-X    bandwidth) cmd_bandwidth ;;
+X    bandwidth) cmd_bandwidth "${2:-}" ;;
 X    set) cmd_set "${2:-}" "${3:-}" ;;
 X    set-community) cmd_set_community "${2:-}" ;;
 X    apply) cmd_apply ;;
 X    apply-all) cmd_apply ;;
-X    *) echo "Usage: $0 {check|show [service]|bandwidth|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
+X    *) echo "Usage: $0 {check|show [service]|bandwidth [detik]|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
 Xesac
-727083b5db7a517affc5dc4ce29b0924
+c90bb26839bbde42d19e3ddb79e4c97c
 echo x - net/titian/files/sbin/titian-persist.sh
-sed 's/^X//' >net/titian/files/sbin/titian-persist.sh << '864ff31c1a211aae53a617d34ceaf61e'
+sed 's/^X//' >net/titian/files/sbin/titian-persist.sh << '74b40a66403d406774aa44693b1decd6'
 X#!/bin/sh
 X# TITIAN Fase 1 — cermin persistensi untuk interface yang DIBUAT titian.
 X#  - Debian: /etc/systemd/network/00-titian-<iface>.network (networkd
@@ -3596,7 +3704,10 @@ XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
 XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XSTATE_DIR="$STATE_ROOT/netstate"
-Xwarn() { echo "Warning(persist): $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '\033[33mWarning(persist):\033[0m %s\n' "$*" >&2
+X    else echo "Warning(persist): $*" >&2; fi
+X}
 X
 Xmark_if() {
 X    mkdir -p "$STATE_DIR" 2>/dev/null || return 0
@@ -3867,7 +3978,7 @@ X        ;;
 X    *) echo "Usage: $0 {mark-if|drop-if|sync-if|bond-if|unbond-if|attach-bond|apply-bond} <iface> [bond]" >&2; exit 2 ;;
 Xesac
 Xexit 0
-864ff31c1a211aae53a617d34ceaf61e
+74b40a66403d406774aa44693b1decd6
 echo x - net/titian/files/sbin/titian-pppoe.sh
 sed 's/^X//' >net/titian/files/sbin/titian-pppoe.sh << '437d91a5b0d62eaf428b3a576d53faf4'
 X#!/bin/sh
@@ -4732,13 +4843,39 @@ X    *) echo "Usage: $0 {gw6|gw6-del|route6-dev|route6-via|route6-del|route6-bla
 Xesac
 09b9862eae960fd6d1b9fe072d7b0aa8
 echo x - net/titian/files/sbin/titian-show.sh
-sed 's/^X//' >net/titian/files/sbin/titian-show.sh << 'edbf683c273770303a635de8996fe70e'
+sed 's/^X//' >net/titian/files/sbin/titian-show.sh << '4eeaf4942d2cb5cd10e3f46dffce0849'
 X#!/bin/sh
 X# TITIAN Fase 1 — perintah show (interfaces, route, neighbor).
 X# Perbedaan dari rtcli: show interfaces MENAMPILKAN inet6 (rtcli
 X# sengaja membuangnya dengan egrep -v inet6).
 X# POSIX sh.
 XOS=$(uname -s)
+X
+X# --- warna status (hanya bila stdout terminal; bila di-pipe, polos) ---
+X# Pola: kode warna dicetak sebagai argumen printf TERPISAH sebelum field
+X# status, reset sesudahnya — jadi lebar kolom printf tetap benar.
+Xif [ -t 1 ]; then _SHOW_COLOR=1; else _SHOW_COLOR=0; fi
+X# _ESC = byte ESC asli (printf '%s' tidak menafsir \033, jadi konstanta
+X# harus berisi byte ESC, bukan string literal "\033").
+X_ESC=$(printf '\033')
+X_C_RED="${_ESC}[31m"; _C_GREEN="${_ESC}[32m"; _C_YELLOW="${_ESC}[33m"; _C_CYAN="${_ESC}[36m"; _C_RESET="${_ESC}[0m"
+X# Kembalikan kode warna untuk sebuah status (kosong bila bukan tty).
+X# up/u -> hijau, down/D/disabled -> merah, L (loopback) -> cyan, warning -> kuning/oranye.
+Xstatus_color() {
+X    if [ "$_SHOW_COLOR" -eq 0 ]; then printf ''; return 0; fi
+X    case "$1" in
+X        up|u|UP) printf '%s' "$_C_GREEN" ;;
+X        down|D|DOWN|disabled) printf '%s' "$_C_RED" ;;
+X        L) printf '%s' "$_C_CYAN" ;;
+X        warning|WARNING) printf '%s' "$_C_YELLOW" ;;
+X        *) printf '' ;;
+X    esac
+X    return 0
+X}
+Xstatus_reset() {
+X    if [ "$_SHOW_COLOR" -eq 0 ]; then printf ''; else printf '%s' "$_C_RESET"; fi
+X    return 0
+X}
 X
 Xinterfaces_linux() {
 X    printf "\n"
@@ -4761,12 +4898,12 @@ X            lo*) operstate="L" ;;
 X        esac
 X        addrs=$(ip -o addr show dev "$dev" 2>/dev/null | awk '{if ($5=="peer") print $4 " peer " $6; else print $4}')
 X        if [ -z "$addrs" ]; then
-X            printf "  %-11s%-19s%8s    %s\n" "$dev" "-" "$operstate" "$alias"
+X            printf "  %-11s%-19s%s%8s%s    %s\n" "$dev" "-" "$(status_color "$operstate")" "$operstate" "$(status_reset)" "$alias"
 X        else
 X            first=1
 X            for a in $addrs; do
 X                if [ "$first" -eq 1 ]; then
-X                    printf "  %-11s%-19s%8s    %s\n" "$dev" "$a" "$operstate" "$alias"
+X                    printf "  %-11s%-19s%s%8s%s    %s\n" "$dev" "$a" "$(status_color "$operstate")" "$operstate" "$(status_reset)" "$alias"
 X                    first=0
 X                else
 X                    printf "  %-11s%-19s\n" "" "$a"
@@ -4782,7 +4919,7 @@ X    printf "\n"
 X    printf "Codes: State, u - Up, D - Down, L - Loopback. \n"
 X    printf "  %-11s%-19s%8s    %s\n" "Interface" "IP Address" "state" "Description"
 X    printf "  %-11s%-19s%8s    %s\n" "---------" "----------" "-----" "-----------"
-X    ifconfig -a 2>/dev/null | awk '
+X    ifconfig -a 2>/dev/null | awk -v C_UP="$_C_GREEN" -v C_DOWN="$_C_RED" -v C_LOOP="$_C_CYAN" -v C_RESET="$_C_RESET" -v USE_COLOR="$_SHOW_COLOR" '
 X        /^[a-z0-9]+:/ {
 X            if (dev != "") { flush() }
 X            split($1, n, ":"); dev = n[1]
@@ -4803,11 +4940,20 @@ X            }
 X        }
 X        /^[[:space:]]*description: / { desc = substr($0, index($0, ":") + 2) }
 X        function flush() {
+X            # warna state: u=hijau, D=merah, L=cyan (hanya bila tty).
+X            # Kode warna sebagai argumen printf terpisah (sebelum/sesudah
+X            # field) supaya lebar kolom %8s tetap benar.
+X            if (USE_COLOR == 1) {
+X                if (state == "u") sc = C_UP
+X                else if (state == "D") sc = C_DOWN
+X                else sc = C_LOOP
+X                sr = C_RESET
+X            } else { sc = ""; sr = "" }
 X            if (naddr == 0) {
-X                printf("  %-11s%-19s%8s    %s\n", dev, "-", state, desc)
+X                printf("  %-11s%-19s%s%8s%s    %s\n", dev, "-", sc, state, sr, desc)
 X            } else {
 X                for (i = 1; i <= naddr; i++) {
-X                    if (i == 1) printf("  %-11s%-19s%8s    %s\n", dev, addrs[i], state, desc)
+X                    if (i == 1) printf("  %-11s%-19s%s%8s%s    %s\n", dev, addrs[i], sc, state, sr, desc)
 X                    else printf("  %-11s%-19s\n", "", addrs[i])
 X                }
 X            }
@@ -4840,7 +4986,7 @@ X            if [ "$operstate" = "up" ] || [ $((flags & 65536)) -ne 0 ] || [ $((
 X        fi
 X        addrs=$(ip -o addr show dev "$dev" 2>/dev/null | awk '{if ($5=="peer") print $4 " peer " $6; else print $4}' | paste -sd ", " -)
 X        [ -z "$addrs" ] && addrs="-"
-X        printf "  %-11s %-9s %-6s %s\n" "$dev" "$admin" "$link" "$addrs"
+X        printf "  %-11s %s%-9s%s %s%-6s%s %s\n" "$dev" "$(status_color "$admin")" "$admin" "$(status_reset)" "$(status_color "$link")" "$link" "$(status_reset)" "$addrs"
 X    done
 X    printf "\n"
 X}
@@ -4849,7 +4995,7 @@ Xterse_fbsd() {
 X    printf "\n"
 X    printf "  %-11s %-9s %-6s %s\n" "Interface" "Admin" "Link" "IP Address"
 X    printf "  %-11s %-9s %-6s %s\n" "---------" "-----" "----" "----------"
-X    ifconfig -a 2>/dev/null | awk '
+X    ifconfig -a 2>/dev/null | awk -v C_UP="$_C_GREEN" -v C_DOWN="$_C_RED" -v C_RESET="$_C_RESET" -v USE_COLOR="$_SHOW_COLOR" '
 X        /^[a-z0-9]+:/ {
 X            if (dev != "") flush()
 X            split($1, n, ":"); dev = n[1]
@@ -4868,9 +5014,16 @@ X                for (i = 1; i <= NF; i++) if ($i == "prefixlen") addrs[++naddr]
 X            }
 X        }
 X        function flush() {
+X            # warna: up=hijau, down/disabled=merah (hanya bila tty).
+X            # Kode warna sebagai argumen printf terpisah supaya lebar
+X            # kolom %-9s / %-6s tetap benar.
+X            if (USE_COLOR == 1) {
+X                ac = (admin == "up") ? C_UP : C_DOWN; ar = C_RESET
+X                lc = (link == "up") ? C_UP : C_DOWN; lr = C_RESET
+X            } else { ac = ""; ar = ""; lc = ""; lr = "" }
 X            a = "-"
 X            for (i = 1; i <= naddr; i++) a = (i == 1) ? addrs[i] : a ", " addrs[i]
-X            printf("  %-11s %-9s %-6s %s\n", dev, admin, link, a)
+X            printf("  %-11s %s%-9s%s %s%-6s%s %s\n", dev, ac, admin, ar, lc, link, lr, a)
 X        }
 X        END { if (dev != "") flush() }
 X    '
@@ -4897,7 +5050,7 @@ X        fi
 X        mtu=$(cat /sys/class/net/$dev/mtu 2>/dev/null)
 X        mac=$(cat /sys/class/net/$dev/address 2>/dev/null)
 X        alias=$(cat /sys/class/net/$dev/ifalias 2>/dev/null)
-X        printf "Interface %s: admin %s, link %s, mtu %s, mac %s" "$dev" "$admin" "$link" "$mtu" "$mac"
+X        printf "Interface %s: admin %s%s%s, link %s%s%s, mtu %s, mac %s" "$dev" "$(status_color "$admin")" "$admin" "$(status_reset)" "$(status_color "$link")" "$link" "$(status_reset)" "$mtu" "$mac"
 X        [ -n "$alias" ] && printf ", description \"%s\"" "$alias"
 X        printf "\n"
 X        ip -o addr show dev "$dev" 2>/dev/null | awk '{if ($5=="peer") print "    " $3 " " $4 " peer " $6; else print "    " $3 " " $4}'
@@ -4917,7 +5070,7 @@ X        case "$dev" in
 X            lo*) link="up" ;;
 X            *) link=$(printf "%s\n" "$out" | awk '/^[[:space:]]*status: / {print ($2 == "active") ? "up" : "down"; exit}'); [ -z "$link" ] && link="down" ;;
 X        esac
-X        printf "Interface %s: admin %s, link %s\n" "$dev" "$admin" "$link"
+X        printf "Interface %s: admin %s%s%s, link %s%s%s\n" "$dev" "$(status_color "$admin")" "$admin" "$(status_reset)" "$(status_color "$link")" "$link" "$(status_reset)"
 X        printf "%s\n" "$out" | sed 's/^/    /'
 X        netstat -I "$dev" -b 2>/dev/null | awk 'NR > 1 && $3 ~ /^<Link/ {printf("    counters: RX %s packets, %s bytes; TX %s packets, %s bytes\n", $5, $8, $9, $11); exit}'
 X        printf "\n"
@@ -4986,7 +5139,7 @@ X        fi
 X        ;;
 X    *) echo "Usage: $0 {interfaces|if-detail|terse|all|route|route6|neighbor} [arg]" >&2; exit 2 ;;
 Xesac
-edbf683c273770303a635de8996fe70e
+4eeaf4942d2cb5cd10e3f46dffce0849
 echo x - net/titian/files/sbin/titian-sys.sh
 sed 's/^X//' >net/titian/files/sbin/titian-sys.sh << 'c54185f92322000bb91d7b656e4292c1'
 X#!/bin/sh
@@ -5304,7 +5457,7 @@ X    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|port-in-use|ser
 Xesac
 c54185f92322000bb91d7b656e4292c1
 echo x - net/titian/files/sbin/titian-sysctl.sh
-sed 's/^X//' >net/titian/files/sbin/titian-sysctl.sh << '29a82f1d3c7bf399cc29ddab809ea67b'
+sed 's/^X//' >net/titian/files/sbin/titian-sysctl.sh << '07c7ca2c20eb8f6aa004e0a26885adbb'
 X#!/bin/sh
 X# TITIAN — perintah `system sysctl` (kernel parameter, kedua OS).
 X# Bukan restorasi rtcli: tree lama TIDAK punya perintah sysctl sama
@@ -5339,7 +5492,10 @@ XSTATE="$STATE_ROOT/sysctl.titian"
 XPREV="$STATE_ROOT/sysctl.titian.prev"
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
-Xwarn() { echo "Warning(sysctl): $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '\033[33mWarning(sysctl):\033[0m %s\n' "$*" >&2
+X    else echo "Warning(sysctl): $*" >&2; fi
+X}
 X
 Xvalid_key() {
 X    # MIB bertitik: segmen alfanumerik/underscore, minimal satu titik
@@ -5525,7 +5681,7 @@ X    apply) sysctl_apply ;;
 X    mirror) mirror ;;
 X    *) echo "Usage: $0 {set|del|show|apply|mirror} ..." >&2; exit 2 ;;
 Xesac
-29a82f1d3c7bf399cc29ddab809ea67b
+07c7ca2c20eb8f6aa004e0a26885adbb
 echo x - net/titian/files/sbin/titian-sysinfo.sh
 sed 's/^X//' >net/titian/files/sbin/titian-sysinfo.sh << 'c56f0d6ca522607df513e237fc7597b2'
 X#!/bin/sh
@@ -5552,7 +5708,7 @@ Xfi
 Xecho
 c56f0d6ca522607df513e237fc7597b2
 echo x - net/titian/files/sbin/titian-traffic-shape.sh
-sed 's/^X//' >net/titian/files/sbin/titian-traffic-shape.sh << 'a81bd9daa4a7ec8c67ba23b0a743ac6d'
+sed 's/^X//' >net/titian/files/sbin/titian-traffic-shape.sh << '2cbc721f7b5d558a9196706883ac54c4'
 X#!/bin/sh
 X# titian-traffic-shape.sh — klish helper: edit + apply /usr/local/etc/traffic-shape.conf
 X# BSDRP_klish, prepared 2026-11-08 (completed 2026-11-08 ~18:00 WIB).
@@ -6044,7 +6200,10 @@ X
 XANCHOR_FILE=/etc/pf-traffic-shape.conf
 XANCHOR=traffic-shape
 X
-Xwarn() { echo "$PROG: warning: $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '%s: \033[33mwarning:\033[0m %s\n' "$PROG" "$*" >&2
+X    else echo "$PROG: warning: $*" >&2; fi
+X}
 X
 Xpf_enabled() {
 X    pfctl -s info 2>/dev/null | grep -q "Status: Enabled"
@@ -6348,7 +6507,7 @@ X    apply-all)     cmd_apply ;;
 X    flush)         cmd_apply --flush ;;
 X    *) echo "usage: $PROG <check|set-enable|set-pipe-field|set-sched-field|set-queue-field|set-rule-field|del-pipe|del-sched|del-queue|del-rule|show|show-pipe|show-sched|show-queue|show-rule|stats|apply|apply-all|flush> ..." >&2; exit 2 ;;
 Xesac
-a81bd9daa4a7ec8c67ba23b0a743ac6d
+2cbc721f7b5d558a9196706883ac54c4
 echo x - net/titian/files/sbin/titian-tune-recommend.sh
 sed 's/^X//' >net/titian/files/sbin/titian-tune-recommend.sh << '87b63c8b9b9b7fe8810570c225aaf379'
 X#!/bin/sh
@@ -6559,7 +6718,7 @@ Xsay ""
 Xsay "Selesai. Jalankan perintah REKOMENDASI di atas lewat CLI Titian bila setuju — tool ini tidak mengubah apa-apa."
 87b63c8b9b9b7fe8810570c225aaf379
 echo x - net/titian/files/sbin/titian-tune.sh
-sed 's/^X//' >net/titian/files/sbin/titian-tune.sh << 'c72ff4921cf25e4af2c139cb3136f034'
+sed 's/^X//' >net/titian/files/sbin/titian-tune.sh << '8efee1d6d2250b8446ec47bab6056c0a'
 X#!/bin/sh
 X# TITIAN — parameter tuning interface (mtu, qlen, speed, offload, coalesce).
 X# Dipakai perintah `mtu`/`qlen`/`speed` di semua if-view dan perintah di view
@@ -6622,7 +6781,10 @@ XSTATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 XPERSIST=${RT_SBIN:-$ROOT/sbin}/titian-persist.sh
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
-Xwarn() { echo "Warning(tune): $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '\033[33mWarning(tune):\033[0m %s\n' "$*" >&2
+X    else echo "Warning(tune): $*" >&2; fi
+X}
 X
 X# --- state file <iface>.tuning ---
 Xtune_set() {
@@ -7178,9 +7340,9 @@ X    apply-all) apply_all ;;
 X    show) show_iface "$2" ;;
 X    *) echo "Usage: $0 {mtu|mtu-del|qlen|qlen-del|offload|offload-del|coalesce|coalesce-del|speed|speed-del|apply|apply-all|show} ..." >&2; exit 2 ;;
 Xesac
-c72ff4921cf25e4af2c139cb3136f034
+8efee1d6d2250b8446ec47bab6056c0a
 echo x - net/titian/files/sbin/titian-vxlan.sh
-sed 's/^X//' >net/titian/files/sbin/titian-vxlan.sh << '7d5eb7e668aaff6c2236db7687043623'
+sed 's/^X//' >net/titian/files/sbin/titian-vxlan.sh << 'dd91ac0e164d803943a115d483d9c3bf'
 X#!/bin/sh
 X# TITIAN — operasi interface VXLAN (Linux + FreeBSD).
 X# Model: netstate <iface>.vxlan (baris "kunci nilai") = sumber kebenaran
@@ -7209,7 +7371,10 @@ XSBIN=$ROOT/sbin
 XSTATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
-Xwarn() { echo "Warning(vxlan): $*" >&2; }
+Xwarn() {
+X    if [ -t 2 ]; then printf '\033[33mWarning(vxlan):\033[0m %s\n' "$*" >&2
+X    else echo "Warning(vxlan): $*" >&2; fi
+X}
 X
 Xvalid_v4() {
 X    # $1 = dotted quad; return 0 bila valid (salinan titian-if.sh)
@@ -7585,7 +7750,7 @@ X    show) do_show "${2:-}" ;;
 X    *) echo "Usage: $0 {create|set|unset|delete|exists|recreate|apply-all|show} <iface> [key value...]" >&2; exit 2 ;;
 Xesac
 Xexit 0
-7d5eb7e668aaff6c2236db7687043623
+dd91ac0e164d803943a115d483d9c3bf
 echo x - net/titian/files/sbin/titian-wireguard.sh
 sed 's/^X//' >net/titian/files/sbin/titian-wireguard.sh << '8d4a0df8f0c3c006be09d208ef0f614a'
 X#!/bin/sh
@@ -10356,7 +10521,7 @@ X
 X</CLISH_MODULE>
 f59099df84dee653a22a4a5747129afd
 echo x - net/titian/files/tree/conf-monitoring.xml
-sed 's/^X//' >net/titian/files/tree/conf-monitoring.xml << '93b263e163e88e211d50449878687486'
+sed 's/^X//' >net/titian/files/tree/conf-monitoring.xml << 'dc42064848db9bf3effe3c9c2e913eba'
 X<?xml version="1.0" encoding="UTF-8"?>
 X<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
 X          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -10530,17 +10695,21 @@ X        </ACTION>
 X    </COMMAND>
 X
 X    <COMMAND name="show monitoring bandwidth"
-X        help="Bandwidth live per interface (bwm-ng, snapshot 1 detik)"
+X        help="Bandwidth live per interface (bwm-ng, bps). Tanpa angka = 1 snapshot; beri detik untuk live (q = berhenti)"
 X        lock="false"
 X        interrupt="true">
+X        <PARAM name="seconds"
+X            help="durasi detik 1-3600 (live, q = berhenti)"
+X            ptype="BW_SECONDS"
+X            optional="true"/>
 X        <ACTION>
-X            ${RT_SBIN}/titian-monitoring.sh bandwidth
+X            ${RT_SBIN}/titian-monitoring.sh bandwidth "${seconds}"
 X        </ACTION>
 X    </COMMAND>
 X</VIEW>
 X
 X</CLISH_MODULE>
-93b263e163e88e211d50449878687486
+dc42064848db9bf3effe3c9c2e913eba
 echo x - net/titian/files/tree/conf-pppoe.xml
 sed 's/^X//' >net/titian/files/tree/conf-pppoe.xml << 'cf571a15cab4506e154a9fec424630b1'
 X<?xml version="1.0" encoding="UTF-8"?>
@@ -13411,7 +13580,7 @@ X
 X</CLISH_MODULE>
 80269a8ab3cc7b9eaab732baa86f5662
 echo x - net/titian/files/tree/types-dev.xml
-sed 's/^X//' >net/titian/files/tree/types-dev.xml << 'd640b19062fa496656683ecc34310640'
+sed 's/^X//' >net/titian/files/tree/types-dev.xml << '0dce3df7b77c1244bbdc223971d1d22b'
 X<?xml version="1.0" encoding="UTF-8"?>
 X<CLISH_MODULE xmlns="/opt/titian/XMLSchema" 
 X          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
@@ -13460,6 +13629,10 @@ X    <!--=======================================================-->
 X    <PTYPE name="VNI_ID"
 X        pattern="[0-9]+"
 X        help="range 1-16777215"/>
+X    <!--=======================================================-->
+X    <PTYPE name="BW_SECONDS"
+X        pattern="([1-9][0-9]{0,2}|[1-2][0-9]{3}|3[0-5][0-9]{2}|3600)"
+X        help="durasi detik 1-3600"/>
 X    <!--=======================================================-->
 X    <PTYPE name="DSTPORT"
 X        pattern="[0-9]+"
@@ -13531,7 +13704,7 @@ X        pattern="^(masquerade|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[
 X        help="alamat IPv4 atau masquerade"/>
 X    <!--=======================================================-->
 X</CLISH_MODULE>
-d640b19062fa496656683ecc34310640
+0dce3df7b77c1244bbdc223971d1d22b
 echo x - net/titian/files/tree/types-ip6.xml
 sed 's/^X//' >net/titian/files/tree/types-ip6.xml << '3b726a8a46bda81b51795dfe7b0add04'
 X<?xml version="1.0" encoding="UTF-8"?>
