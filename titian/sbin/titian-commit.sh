@@ -37,14 +37,16 @@ apply_routing() {
             sh "$BIRD_SH" check filter >/dev/null 2>&1 || true
             _birdc=$(command -v birdc 2>/dev/null || echo birdc)
             $_birdc configure 2>&1 | grep -v '^BIRD' || true
-            echo "commit: bird sudah jalan — config di-reload (birdc configure)"
+            echo "commit: bird already jalan — config at-reload (birdc configure)"
         else
             if command -v service >/dev/null 2>&1; then service bird start || err "service bird start gagal"; else echo "(service tidak ada — lewati: service bird start)"; fi
             echo "commit: bird enabled + started"
         fi
     elif [ "$_bird" = "no" ]; then
+        # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
+        # walau bird_enable sudah NO. `onestop` gagal di Linux -> fallback `stop`.
+        if command -v service >/dev/null 2>&1; then service bird onestop 2>/dev/null || service bird stop 2>/dev/null || true; fi
         if command -v sysrc >/dev/null 2>&1; then sysrc bird_enable="NO" >/dev/null || err "sysrc bird_enable gagal"; fi
-        if command -v service >/dev/null 2>&1; then service bird stop 2>/dev/null || true; fi
         echo "commit: bird disabled + stopped"
     fi
     if [ "$_frr" = "yes" ] || [ "$_frr" = "no" ]; then
@@ -65,7 +67,7 @@ apply_firewall() {
         echo "commit: firewall enabled + applied"
     else
         if command -v service >/dev/null 2>&1; then service firewall stop 2>/dev/null || true; else sh "$FW_SH" apply-all || true; fi
-        echo "commit: firewall disabled (anchors di-flush, pf tetap loaded)"
+        echo "commit: firewall disabled (anchors at-flush, pf tetap loaded)"
     fi
     rm -f /var/run/firewall.dirty
 }
@@ -108,7 +110,7 @@ do_check() {
     if [ -f /usr/local/etc/bird.conf ]; then
         sh "$BIRD_SH" validate-config /usr/local/etc/bird.conf || exit 33
     fi
-    echo "commit check: OK (tidak ada konflik bird/FRR, bird.conf lolos validasi varian)"
+    echo "commit check: OK (no  konflik bird/FRR, bird.conf pass validasi varian)"
 }
 
 do_commit() {
@@ -119,7 +121,7 @@ do_commit() {
     apply_pppoe || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
-    echo "commit: selesai"
+    echo "commit: done"
 }
 
 do_apply_all() {
@@ -132,7 +134,7 @@ do_apply_all() {
     apply_pppoe || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
-    echo "commit apply-all: selesai"
+    echo "commit apply-all: done"
 }
 
 case "${1:-}" in

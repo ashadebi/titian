@@ -6,6 +6,13 @@
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 BIN=$ROOT/bin
+
+# Restore config persisten dari partisi cfg (/cfg/titian) ke /etc/titian
+# (tmpfs) SEBELUM replay — tanpa ini replay tidak menemukan config
+# sesudah reboot. Best-effort: bila /cfg kosong, lanjut (boot bersih).
+if [ -x "$ROOT/sbin/titian-cfg.sh" ]; then
+    "$ROOT/sbin/titian-cfg.sh" restore 2>/dev/null || true
+fi
 if [ ! -x "$BIN/konfd" ] && [ -x /usr/local/bin/konfd ]; then
     BIN=/usr/local/bin
 fi
@@ -19,7 +26,7 @@ LOG=/var/log/titian-konfd.log
 if [ -f "$PIDFILE" ]; then
     oldpid=$(cat "$PIDFILE" 2>/dev/null)
     if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
-        echo "konfd sudah jalan (pid $oldpid)"
+        echo "konfd already jalan (pid $oldpid)"
     else
         rm -f "$PIDFILE" "$SOCKFILE"
     fi
@@ -40,7 +47,7 @@ if [ ! -f "$PIDFILE" ]; then
         cp -f /var/run/konfd.pid "$PIDFILE" 2>/dev/null || true
     fi
     if [ ! -S "$SOCKFILE" ]; then
-        echo "PERINGATAN: socket konfd tidak muncul; lihat $LOG" >&2
+        echo "Warning: socket konfd not muncul; show $LOG" >&2
     fi
 fi
 
@@ -54,8 +61,31 @@ if [ "$(uname -s)" = "FreeBSD" ]; then
 fi
 
 # replay startup-config (bila ada) — idempotent (replace semantics)
+# Perbaikan replay (12 Nov 2026, reboot ke-2/ke-4):
+#  `!` pemisah seksi keluar dari sub-mode KECUALI bridge — sub-mode
+#  bridge TIDAK keluar pada `!`, sehingga `interface` sesudah bridge
+#  gagal "Unknown command" (vlan99 hilang, bridge0 hanya 1 member).
+#  Preprocess: sisipkan `exit` HANYA sebelum `interface` yang
+#  mengikuti seksi bridge (lacak last_iface). JANGAN sisipkan `exit`
+#  sebelum semua interface/router — itu merusak replay ke-3/ke-4
+#  (exit ganda keluar dari configure-view, semua baris "Unknown
+#  command", running-config kosong). Replay DUA pass: pass 1 membuat
+#  semua interface, pass 2 menempelkan member/atribut yang gagal di
+#  pass 1 (dependensi sudah ada).
 if [ -f "$STATE_ROOT/startup-config" ]; then
-    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$STATE_ROOT/startup-config" 2>&1 | tee /var/log/titian-replay.log
+    _replay_tmp="/tmp/titian-replay-prep.conf"
+    awk '
+        /^interface / {
+            if (last_iface == "bridge") print "exit"
+            if (/^interface bridge/) { last_iface = "bridge" } else { last_iface = "other" }
+        }
+        { print }
+    ' "$STATE_ROOT/startup-config" > "$_replay_tmp" 2>/dev/null
+    _replay_src="$STATE_ROOT/startup-config"
+    [ -s "$_replay_tmp" ] && _replay_src="$_replay_tmp"
+    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee /var/log/titian-replay.log
+    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee -a /var/log/titian-replay.log
+    rm -f "$_replay_tmp" 2>/dev/null || true
 fi
 
 # jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat

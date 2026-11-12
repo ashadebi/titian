@@ -312,7 +312,7 @@ do_check() {
         rm -f "$tmp"
         return 0
     else
-        echo "parse GAGAL: section $section (tidak ada perubahan diterapkan)" >&2
+        echo "parse Failed: section $section (no  perubahan diterapkan)" >&2
         rm -f "$tmp"
         exit 33
     fi
@@ -327,7 +327,7 @@ do_generate() {
     bird=$(bird_bin)
     if ! out=$("$bird" -p -c "$tmp" 2>&1); then
         echo "$out" >&2
-        echo "parse GAGAL: section $section (tidak ada perubahan diterapkan)" >&2
+        echo "parse Failed: section $section (no  perubahan diterapkan)" >&2
         rm -f "$tmp"
         exit 33
     fi
@@ -346,7 +346,7 @@ do_generate() {
     out=$("$birdc" configure 2>&1); rc=$?
     echo "$out" | grep -v '^BIRD'
     if [ "$rc" -ne 0 ]; then
-        echo "PERINGATAN: birdc configure gagal (config sudah tertulis; backup: $bakdir/bird.conf.$ts)" >&2
+        echo "Warning: birdc configure failed (config already tertulis; backup: $bakdir/bird.conf.$ts)" >&2
         exit 33
     fi
 }
@@ -394,7 +394,7 @@ do_set_threads() {
     cp -f "$conf" "$STATE_ROOT/bird-backup/bird.conf.threads-bak" 2>/dev/null || true
     cat "$_tmp" > "$conf" || { rm -f "$_tmp"; err "gagal tulis $conf"; }
     rm -f "$_tmp"
-    echo "threads $n ditulis ke $conf"
+    echo "threads $n ditulis to $conf"
     out=$("$(birdc_bin)" configure 2>&1); rc=$?
     echo "$out" | grep -v '^BIRD'
     [ "$rc" -ne 0 ] && err "birdc configure gagal sesudah threads $n"

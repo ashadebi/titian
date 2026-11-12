@@ -78,7 +78,7 @@ apply() {
         err "parse GAGAL, filter.conf dikembalikan (tidak ada perubahan diterapkan)"
     fi
     "$BIRD_SH" generate filter || {
-        echo "PERINGATAN: generate filter gagal setelah check lolos; backup filter: $FILTER.cli-bak" >&2
+        echo "Warning: generate filter failed after check pass; backup filter: $FILTER.cli-bak" >&2
         exit 33
     }
 }

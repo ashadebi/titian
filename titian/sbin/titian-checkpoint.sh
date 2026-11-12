@@ -192,7 +192,7 @@ cmd_save() {
     rm -f "$tmp"
     write_meta "$d" "$name" "running" || warn "gagal tulis meta (checkpoint tetap tersimpan)"
     echo "checkpoint $name dibuat: $(grep '^created_wib=' "$d/meta" 2>/dev/null | cut -d= -f2-)"
-    echo "  isi: running-config + bird.conf + bird.d + netstate + sysctl (beku; 'save' biasa tidak mengubah titik ini)"
+    echo "  isi: running-config + bird.conf + bird.d + netstate + sysctl (beku; 'save' biasa not mengubah point ini)"
 }
 
 cmd_snapshot_last_save() {
@@ -219,12 +219,12 @@ cmd_list() {
         done
     fi
     if [ "$found" -eq 0 ]; then
-        echo "(belum ada checkpoint — pakai 'checkpoint save <nama>')"
+        echo "(none yet checkpoint — pakai 'checkpoint save <name>')"
         return 0
     fi
     tmp=$(mktemp /tmp/titian-ckpt-list.XXXXXX) || tmp=""
     if [ -n "$tmp" ] && ! dump_running "$tmp"; then rm -f "$tmp"; tmp=""; fi
-    printf '%-24s %-22s %s\n' "NAMA" "DIBUAT (WIB)" "SAAT INI"
+    printf '%-24s %-22s %s\n' "Name" "DIBUAT (WIB)" "SAAT INI"
     # kumpulkan "created|name", urutkan kronologis, lalu cetak
     for d in "$CKPT_DIR/"*/; do
         [ -d "$d" ] || continue
@@ -241,7 +241,7 @@ cmd_list() {
         printf '%-24s %-22s %s\n' "$name" "$created" "$line"
     done
     [ -n "$tmp" ] && rm -f "$tmp"
-    echo "  * = isi titik sama persis dengan running-config saat ini"
+    echo "  * = isi point sama persis with running-config current"
 }
 
 cmd_delete() {
@@ -250,7 +250,7 @@ cmd_delete() {
     d="$CKPT_DIR/$name"
     [ -d "$d" ] || err "checkpoint tidak ada: $name — tidak ada yang dihapus"
     rm -rf "$d" || err "gagal hapus checkpoint $name"
-    echo "checkpoint $name dihapus"
+    echo "checkpoint $name deleted"
 }
 
 # --- prune: hapus objek live yang tidak ada di titik ---
@@ -549,15 +549,15 @@ cmd_rollback() {
         rm -f "$cur"
         err "gagal membuang running-config saat ini (konfd tidak terjangkau?) — TIDAK ADA PERUBAHAN"
     fi
-    echo "rollback ke $name — prune objek live yang tidak ada di titik..."
+    echo "rollback to $name — prune objek live that no  at point..."
     prune_all "$cur" "$d"
-    echo "rollback ke $name — pulihkan file (startup-config + bird + netstate + sysctl)..."
+    echo "rollback to $name — pulihkan file (startup-config + bird + netstate + sysctl)..."
     if ! restore_files "$d"; then
         rm -f "$cur"
         err "gagal memulihkan file dari titik $name — KEADAAN MUNGKIN SETENGAH (periksa manual; titik tidak diubah)"
     fi
     regen_mirrors
-    echo "rollback ke $name — restart service titian..."
+    echo "rollback to $name — restart service titian..."
     if ! service_restart; then
         rm -f "$cur"
         err "service titian TIDAK KEMBALI setelah restart — file sudah dipulihkan dari titik, tapi konfd tidak jalan (periksa log service)"
@@ -573,9 +573,9 @@ cmd_rollback() {
     tmp=$(mktemp /tmp/titian-ckpt-rb2.XXXXXX) || tmp=""
     if [ -n "$tmp" ] && dump_running "$tmp"; then
         if cmp -s "$tmp" "$d/running-config"; then
-            echo "rollback OK: running-config sama persis dengan titik $name"
+            echo "rollback OK: running-config sama persis with point $name"
         else
-            echo "PERINGATAN: running-config sesudah rollback BERBEDA dari titik $name (diff di bawah):" >&2
+            echo "Warning: running-config after rollback Differs from point $name (diff at below):" >&2
             diff "$d/running-config" "$tmp" 2>/dev/null | head -40 >&2
             warn "verifikasi diff tidak kosong — periksa manual"
         fi
@@ -590,7 +590,7 @@ cmd_rollback() {
         grep -v '^last_rollback_wib=' "$d/meta" > "$d/meta.tmp" 2>/dev/null && mv "$d/meta.tmp" "$d/meta" 2>/dev/null || true
         echo "last_rollback_wib=$(now_wib)" >> "$d/meta" 2>/dev/null || true
     fi
-    echo "rollback ke $name SELESAI (persistensi: startup-config sudah ditulis dari titik — bertahan melewati reboot)."
+    echo "rollback to $name Done (persistensi: startup-config already ditulis from point — bertahan melewati reboot)."
     [ "$PRUNE_WARN" -eq 1 ] && warn "ada peringatan prune di atas — periksa baris Warning sebelum menganggap rollback bersih"
     return 0
 }
