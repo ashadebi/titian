@@ -243,7 +243,7 @@ cmd_set() {
 cmd_set_community() {
     case "$1" in ''|*' '*) die "community tidak boleh kosong/berspasi" ;; esac
     upsert snmp-community "$1"
-    echo "monitoring snmp community diubah (pending commit — berlaku saat snmpd di-apply)"
+    echo "monitoring snmp community diubah (pending commit — berlaku saat snmpd at-apply)"
     exit 0
 }
 
@@ -266,21 +266,21 @@ cmd_apply() {
             mv "$SNMP_CONF.tmp.$$" "$SNMP_CONF" || die "cannot write $SNMP_CONF"
             chmod 600 "$SNMP_CONF" 2>/dev/null || true
         fi
-        if command -v sysrc >/dev/null 2>&1; then
-            if [ "$_want" = "yes" ]; then sysrc "${_name}_enable=YES" >/dev/null || err "sysrc ${_name}_enable gagal"
-            else sysrc "${_name}_enable=NO" >/dev/null || err "sysrc ${_name}_enable gagal"; fi
-        fi
         if command -v service >/dev/null 2>&1; then
             if [ "$_want" = "yes" ]; then
+                if command -v sysrc >/dev/null 2>&1; then sysrc "${_name}_enable=YES" >/dev/null || err "sysrc ${_name}_enable gagal"; fi
                 if svc_running "$_name"; then service "$_name" restart || err "service $_name restart gagal"
                 else service "$_name" start || err "service $_name start gagal"; fi
                 echo "monitoring: $_name enabled + running"
             else
-                service "$_name" stop 2>/dev/null || true
+                # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
+                # walau enable sudah NO. `onestop` gagal di Linux -> fallback `stop`.
+                service "$_name" onestop 2>/dev/null || service "$_name" stop 2>/dev/null || true
+                if command -v sysrc >/dev/null 2>&1; then sysrc "${_name}_enable=NO" >/dev/null || err "sysrc ${_name}_enable gagal"; fi
                 echo "monitoring: $_name disabled + stopped"
             fi
         else
-            echo "(service tidak ada di host ini — lewati: $_name $_want)"
+            echo "(service no  at host ini — lewati: $_name $_want)"
         fi
     done
     rm -f "$DIRTY"

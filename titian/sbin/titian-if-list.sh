@@ -44,7 +44,7 @@ case "${1:-all}" in
         # Exclusion-based: interface hasil rename tidak cocok pola nama
         # apa pun — justru karena itu ia harus lolos di sini.
         if [ "$OS" = "FreeBSD" ]; then
-            echo "$ALL" | grep -v -E '^lo[0-9]+$|^lagg[0-9]+$|^vlan[0-9]+$|^vxlan[0-9]+$|^bond[0-9]+$' | sort
+            echo "$ALL" | grep -v -E '^lo[0-9]+$|^lagg[0-9]+$|^vlan[0-9]+$|^vxlan[0-9]+$|^bond[0-9]+$|^bridge[0-9]+$' | sort
         else
             echo "$ALL" | grep -v -E '^lo[0-9]*$|^bond[0-9]+$|^vxlan[0-9]+$|^lagg[0-9]+$' | grep -v '\.' | sort
         fi
@@ -75,11 +75,14 @@ case "${1:-all}" in
     vxlan)
         echo "$ALL" | grep -E '^vxlan[0-9]+$' | sort
         ;;
+    bridge)
+        echo "$ALL" | grep -E '^bridge[0-9]+$' | sort
+        ;;
     dummy)
         echo "$ALL" | grep -E '^lo[1-9]$' | sort
         ;;
     all)
         echo "$ALL" | sort
         ;;
-    *) echo "Usage: $0 {eth|vlan|bond|lagg|dummy|all}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {eth|vlan|bond|lagg|vxlan|bridge|dummy|all}" >&2; exit 2 ;;
 esac

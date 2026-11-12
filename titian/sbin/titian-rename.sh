@@ -203,7 +203,7 @@ write_persist_linux() {
 # Dipanggil HANYA untuk kegagalan sesudah rename OS (sebelum restart).
 # Variabel global: old, new, was_up, bak, rcbak, linkbak, persist_done.
 fail_rollback() {
-    echo "GAGAL: $1 — mengembalikan keadaan (tanpa perubahan Titian)..." >&2
+    echo "Failed: $1 — mengembalikan keadaan (tanpa perubahan Titian)..." >&2
     if iface_exists "$new"; then
         if [ "$OS" = "FreeBSD" ]; then ifconfig "$new" name "$old" 2>/dev/null || true;
         else ip link set dev "$new" name "$old" 2>/dev/null || true; fi
@@ -274,7 +274,7 @@ rewrite_startup "$STARTUP" "$tmpnew" "$old" "$new" || err "gagal menulis ulang s
 matches=$(count_matches "$STARTUP" "$old")
 if [ "$matches" = "0" ]; then
     cmp -s "$tmpnew" "$STARTUP" || err "self-check rewrite gagal (tanpa perubahan)"
-    echo "catatan: $old tidak punya section/referensi di startup-config (tanpa state Titian) — rename OS + aturan boot saja"
+    echo "note: $old not punya section/referensi at startup-config (tanpa state Titian) — rename OS + aturan boot saja"
 else
     echo "tulis ulang startup-config: $matches baris section/referensi $old -> $new"
 fi
@@ -326,7 +326,7 @@ fi
 "$SBIN/titian-persist.sh" drop-if "$old" 2>/dev/null || warn "drop-if $old gagal (cermin lama mungkin mengendap)"
 
 # Restart service (pola rollback) — sesi CLI terputus sesaat.
-echo "rename $old -> $new — restart service titian (sesi CLI terputus sesaat; sambung lagi lalu cek 'show interfaces')..."
+echo "rename $old -> $new — restart service titian (sesi CLI terputus sesaat; sambung lagi lalu check 'show interfaces')..."
 echo "$(date '+%Y-%m-%d %H:%M:%S %Z') rename $old -> $new (restart issued)" >> /var/log/titian-rename.log 2>/dev/null || true
 if [ "$OS" = "FreeBSD" ]; then
     service titian restart 2>&1 || err "restart service GAGAL — state sudah PERSISTEN-baru (startup-config + netstate + aturan boot untuk $new); perbaiki service (start akan me-replay config baru), lalu verifikasi dengan 'show interfaces'"
@@ -337,7 +337,7 @@ i=0
 while [ ! -S "$SOCKFILE" ] && [ "$i" -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
 rm -f "$bak" "$rcbak" "$linkbak" "$tmpnew" 2>/dev/null || true
 if iface_exists "$new" && ! iface_exists "$old"; then
-    echo "rename OK: $old -> $new (sistem + startup-config + netstate + aturan boot; verifikasi lengkap: 'show interfaces' + 'show running-config')"
+    echo "rename OK: $old -> $new (system + startup-config + netstate + aturan boot; verifikasi lengkap: 'show interfaces' + 'show running-config')"
 else
     warn "verifikasi pasca-restart tidak keduanya benar ($new ada / $old hilang) — periksa 'show interfaces' + 'show running-config'"
 fi

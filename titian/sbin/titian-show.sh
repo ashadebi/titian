@@ -237,11 +237,11 @@ if_detail() {
     if [ "$OS" = "FreeBSD" ]; then
         ifconfig "$iface" 2>/dev/null || { echo "Error: interface $iface tidak ditemukan di sistem (lihat 'show interfaces' untuk daftar)." >&2; exit 33; }
         if [ -n "$detail" ]; then
-            echo "(detail hardware setara ethtool/udev tidak tersedia di FreeBSD; pakai pciconf -lv)"
+            echo "(detail hardware setara ethtool/udev not tersedia at FreeBSD; pakai pciconf -lv)"
         fi
     else
         if [ ! -d "/sys/class/net/$iface" ]; then
-            echo "Error: interface $iface tidak ditemukan di sistem (lihat 'show interfaces' untuk daftar)." >&2; exit 33
+            echo "Error: interface $iface not found at system (show 'show interfaces' for list)." >&2; exit 33
         fi
         printf "\n"
         ip -d link show "$iface"

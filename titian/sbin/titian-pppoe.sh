@@ -157,13 +157,13 @@ cmd_user_add() {
     printf 'user %s %s -\n' "$1" "changeme" >> "$CONF" || die "cannot write $CONF"
     chmod 600 "$CONF" 2>/dev/null || true
     mark_dirty
-    echo "pppoe user $1 ditambah (password default 'changeme' — segera set via password)"
+    echo "pppoe user $1 added (password default 'changeme' — segera set via password)"
     exit 0
 }
 
 cmd_user_del() {
     dellines "^user $1 " "user $1"
-    echo "pppoe user $1 dihapus"
+    echo "pppoe user $1 deleted"
     exit 0
 }
 
@@ -202,7 +202,7 @@ cmd_user_del_ip() {
     set -- $_line
     _pw="${3:-changeme}"
     upsert "^user $_name " "user $_name $_pw -"
-    echo "pppoe user $_name: IP statis dihapus (kembali ke pool)"
+    echo "pppoe user $_name: IP statis deleted (back to pool)"
     exit 0
 }
 
@@ -229,7 +229,7 @@ cmd_flush() {
         || die "cannot write $CONF"
     chmod 600 "$CONF" 2>/dev/null || true
     mark_dirty
-    echo "pppoe-server: semua konfigurasi dihapus (pending commit)"
+    echo "pppoe-server: all konfigurasi deleted (pending commit)"
     exit 0
 }
 
@@ -242,8 +242,10 @@ cmd_apply() {
     _rs=$(sed -n 's/^radius-server //p' "$CONF" | head -1)
     _rsec=$(sed -n 's/^radius-secret //p' "$CONF" | head -1)
     if [ "$_en" != "yes" ]; then
+        # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
+        # walau mpd_enable sudah NO. `onestop` gagal di Linux -> fallback `stop`.
+        if command -v service >/dev/null 2>&1; then service mpd5 onestop 2>/dev/null || service mpd5 stop 2>/dev/null || true; fi
         if command -v sysrc >/dev/null 2>&1; then sysrc mpd_enable="NO" >/dev/null; fi
-        if command -v service >/dev/null 2>&1; then service mpd5 stop 2>/dev/null || true; fi
         echo "pppoe-server: disabled + stopped"
         return 0
     fi
@@ -293,7 +295,7 @@ cmd_apply() {
         if pgrep -x mpd5 >/dev/null 2>&1; then service mpd5 restart || die "service mpd5 restart gagal"
         else service mpd5 start || die "service mpd5 start gagal"; fi
     else
-        echo "(service tidak ada di host ini — lewati start mpd5; config tertulis di $MPD_CONF)"
+        echo "(service no  at host ini — lewati start mpd5; config tertulis at $MPD_CONF)"
     fi
     echo "pppoe-server: enabled + applied (iface $_if, pool $_pstart-$_pend)"
     return 0

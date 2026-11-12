@@ -184,7 +184,7 @@ apply() {
         err "parse GAGAL, $frag dikembalikan (tidak ada perubahan diterapkan)"
     fi
     "$BIRD_SH" generate "$sec" || {
-        echo "PERINGATAN: generate $sec gagal setelah check lolos; fragmen tetap teredit, backup pra-edit: $frag.cli-bak" >&2
+        echo "Warning: generate $sec failed after check pass; fragmen tetap teredit, backup pra-edit: $frag.cli-bak" >&2
         exit 33
     }
 }

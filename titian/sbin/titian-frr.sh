@@ -55,7 +55,7 @@ svc() {
     if command -v service >/dev/null 2>&1; then
         service "$1" "$2"
     else
-        echo "(service tidak ada di host ini — lewati: service $1 $2)"
+        echo "(service no  at host ini — lewati: service $1 $2)"
     fi
 }
 
@@ -87,14 +87,17 @@ do_apply() {
         sh "$BIRD_SH" check-exclusion frr || exit 33
         if command -v sysrc >/dev/null 2>&1; then sysrc frr_enable="YES" >/dev/null || err "sysrc frr_enable gagal"; fi
         if [ -n "$(pgrep -x zebra 2>/dev/null | head -1)" ]; then
-            echo "frr: zebra sudah jalan (tidak di-restart)"
+            echo "frr: zebra already jalan (not at-restart)"
         else
             svc frr start || err "service frr start gagal"
         fi
         echo "frr: enabled + running"
     else
+        # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
+        # walau frr_enable sudah NO (dari commit sebelumnya yang gagal).
+        # `onestop` gagal di Linux -> fallback ke `stop`.
+        svc frr onestop 2>/dev/null || svc frr stop 2>/dev/null || true
         if command -v sysrc >/dev/null 2>&1; then sysrc frr_enable="NO" >/dev/null || err "sysrc frr_enable gagal"; fi
-        svc frr stop 2>/dev/null || true
         echo "frr: disabled + stopped"
     fi
     rm -f "$DIRTY"
@@ -118,7 +121,7 @@ do_del_router_id() {
     have_vtysh || err "vtysh tidak ditemukan"
     vtysh -c "configure terminal" -c "no router-id" -c "end" -c "write memory" \
         || err "gagal hapus router-id via vtysh"
-    echo "frr: router-id dihapus (running + write memory)"
+    echo "frr: router-id deleted (running + write memory)"
 }
 
 do_set_log() {
@@ -137,7 +140,7 @@ do_set_log() {
 
 do_write_memory() {
     vtysh_cmd "write memory"
-    echo "frr: running-config ditulis ke $FRR_CONF"
+    echo "frr: running-config ditulis to $FRR_CONF"
 }
 
 frr_version() {
