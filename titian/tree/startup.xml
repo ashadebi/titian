@@ -70,6 +70,13 @@ HOTKEYS
 	</ACTION>
 </VAR>
 
+<!--Get bridge interface -->
+<VAR name="Get_if_bridge" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-if-list.sh bridge
+	</ACTION>
+</VAR>
+
 <!--Get all interface -->
 <VAR name="Get_if_all" help="Get" dynamic="true">
 	<ACTION>

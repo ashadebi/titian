@@ -22,7 +22,7 @@
     <!--=======================================================-->
     <PTYPE name="TS_NAME"
         pattern="^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
-        help="nama pipe/queue/sched/rule [A-Za-z0-9_-]+ (maks 32)"/>
+        help="name pipe/queue/sched/rule [A-Za-z0-9_-]+ (maks 32)"/>
     <PTYPE name="TS_RATE"
         pattern="^[0-9]+(Kbit/s|Mbit/s|Gbit/s|bit/s)$"
         help="bandwidth, mis. 10Mbit/s, 512Kbit/s, 1Gbit/s"/>
@@ -40,7 +40,7 @@
         help="dst-ip | src-ip | dst-ip6 | src-ip6 | dst-port | src-port | proto | flow-id | all"/>
     <PTYPE name="TS_MASKVAL"
         pattern="^(/([0-9]|[1-9][0-9]|1[0-2][0-9])|0x[0-9a-fA-F]+|[0-9]+)$"
-        help="nilai mask: /N bit (mis. /32) atau angka 0x... (default = full mask)"/>
+        help="value mask: /N bit (mis. /32) or angka 0x... (default = full mask)"/>
     <PTYPE name="TS_DIR"
         pattern="^(in|out)$"
         help="in | out"/>
@@ -104,7 +104,7 @@
                 ptype="SUBCOMMAND"
                 mode="subcommand">
             <PARAM name="Name"
-                help="nama pipe"
+                help="name pipe"
                 ptype="TS_NAME"/>
             <CONFIG priority="0x1310" pattern="^pipe ${Name}$"/>
             <ACTION>
@@ -114,7 +114,7 @@
         <COMMAND name="no pipe"
                 help="Delete a dummynet pipe">
             <PARAM name="Name"
-                help="nama pipe"
+                help="name pipe"
                 ptype="TS_NAME"/>
             <CONFIG operation="unset" pattern="^pipe ${Name}"/>
             <ACTION>
@@ -129,7 +129,7 @@
                 ptype="SUBCOMMAND"
                 mode="subcommand">
             <PARAM name="Name"
-                help="nama scheduler"
+                help="name scheduler"
                 ptype="TS_NAME"/>
             <CONFIG priority="0x1315" pattern="^sched ${Name}$"/>
             <ACTION>
@@ -139,7 +139,7 @@
         <COMMAND name="no sched"
                 help="Delete a dummynet scheduler">
             <PARAM name="Name"
-                help="nama scheduler"
+                help="name scheduler"
                 ptype="TS_NAME"/>
             <CONFIG operation="unset" pattern="^sched ${Name}"/>
             <ACTION>
@@ -154,7 +154,7 @@
                 ptype="SUBCOMMAND"
                 mode="subcommand">
             <PARAM name="Name"
-                help="nama queue"
+                help="name queue"
                 ptype="TS_NAME"/>
             <CONFIG priority="0x1320" pattern="^queue ${Name}$"/>
             <ACTION>
@@ -164,7 +164,7 @@
         <COMMAND name="no queue"
                 help="Delete a dummynet queue">
             <PARAM name="Name"
-                help="nama queue"
+                help="name queue"
                 ptype="TS_NAME"/>
             <CONFIG operation="unset" pattern="^queue ${Name}"/>
             <ACTION>
@@ -179,7 +179,7 @@
                 ptype="SUBCOMMAND"
                 mode="subcommand">
             <PARAM name="Name"
-                help="nama rule"
+                help="name rule"
                 ptype="TS_NAME"/>
             <CONFIG priority="0x1330" pattern="^rule ${Name}$"/>
             <ACTION>
@@ -189,7 +189,7 @@
         <COMMAND name="no rule"
                 help="Delete a divert rule">
             <PARAM name="Name"
-                help="nama rule"
+                help="name rule"
                 ptype="TS_NAME"/>
             <CONFIG operation="unset" pattern="^rule ${Name}"/>
             <ACTION>
@@ -258,7 +258,7 @@
         <COMMAND name="burst"
                 help="Burst bytes allowed after idle (0 = none)">
             <PARAM name="Bytes"
-                help="ukuran burst dalam byte"
+                help="ukuran burst in byte"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -373,7 +373,7 @@
         <COMMAND name="limit"
                 help="Hard packet limit of all sub-queues (fq_codel/fq_pie only, default 10240)">
             <PARAM name="Packets"
-                help="jumlah paket"
+                help="jumlah packet"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -412,7 +412,7 @@
         <COMMAND name="pipe"
                 help="Parent pipe for this queue">
             <PARAM name="Pipe"
-                help="nama pipe"
+                help="name pipe"
                 ptype="TS_NAME"/>
             <CONFIG/>
             <ACTION>
@@ -422,7 +422,7 @@
         <COMMAND name="sched"
                 help="Parent scheduler for this queue (instead of a pipe)">
             <PARAM name="Sched"
-                help="nama scheduler"
+                help="name scheduler"
                 ptype="TS_NAME"/>
             <CONFIG/>
             <ACTION>
@@ -435,7 +435,7 @@
                 help="dst-ip | src-ip | dst-ip6 | src-ip6 | dst-port | src-port | proto | flow-id | all"
                 ptype="TS_MASK"/>
             <PARAM name="Value"
-                help="nilai mask: /N atau angka (kosong = full)"
+                help="value mask: /N or angka (kosong = full)"
                 ptype="TS_MASKVAL"
                 optional="true"/>
             <CONFIG/>
@@ -541,7 +541,7 @@
         <COMMAND name="interface"
                 help="Interface + direction to shape">
             <PARAM name="If"
-                help="nama interface"
+                help="name interface"
                 ptype="IFACE_SYS"/>
             <PARAM name="Dir"
                 help="in | out"
@@ -554,7 +554,7 @@
         <COMMAND name="pipe"
                 help="Divert into a pipe">
             <PARAM name="Pipe"
-                help="nama pipe"
+                help="name pipe"
                 ptype="TS_NAME"/>
             <CONFIG/>
             <ACTION>
@@ -564,7 +564,7 @@
         <COMMAND name="queue"
                 help="Divert into a queue">
             <PARAM name="Queue"
-                help="nama queue"
+                help="name queue"
                 ptype="TS_NAME"/>
             <CONFIG/>
             <ACTION>
@@ -572,9 +572,9 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="src"
-                help="Match source address (CIDR atau any)">
+                help="Match source address (CIDR or any)">
             <PARAM name="Addr"
-                help="CIDR atau any"
+                help="CIDR or any"
                 ptype="FW_CIDR_OR_ANY"/>
             <CONFIG/>
             <ACTION>
@@ -582,9 +582,9 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="dst"
-                help="Match destination address (CIDR atau any)">
+                help="Match destination address (CIDR or any)">
             <PARAM name="Addr"
-                help="CIDR atau any"
+                help="CIDR or any"
                 ptype="FW_CIDR_OR_ANY"/>
             <CONFIG/>
             <ACTION>
@@ -602,7 +602,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="dport"
-                help="Match destination port (butuh proto tcp/udp)">
+                help="Match destination port (needs proto tcp/udp)">
             <PARAM name="Port"
                 help="1-65535"
                 ptype="DSTPORT"/>
