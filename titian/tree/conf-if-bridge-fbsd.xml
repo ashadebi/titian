@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- TITIAN: bridge interface (FreeBSD if_bridge).
+         Memetakan layanan L2: sebuah bridge menggabungkan
+         beberapa interface L2 (vxlan, vlan, ethernet, lagg)
+         ke satu segmen broadcast. Pola utama: VXLAN overlay
+         dijembatani ke VLAN / interface lokal, sehingga layanan
+         L2 (mis. satu subnet pelanggan) terbentang melewati
+         tunnel VXLAN.
+         Perintah: interface bridge <N> (buat bridge<N>),
+         lalu di sub-mode: member <iface> (tambah anggota),
+         ip address <CIDR> (IP di bridge), dst.
+         Backend: sbin/titian-bridge.sh. Modul if_bridge
+         dimuat + dipersistenkan ke /boot/loader.conf. -->
+    <!--=======================================================-->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="interface bridge"
+        help="Bridge interface L2 (if_bridge) — join vxlan/vlan/ethernet to satu segmen"
+        view="configure-bridge-view"
+        viewid="iface=${iface_bridge}">
+        <PARAM name="iface_bridge"
+            help="Bridge interface (bridge[N])"
+            completion="${Get_if_bridge}"
+            ptype="IFACE_BRIDGE"/>
+        <CONFIG priority="0x2002" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bridge.sh create "${iface_bridge}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no interface bridge"
+            help="Delete bridge interface">
+            <PARAM name="iface_bridge"
+                help="Bridge interface (bridge[N])"
+                ptype="IFACE_BRIDGE"/>
+        <CONFIG operation="unset" pattern="^interface bridge ${iface_bridge}($| )"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bridge.sh destroy "${iface_bridge}"
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+<VIEW name="configure-bridge-view"
+    prompt="${SYSTEM_NAME}(config-bridge-${iface})# "
+    depth="1">
+
+    <COMMAND name="no"
+        help="negasi perintah">
+        <PARAM name="subcommand"
+            help="perintah that dinegasi"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+
+    <COMMAND name="ip"
+        help="konfigurasi IP">
+        <PARAM name="subcommand"
+            help="sub-perintah IP"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+
+    <COMMAND name="no ip"
+        help="negasi konfigurasi IP">
+        <PARAM name="subcommand"
+            help="sub-perintah IP that dinegasi"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+
+    <COMMAND name="ipv6"
+        help="konfigurasi IPv6">
+        <PARAM name="subcommand"
+            help="sub-perintah IPv6"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+
+    <COMMAND name="no ipv6"
+        help="negasi konfigurasi IPv6">
+        <PARAM name="subcommand"
+            help="sub-perintah IPv6 that dinegasi"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+
+    <COMMAND name="member"
+        help="Add anggota bridge (vxlan/vlan/ethernet/lagg — jadi satu segmen L2)">
+        <PARAM name="member"
+            help="Interface anggota (show 'show interfaces')"
+            completion="${Get_if_all}"
+            ptype="IFACE_SYS"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bridge.sh add-member "${iface}" "${member}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no member"
+        help="Detach anggota from bridge">
+        <PARAM name="member"
+            help="Interface anggota"
+            completion="${Get_if_all}"
+            ptype="IFACE_SYS"/>
+        <CONFIG operation="unset" pattern="^member ${member}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bridge.sh del-member "${iface}" "${member}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+        help="Deskripsi bridge">
+        <PARAM name="desc"
+            help="Teks deskripsi"
+            ptype="STRING"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ifconfig "${iface}" description "${desc}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no description"
+        help="Delete deskripsi bridge">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ifconfig "${iface}" description ""
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mtu"
+        help="MTU bridge">
+        <PARAM name="mtu"
+            help="MTU (576-9216)"
+            ptype="MTU"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ifconfig "${iface}" mtu "${mtu}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no mtu"
+        help="Kembalikan MTU default (1500)">
+        <CONFIG operation="unset" pattern="^mtu"/>
+        <ACTION>
+            ifconfig "${iface}" mtu 1500
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disable"
+          help="Disable bridge (admin down)">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ifconfig "${iface}" down
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable"
+        help="Hidupkan bridge (admin up)">
+        <CONFIG/>
+        <ACTION>
+            ifconfig "${iface}" up
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ip address"
+            help="Alamat IPv4 bridge (CIDR)">
+            <PARAM name="ip"
+                help="Alamat IPv4 (CIDR, example 198.51.100.1/24)"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Alamat peer (PtP)"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ip address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ip address"
+           help="Delete alamat IPv4 bridge"
+           lock="false">
+           <PARAM name="ip"
+                help="Alamat IPv4 (CIDR)"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Alamat peer (PtP)"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="^ip address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ipv6 address"
+            help="Alamat IPv6 bridge (CIDR)">
+            <PARAM name="ip"
+                help="Alamat IPv6 (CIDR)"
+                ptype="IP6_ADDR_MASK"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ipv6 address"
+           help="Delete alamat IPv6 bridge">
+           <PARAM name="ip"
+                help="Alamat IPv6 (CIDR)"
+                ptype="IP6_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^ipv6 address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="exit"
+        help="Exit from mode konfigurasi bridge">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+
+</VIEW>
+
+<VIEW name="enable-view">
+
+    <COMMAND name="show bridge"
+        help="Display bridge + anggotanya">
+        <PARAM name="bridge"
+            help="Bridge (bridge[N], kosong = all)"
+            optional="true"
+            ptype="IFACE_BRIDGE"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bridge.sh show "${bridge}"
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

@@ -152,7 +152,7 @@ cmd_generate_key() {
     printf '%s\n' "$_priv" > "$KEY_DIR/$1.key" || die "cannot write key"
     chmod 600 "$KEY_DIR/$1.key" 2>/dev/null || true
     upsert "$1" '^public-key ' "public-key $_pub"
-    echo "wireguard $1: keypair baru dibuat (private key tersimpan mode 600, tidak ditampilkan)"
+    echo "wireguard $1: keypair baru dibuat (private key tersimpan mode 600, not ditampilkan)"
     echo "public key: $_pub"
     exit 0
 }
@@ -166,13 +166,13 @@ cmd_peer_add() {
     printf 'peer %s allowed-ips - endpoint - keepalive 0\n' "$2" >> "$(state_file "$1")" \
         || die "cannot write state"
     mark_dirty
-    echo "wireguard $1 peer ditambah (pending commit — set allowed-ips dulu)"
+    echo "wireguard $1 peer added (pending commit — set allowed-ips dulu)"
     exit 0
 }
 
 cmd_peer_del() {
     dellines "$1" "^peer $2 " "peer $2"
-    echo "wireguard $1 peer dihapus"
+    echo "wireguard $1 peer deleted"
     exit 0
 }
 
@@ -217,7 +217,7 @@ cmd_peer_del_field() {
         *) die "field tidak dikenal: $_field" ;;
     esac
     upsert "$_if" "^peer $_pub " "peer $_pub allowed-ips $_aip endpoint $_ep keepalive $_ka"
-    echo "wireguard $_if peer $_pub: $_field dihapus"
+    echo "wireguard $_if peer $_pub: $_field deleted"
     exit 0
 }
 
@@ -228,7 +228,7 @@ cmd_del_iface() {
     rm -f "$_f" "$KEY_DIR/$1.key"
     if ifconfig "$1" >/dev/null 2>&1; then ifconfig "$1" destroy 2>/dev/null || true; fi
     mark_dirty
-    echo "wireguard $1 dihapus (config + key + interface)"
+    echo "wireguard $1 deleted (config + key + interface)"
     exit 0
 }
 
@@ -240,7 +240,7 @@ apply_one() {
     _en=$(sed -n 's/^enable //p' "$_f" | head -1)
     if [ "$_en" != "yes" ]; then
         ifconfig "$_n" >/dev/null 2>&1 && ifconfig "$_n" destroy 2>/dev/null || true
-        echo "wireguard $_n: disabled (interface dihancurkan bila ada)"
+        echo "wireguard $_n: disabled (interface dihancurkan if ada)"
         return 0
     fi
     _addr=$(sed -n 's/^address //p' "$_f" | head -1)

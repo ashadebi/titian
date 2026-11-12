@@ -37,12 +37,12 @@
         completion="true"/>
 
     <COMMAND name="exit"
-        help="Kembali ke configure-view"
+        help="Back to configure-view"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
     <COMMAND name="end"
-        help="Kembali ke enable-view"
+        help="Back to enable-view"
         view="enable-view"/>
     <HOTKEY key="^Z" cmd="exit"/>
 
@@ -56,7 +56,7 @@
         help="Negate logging configuration"/>
 
     <COMMAND name="router-id"
-        help="Router ID FRR (dipakai OSPF/BGP)">
+        help="Router ID FRR (used OSPF/BGP)">
         <PARAM name="id"
             help="alamat IPv4 router-id"
             ptype="IP_ADDR"/>
@@ -66,7 +66,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no router-id"
-        help="Hapus router-id FRR">
+        help="Delete router-id FRR">
         <CONFIG operation="unset" pattern="^router-id"/>
         <ACTION>
             ${RT_SBIN}/titian-frr.sh del-router-id
@@ -74,14 +74,14 @@
     </COMMAND>
 
     <COMMAND name="log syslog"
-        help="Log FRR ke syslog">
+        help="Log FRR to syslog">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-frr.sh set-log syslog
         </ACTION>
     </COMMAND>
     <COMMAND name="no log syslog"
-        help="Matikan log FRR ke syslog">
+        help="Disable log FRR to syslog">
         <CONFIG operation="unset" pattern="^log syslog"/>
         <ACTION>
             ${RT_SBIN}/titian-frr.sh set-log none
@@ -89,7 +89,7 @@
     </COMMAND>
 
     <COMMAND name="write-memory"
-        help="Tulis running-config FRR ke frr.conf (persisten)">
+        help="Tulis running-config FRR to frr.conf (persisten)">
         <ACTION>
             ${RT_SBIN}/titian-frr.sh write-memory
         </ACTION>
@@ -106,7 +106,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show frr version"
-        help="Versi FRR + daemon yang jalan"
+        help="Versi FRR + daemon that jalan"
         lock="false"
         interrupt="true">
         <ACTION>

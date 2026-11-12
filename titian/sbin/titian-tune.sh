@@ -528,8 +528,8 @@ apply_all() {
 show_iface() {
     local iface=$1
     iface_exists "$iface" || err "interface $iface tidak ditemukan di sistem (lihat 'show interfaces' untuk daftar)"
-    echo "Tuning $iface ($OS) — nilai live + arti singkat"
-    echo "  (nilai bertanda * = pernah di-set lewat Titian / tercatat di cermin)"
+    echo "Tuning $iface ($OS) — value live + arti singkat"
+    echo "  (value bertanda * = pernah at-set lewat Titian / tercatat at mirror)"
     if [ "$OS" = "FreeBSD" ]; then
         _show_fbsd "$iface"
     else
@@ -544,7 +544,7 @@ _show_linux() {
     local iface=$1 m mtu q
     m=$(_mark "$iface" "mtu")
     mtu=$(cat "/sys/class/net/$iface/mtu" 2>/dev/null || echo "?")
-    echo "  mtu${m}: $mtu — ukuran paket terbesar yang boleh lewat interface; 1500 = default Ethernet, 9000 = jumbo (wajib didukung seluruh path, kalau tidak paket di-drop/difragmentasi)."
+    echo "  mtu${m}: $mtu — ukuran packet terbesar that boleh lewat interface; 1500 = default Ethernet, 9000 = jumbo (wajib didukung seluruh path, kalau not packet at-drop/difragmentasi)."
     q=$(cat "/sys/class/net/$iface/tx_queue_len" 2>/dev/null || echo "?")
     m=$(_mark "$iface" "qlen")
     echo "  txqueuelen${m}: $q — panjang antrean kirim; antrean besar menahan burst tapi menambah latensi antre (bufferbloat). Default 1000 (1G), 10000 (10G)."
@@ -555,7 +555,7 @@ _show_linux() {
         [ -n "$_dp" ] || _dp="(tidak dilaporkan driver)"
         echo "  speed$(_mark "$iface" "speed"): $_sp / $_dp — kecepatan + duplex yang dilaporkan driver; WAJIB non-nol + full untuk bonding 802.3ad (tanpa ini slave MII down dan tidak ada LACPDU yang dikirim). Nilai arbitrer untuk link virtual, tapi harus sama di semua slave satu bond."
     else
-        echo "  speed: ethtool tidak tersedia di host ini (tidak bisa dibaca)."
+        echo "  speed: ethtool not tersedia at host ini (cannot dibaca)."
     fi
     if command -v ethtool >/dev/null 2>&1; then
         ethtool -k "$iface" 2>/dev/null | awk '/^[a-z0-9-]+:/{print}' | while read -r line; do
@@ -582,14 +582,14 @@ _show_linux() {
         echo "  rx-usecs$(_mark "$iface" "coalesce rx-usecs"): $_rxu — jeda tunda interupsi receive (mikrodetik); nilai besar = interupsi lebih jarang (hemat CPU, latensi naik), 0 = interupsi segera. Default driver, umum 125."
         echo "  adaptive-rx$(_mark "$iface" "coalesce adaptive-rx"): $_arx — driver menyesuaikan rx-usecs otomatis ikut beban; on untuk beban campuran, off bila latensi harus deterministik. Default off."
     else
-        echo "  offload/coalesce: ethtool tidak tersedia di host ini (tidak bisa dibaca)."
+        echo "  offload/coalesce: ethtool not tersedia at host ini (cannot dibaca)."
     fi
 }
 _show_fbsd() {
     local iface=$1 out
     out=$(ifconfig "$iface" 2>/dev/null)
     echo "  mtu$(_mark "$iface" "mtu"): $(echo "$out" | awk '{for(i=1;i<=NF;i++) if ($i == "mtu") {print $(i+1); exit}}') — ukuran paket terbesar; 1500 = default, 9000 = jumbo (wajib didukung seluruh path)."
-    echo "  qlen: (tidak ada padanan FreeBSD — txqueuelen adalah konsep Linux.)"
+    echo "  qlen: (no  padanan FreeBSD — txqueuelen adalah konsep Linux.)"
     echo "  flags ifconfig: options=<$(fbsd_opt_tokens "$iface")>"
     if fbsd_opt_has "$iface" TSO4 || fbsd_opt_has "$iface" TSO6; then _tso=on; else _tso=off; fi
     if fbsd_opt_has "$iface" LRO; then _lro=on; else _lro=off; fi
@@ -599,8 +599,8 @@ _show_fbsd() {
     echo "    lro$(_mark "$iface" "offload lro"): $_lro — HARUS off di router/bridge (bisa merusak forwarding); pakai GRO tidak tersedia di FreeBSD, jadi biarkan off."
     echo "    rxcsum$(_mark "$iface" "offload rx"): $_rx — checksum receive oleh NIC; hampir selalu on."
     echo "    txcsum$(_mark "$iface" "offload tx"): $_tx — checksum transmit oleh NIC; hampir selalu on."
-    echo "    gro/gso/sg: tidak punya padanan ifconfig di FreeBSD."
-    echo "  coalesce: tidak punya padanan generik di FreeBSD."
+    echo "    gro/gso/sg: not punya padanan ifconfig at FreeBSD."
+    echo "  coalesce: not punya padanan generik at FreeBSD."
 }
 
 case "${1:-}" in

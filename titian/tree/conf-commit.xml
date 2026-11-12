@@ -22,7 +22,7 @@
 
 <VIEW name="configure-view">
     <COMMAND name="commit"
-        help="Terapkan perubahan pending: cek bird-vs-FRR, validasi bird.conf, naikkan service (firewall/traffic-shape/pppoe/wireguard/monitoring/bird/frr)"
+        help="Terapkan perubahan pending: check bird-vs-FRR, validasi bird.conf, naikkan service (firewall/traffic-shape/pppoe/wireguard/monitoring/bird/frr)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -30,7 +30,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="commit check"
-        help="Cek saja (mutual exclusion + validasi bird.conf) tanpa menerapkan apa pun"
+        help="Check saja (mutual exclusion + validasi bird.conf) tanpa menerapkan apa pun"
         lock="false"
         interrupt="true">
         <ACTION>

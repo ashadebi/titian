@@ -39,7 +39,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="no firewall"
-                help="Hapus SELURUH konfigurasi firewall (semua rule)">
+                help="Delete SELURUH konfigurasi firewall (all rule)">
             <CONFIG operation="unset" pattern="^firewall$"/>
             <ACTION>
                 ${RT_SBIN}/titian-fw.sh flush
@@ -82,19 +82,19 @@
         </COMMAND>
 
         <COMMAND name="filter"
-                help="Aturan filter: chain + aksi + proto + src + dst + sport + dport + in + out (semua field wajib, pakai any bila tidak peduli; urutan dibuat = prioritas, pertama cocok menang)">
+                help="Aturan filter: chain + aksi + proto + src + dst + sport + dport + in + out (all field wajib, pakai any if not peduli; urutan dibuat = prioritas, pertama cocok menang)">
             <PARAM name="chain"
-                help="forward (transit) | input (ke router) | output (dari router)"
+                help="forward (transit) | input (to router) | output (from router)"
                 ptype="FW_CHAIN"/>
             <PARAM name="action"
-                help="permit (lolos) | deny (buang)"
+                help="permit (pass) | deny (buang)"
                 ptype="FW_ACTION"/>
             <PARAM name="proto"
                 help="proto"
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="proto_val"
-                    help="tcp | udp | icmp | all (all/icmp tidak memakai port)"
+                    help="tcp | udp | icmp | all (all/icmp not memakai port)"
                     ptype="FW_PROTO"/>
             </PARAM>
             <PARAM name="src"
@@ -102,7 +102,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="src_val"
-                    help="sumber CIDR (mis. 192.168.1.0/24) atau any"
+                    help="sumber CIDR (mis. 192.168.1.0/24) or any"
                     ptype="FW_CIDR_OR_ANY"/>
             </PARAM>
             <PARAM name="dst"
@@ -110,7 +110,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="dst_val"
-                    help="tujuan CIDR atau any"
+                    help="destination CIDR or any"
                     ptype="FW_CIDR_OR_ANY"/>
             </PARAM>
             <PARAM name="sport"
@@ -118,7 +118,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="sport_val"
-                    help="port sumber 1-65535 atau any (hanya tcp/udp)"
+                    help="port sumber 1-65535 or any (hanya tcp/udp)"
                     ptype="FW_PORT_OR_ANY"/>
             </PARAM>
             <PARAM name="dport"
@@ -126,7 +126,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="dport_val"
-                    help="port tujuan 1-65535 atau any (hanya tcp/udp)"
+                    help="port destination 1-65535 or any (hanya tcp/udp)"
                     ptype="FW_PORT_OR_ANY"/>
             </PARAM>
             <PARAM name="in"
@@ -134,7 +134,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="in_val"
-                    help="interface masuk (forward/input: WAJIB iface; output: any)"
+                    help="interface enter (forward/input: WAJIB iface; output: any)"
                     ptype="FW_IFACE_OR_ANY"/>
             </PARAM>
             <PARAM name="out"
@@ -142,7 +142,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="out_val"
-                    help="interface keluar (forward/input: any; output: WAJIB iface)"
+                    help="interface exit (forward/input: any; output: WAJIB iface)"
                     ptype="FW_IFACE_OR_ANY"/>
             </PARAM>
             <CONFIG pattern="^${__line}$"/>
@@ -151,7 +151,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="no filter"
-                help="Hapus aturan filter (sintaks lengkap sama dengan pembuatnya)">
+                help="Delete aturan filter (sintaks lengkap sama with pembuatnya)">
             <PARAM name="chain"
                 help="forward | input | output"
                 ptype="FW_CHAIN"/>
@@ -171,7 +171,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="src_val"
-                    help="sumber CIDR atau any"
+                    help="sumber CIDR or any"
                     ptype="FW_CIDR_OR_ANY"/>
             </PARAM>
             <PARAM name="dst"
@@ -179,7 +179,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="dst_val"
-                    help="tujuan CIDR atau any"
+                    help="destination CIDR or any"
                     ptype="FW_CIDR_OR_ANY"/>
             </PARAM>
             <PARAM name="sport"
@@ -187,7 +187,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="sport_val"
-                    help="port sumber atau any"
+                    help="port sumber or any"
                     ptype="FW_PORT_OR_ANY"/>
             </PARAM>
             <PARAM name="dport"
@@ -195,7 +195,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="dport_val"
-                    help="port tujuan atau any"
+                    help="port destination or any"
                     ptype="FW_PORT_OR_ANY"/>
             </PARAM>
             <PARAM name="in"
@@ -203,7 +203,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="in_val"
-                    help="interface masuk atau any"
+                    help="interface enter or any"
                     ptype="FW_IFACE_OR_ANY"/>
             </PARAM>
             <PARAM name="out"
@@ -211,7 +211,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="out_val"
-                    help="interface keluar atau any"
+                    help="interface exit or any"
                     ptype="FW_IFACE_OR_ANY"/>
             </PARAM>
             <CONFIG operation="unset" pattern="^filter ${chain} ${action} proto ${proto_val} src ${src_val} dst ${dst_val} sport ${sport_val} dport ${dport_val} in ${in_val} out ${out_val}$"/>
@@ -221,16 +221,16 @@
         </COMMAND>
 
         <COMMAND name="snat"
-                help="Source NAT: trafik dari srcnet yang keluar via out diubah sumbernya ke target (alamat eksplisit atau masquerade = alamat iface keluar)">
+                help="Source NAT: traffic from srcnet that exit via out diubah sumbernya to target (alamat eksplisit or masquerade = alamat iface exit)">
             <PARAM name="srcnet"
-                help="jaringan sumber CIDR (mis. 192.168.1.0/24)"
+                help="network sumber CIDR (mis. 192.168.1.0/24)"
                 ptype="IP_ADDR_MASK"/>
             <PARAM name="to"
                 help="to"
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="to_val"
-                    help="alamat IPv4 hasil NAT atau masquerade"
+                    help="alamat IPv4 hasil NAT or masquerade"
                     ptype="FW_SNAT_TARGET"/>
             </PARAM>
             <PARAM name="out"
@@ -238,7 +238,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="out_val"
-                    help="interface keluar (WAJIB iface)"
+                    help="interface exit (WAJIB iface)"
                     ptype="IFACE_SYS"/>
             </PARAM>
             <CONFIG pattern="^${__line}$"/>
@@ -247,16 +247,16 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="no snat"
-                help="Hapus aturan snat (sintaks lengkap sama dengan pembuatnya)">
+                help="Delete aturan snat (sintaks lengkap sama with pembuatnya)">
             <PARAM name="srcnet"
-                help="jaringan sumber CIDR"
+                help="network sumber CIDR"
                 ptype="IP_ADDR_MASK"/>
             <PARAM name="to"
                 help="to"
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="to_val"
-                    help="alamat IPv4 hasil NAT atau masquerade"
+                    help="alamat IPv4 hasil NAT or masquerade"
                     ptype="FW_SNAT_TARGET"/>
             </PARAM>
             <PARAM name="out"
@@ -264,7 +264,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="out_val"
-                    help="interface keluar"
+                    help="interface exit"
                     ptype="IFACE_SYS"/>
             </PARAM>
             <CONFIG operation="unset" pattern="^snat ${srcnet} to ${to_val} out ${out_val}$"/>
@@ -274,16 +274,16 @@
         </COMMAND>
 
         <COMMAND name="dnat"
-                help="Destination NAT / port forwarding: trafik masuk via in ke dport dialihkan ke alamat (+port) tujuan. BUTUH forward permit ke tujuan TERJEMAHAN agar lolos (filter melihat paket post-DNAT)">
+                help="Destination NAT / port forwarding: traffic enter via in to dport redirected to alamat (+port) destination. Needs forward permit to destination TERJEMAHAN so that pass (filter sees packet post-DNAT)">
             <PARAM name="proto"
-                help="tcp | udp (icmp tidak memakai port, tidak didukung dnat)"
+                help="tcp | udp (icmp not memakai port, not didukung dnat)"
                 ptype="FW_DNAT_PROTO"/>
             <PARAM name="in"
                 help="in"
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="in_val"
-                    help="interface masuk (wajib; dnat selalu terikat iface)"
+                    help="interface enter (wajib; dnat selalu terikat iface)"
                     ptype="IFACE_SYS"/>
             </PARAM>
             <PARAM name="dport"
@@ -299,7 +299,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="to_val"
-                    help="alamat IPv4 tujuan"
+                    help="alamat IPv4 destination"
                     ptype="IP_ADDR"/>
             </PARAM>
             <PARAM name="port"
@@ -307,7 +307,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="toport_val"
-                    help="port tujuan 1-65535 atau same (= port publik)"
+                    help="port destination 1-65535 or same (= port publik)"
                     ptype="FW_PORT_OR_SAME"/>
             </PARAM>
             <CONFIG pattern="^${__line}$"/>
@@ -316,7 +316,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="no dnat"
-                help="Hapus aturan dnat (sintaks lengkap sama dengan pembuatnya)">
+                help="Delete aturan dnat (sintaks lengkap sama with pembuatnya)">
             <PARAM name="proto"
                 help="tcp | udp"
                 ptype="FW_DNAT_PROTO"/>
@@ -325,7 +325,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="in_val"
-                    help="interface masuk"
+                    help="interface enter"
                     ptype="IFACE_SYS"/>
             </PARAM>
             <PARAM name="dport"
@@ -341,7 +341,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="to_val"
-                    help="alamat IPv4 tujuan"
+                    help="alamat IPv4 destination"
                     ptype="IP_ADDR"/>
             </PARAM>
             <PARAM name="port"
@@ -349,7 +349,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
                 <PARAM name="toport_val"
-                    help="port tujuan atau same"
+                    help="port destination or same"
                     ptype="FW_PORT_OR_SAME"/>
             </PARAM>
             <CONFIG operation="unset" pattern="^dnat ${proto} in ${in_val} dport ${dport_val} to ${to_val} port ${toport_val}$"/>
@@ -359,9 +359,9 @@
         </COMMAND>
 
         <COMMAND name="protect-interface"
-                help="Tambah interface ke daftar protected (rule tidak boleh memakai iface ini sebagai in/out — guard anti-lockout)">
+                help="Add interface to list protected (rule not boleh memakai iface ini sebagai in/out — guard anti-lockout)">
             <PARAM name="If"
-                help="nama interface"
+                help="name interface"
                 ptype="IFACE_SYS"/>
             <CONFIG/>
             <ACTION>
@@ -369,9 +369,9 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="no protect-interface"
-                help="Hapus interface dari daftar protected (minimal satu harus tersisa)">
+                help="Delete interface from list protected (minimal satu must tersisa)">
             <PARAM name="If"
-                help="nama interface"
+                help="name interface"
                 ptype="IFACE_SYS"/>
             <CONFIG operation="unset" pattern="^protected ${If}"/>
             <ACTION>
@@ -391,7 +391,7 @@
     <VIEW name="enable-view">
 
         <COMMAND name="show firewall"
-                help="Daftar rule firewall/NAT (urutan = prioritas) + dump anchor pf live + status forwarding"
+                help="List rule firewall/NAT (urutan = prioritas) + dump anchor pf live + status forwarding"
                 lock="false"
                 interrupt="true">
             <ACTION>
@@ -400,7 +400,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="show firewall filter"
-                help="Daftar rule filter saja"
+                help="List rule filter saja"
                 lock="false"
                 interrupt="true">
             <ACTION>
@@ -408,7 +408,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="show firewall nat"
-                help="Daftar rule snat/dnat saja"
+                help="List rule snat/dnat saja"
                 lock="false"
                 interrupt="true">
             <ACTION>
