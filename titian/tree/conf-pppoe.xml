@@ -32,7 +32,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no pppoe-server"
-            help="Hapus SELURUH konfigurasi PPPoE server (semua user + pool)">
+            help="Delete SELURUH konfigurasi PPPoE server (all user + pool)">
         <CONFIG operation="unset" pattern="^pppoe-server$"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh flush
@@ -48,12 +48,12 @@
         completion="true"/>
 
     <COMMAND name="exit"
-        help="Kembali ke configure-view"
+        help="Back to configure-view"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
     <COMMAND name="end"
-        help="Kembali ke enable-view"
+        help="Back to enable-view"
         view="enable-view"/>
     <HOTKEY key="^Z" cmd="exit"/>
 
@@ -78,7 +78,7 @@
     <COMMAND name="interface"
         help="Interface tempat PPPoE server mendengarkan">
         <PARAM name="If"
-            help="nama interface"
+            help="name interface"
             ptype="IFACE_SYS"/>
         <CONFIG/>
         <ACTION>
@@ -86,7 +86,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no interface"
-        help="Hapus interface PPPoE server">
+        help="Delete interface PPPoE server">
         <CONFIG operation="unset" pattern="^interface"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh del-interface
@@ -94,7 +94,7 @@
     </COMMAND>
 
     <COMMAND name="pool"
-        help="Pool alamat IP untuk klien PPPoE (range start-end)">
+        help="Pool alamat IP for klien PPPoE (range start-end)">
         <PARAM name="Start"
             help="alamat awal pool"
             ptype="IP_ADDR"/>
@@ -107,7 +107,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no pool"
-        help="Hapus pool alamat PPPoE">
+        help="Delete pool alamat PPPoE">
         <CONFIG operation="unset" pattern="^pool"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh del-pool
@@ -115,13 +115,13 @@
     </COMMAND>
 
     <COMMAND name="user"
-            help="User PPPoE (password + IP statis opsional di subview)"
+            help="User PPPoE (password + IP statis opsional at subview)"
             view="configure-pppoe-user-view"
             viewid="pppoe_user=${Name}"
             ptype="SUBCOMMAND"
             mode="subcommand">
         <PARAM name="Name"
-            help="nama user"
+            help="name user"
             ptype="STRING"/>
         <CONFIG priority="0x1610" pattern="^user ${Name}$"/>
         <ACTION>
@@ -129,9 +129,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no user"
-            help="Hapus user PPPoE">
+            help="Delete user PPPoE">
         <PARAM name="Name"
-            help="nama user"
+            help="name user"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^user ${Name}"/>
         <ACTION>
@@ -140,7 +140,7 @@
     </COMMAND>
 
     <COMMAND name="radius-server"
-        help="Server RADIUS untuk auth PPPoE (tanpa CoA)">
+        help="Server RADIUS for auth PPPoE (tanpa CoA)">
         <PARAM name="Server"
             help="alamat IPv4 server RADIUS"
             ptype="IP_ADDR"/>
@@ -150,7 +150,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no radius-server"
-        help="Hapus server RADIUS (kembali ke auth lokal)">
+        help="Delete server RADIUS (back to auth lokal)">
         <CONFIG operation="unset" pattern="^radius-server"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh del-radius-server
@@ -158,7 +158,7 @@
     </COMMAND>
 
     <COMMAND name="radius-secret"
-        help="Shared secret RADIUS (tersimpan di mpd.conf, mode 600)">
+        help="Shared secret RADIUS (tersimpan at mpd.conf, mode 600)">
         <PARAM name="Secret"
             help="shared secret"
             ptype="STRING"/>
@@ -168,7 +168,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no radius-secret"
-        help="Hapus shared secret RADIUS">
+        help="Delete shared secret RADIUS">
         <CONFIG operation="unset" pattern="^radius-secret"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh del-radius-secret
@@ -183,14 +183,14 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Kembali ke pppoe-server mode"
+        help="Back to pppoe-server mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
     <HOTKEY key="^Z" cmd="exit"/>
 
     <COMMAND name="password"
-        help="Password user (tersimpan di mpd.secret, mode 600)">
+        help="Password user (tersimpan at mpd.secret, mode 600)">
         <PARAM name="Pass"
             help="password"
             ptype="STRING"/>
@@ -200,7 +200,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="ip"
-        help="Alamat IP statis untuk user ini (kosong = dari pool)">
+        help="Alamat IP statis for user ini (kosong = from pool)">
         <PARAM name="Addr"
             help="alamat IPv4"
             ptype="IP_ADDR"/>
@@ -210,7 +210,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ip"
-        help="Hapus IP statis user (kembali ke pool)">
+        help="Delete IP statis user (back to pool)">
         <CONFIG operation="unset" pattern="^ip"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh user-del-ip "${pppoe_user}"
@@ -228,7 +228,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show pppoe-server users"
-        help="Daftar user PPPoE (nama + IP statis; password tidak ditampilkan)"
+        help="List user PPPoE (name + IP statis; password not ditampilkan)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -236,7 +236,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show pppoe-server sessions"
-        help="Sesi PPPoE yang aktif (interface ng*)"
+        help="Sesi PPPoE that aktif (interface ng*)"
         lock="false"
         interrupt="true">
         <ACTION>

@@ -76,9 +76,9 @@
 	</COMMAND>
 
 	<COMMAND name="no system sysctl"
-		help="Hapus setelan sysctl Titian (cermin bersih; nilai live kembali ke nilai sebelum-set, atau bertahan sampai reboot bila nilai awal tak tercatat)">
+		help="Delete setting sysctl Titian (mirror clean; value live back to value before-set, or bertahan sampai reboot if value awal tak tercatat)">
 		<PARAM name="key"
-			help="MIB key yang dihapus"
+			help="MIB key that deleted"
 			ptype="STRING"/>
 		<CONFIG operation="unset" pattern="system sysctl ${key}"/>
 		<ACTION>

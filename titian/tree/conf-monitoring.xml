@@ -17,7 +17,7 @@
 
 <VIEW name="configure-view">
     <COMMAND name="monitoring"
-            help="Monitoring: snmpd / node_exporter / bird_exporter / nfacctd (semua OFF by default)"
+            help="Monitoring: snmpd / node_exporter / bird_exporter / nfacctd (all OFF by default)"
             view="configure-monitoring-view"
             viewid="sysview=monitoring"
             ptype="SUBCOMMAND"
@@ -37,12 +37,12 @@
         completion="true"/>
 
     <COMMAND name="exit"
-        help="Kembali ke configure-view"
+        help="Back to configure-view"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
     <COMMAND name="end"
-        help="Kembali ke enable-view"
+        help="Back to enable-view"
         view="enable-view"/>
     <HOTKEY key="^Z" cmd="exit"/>
 
@@ -82,7 +82,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="snmp community"
-        help="Community SNMP read-only (default bsdrp-ro — ganti sebelum expose)">
+        help="Community SNMP read-only (default bsdrp-ro — change before expose)">
         <PARAM name="Comm"
             help="community string"
             ptype="STRING"/>
@@ -171,7 +171,7 @@
     </COMMAND>
 
     <COMMAND name="show monitoring bandwidth"
-        help="Bandwidth live per interface (bwm-ng, bps). Tanpa angka = 1 snapshot; beri detik untuk live (q = berhenti)"
+        help="Bandwidth live per interface (bwm-ng, bps). Tanpa angka = 1 snapshot; beri detik for live (q = berhenti)"
         lock="false"
         interrupt="true">
         <PARAM name="seconds"

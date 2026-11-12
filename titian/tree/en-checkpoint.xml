@@ -34,38 +34,38 @@ SEMANTIK ROLLBACK (baca sebelum pakai):
          butuh prefix ini agar checkpoint save/list/delete ter-resolve,
          mengikuti pola community/show/generate di tree lain) -->
     <COMMAND name="checkpoint"
-             help="Checkpoint management (titik simpan bernama)"/>
+             help="Checkpoint management (point save bernama)"/>
 
     <COMMAND name="checkpoint save"
-             help="Simpan running-config saat ini sebagai titik bernama (beku; save biasa tidak mengubahnya)">
+             help="Save running-config current sebagai point bernama (beku; save biasa not mengubahnya)">
         <PARAM name="name"
-               help="Nama titik [A-Za-z0-9_-]+"
+               help="Name point [A-Za-z0-9_-]+"
                ptype="CHECKPOINT_NAME"/>
         <ACTION>${RT_SBIN}/titian-checkpoint.sh save "${name}"</ACTION>
     </COMMAND>
 
     <COMMAND name="checkpoint list"
-             help="Daftar titik checkpoint (nama + waktu dibuat WIB; * = sama dengan running-config saat ini)">
+             help="List point checkpoint (name + waktu dibuat WIB; * = sama with running-config current)">
         <ACTION>${RT_SBIN}/titian-checkpoint.sh list</ACTION>
     </COMMAND>
 
     <COMMAND name="checkpoint delete"
-             help="Hapus satu titik checkpoint">
+             help="Delete satu point checkpoint">
         <PARAM name="name"
-               help="Nama titik [A-Za-z0-9_-]+"
+               help="Name point [A-Za-z0-9_-]+"
                ptype="CHECKPOINT_NAME"/>
         <ACTION>${RT_SBIN}/titian-checkpoint.sh delete "${name}"</ACTION>
     </COMMAND>
 
     <COMMAND name="show checkpoints"
-             help="Daftar titik checkpoint (sama dengan checkpoint list)">
+             help="List point checkpoint (sama with checkpoint list)">
         <ACTION>${RT_SBIN}/titian-checkpoint.sh list</ACTION>
     </COMMAND>
 
     <COMMAND name="rollback"
-             help="Kembali ke titik checkpoint bernama; tanpa nama = kembali ke startup-config (buang perubahan running yang belum di-save). PERSISTEN: running-config + bird.conf + bird.d + netstate + sysctl dikembalikan ke isi titik, startup-config ditulis dari titik + restart service + birdc configure, bertahan melewati reboot">
+             help="Back to point checkpoint bernama; tanpa name = back to startup-config (buang perubahan running that not yet at-save). PERSISTEN: running-config + bird.conf + bird.d + netstate + sysctl dikembalikan to isi point, startup-config ditulis from point + restart service + birdc configure, bertahan melewati reboot">
         <PARAM name="name"
-               help="Nama titik [A-Za-z0-9_-]+ (kosong = startup-config)"
+               help="Name point [A-Za-z0-9_-]+ (kosong = startup-config)"
                ptype="CHECKPOINT_NAME"
                optional="true"/>
         <ACTION>${RT_SBIN}/titian-checkpoint.sh rollback "${name}"</ACTION>

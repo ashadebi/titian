@@ -59,6 +59,9 @@
             # karena `save` sendiri tidak memotretnya). Best-effort:
             # gagal memotret TIDAK PERNAH menggagalkan save.
             ${RT_SBIN}/titian-checkpoint.sh snapshot-last-save 2>/dev/null || echo "peringatan: snapshot .last-save gagal (save tetap berhasil)"
+            # Persist ke partisi cfg (/cfg/titian) — /etc adalah tmpfs
+            # (hilang saat reboot); tanpa ini save hilang sesudah reboot.
+            ${RT_SBIN}/titian-cfg.sh save 2>/dev/null || echo "peringatan: persist ke /cfg gagal (save tetap berhasil di sesi ini, tapi HILANG sesudah reboot)"
       </ACTION>
   </COMMAND>
 

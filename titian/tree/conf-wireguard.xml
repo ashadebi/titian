@@ -30,7 +30,7 @@
             ptype="SUBCOMMAND"
             mode="subcommand">
         <PARAM name="Name"
-            help="nama interface (wg0, wg1, ...)"
+            help="name interface (wg0, wg1, ...)"
             ptype="WG_IFACE"/>
         <CONFIG priority="0x1700" pattern="^wireguard ${Name}$"/>
         <ACTION>
@@ -38,9 +38,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no wireguard"
-            help="Hapus SELURUH konfigurasi WireGuard interface ini">
+            help="Delete SELURUH konfigurasi WireGuard interface ini">
         <PARAM name="Name"
-            help="nama interface"
+            help="name interface"
             ptype="WG_IFACE"/>
         <CONFIG operation="unset" pattern="^wireguard ${Name}"/>
         <ACTION>
@@ -57,12 +57,12 @@
         completion="true"/>
 
     <COMMAND name="exit"
-        help="Kembali ke configure-view"
+        help="Back to configure-view"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
     <COMMAND name="end"
-        help="Kembali ke enable-view"
+        help="Back to enable-view"
         view="enable-view"/>
     <HOTKEY key="^Z" cmd="exit"/>
 
@@ -87,7 +87,7 @@
     <COMMAND name="address"
         help="Alamat IP interface WireGuard">
         <PARAM name="Addr"
-            help="alamat/prefix (contoh 10.6.0.1/24)"
+            help="alamat/prefix (example 10.6.0.1/24)"
             ptype="IP_ADDR_MASK"/>
         <CONFIG/>
         <ACTION>
@@ -95,7 +95,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no address"
-        help="Hapus alamat IP interface">
+        help="Delete alamat IP interface">
         <CONFIG operation="unset" pattern="^address"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh del-address "${wg}"
@@ -113,7 +113,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no listen-port"
-        help="Hapus listen-port (default wg 51820)">
+        help="Delete listen-port (default wg 51820)">
         <CONFIG operation="unset" pattern="^listen-port"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh del-listen-port "${wg}"
@@ -121,7 +121,7 @@
     </COMMAND>
 
     <COMMAND name="generate-key"
-        help="Buat keypair baru (private key tersimpan mode 600; public key ditampilkan sekali)">
+        help="Create keypair baru (private key tersimpan mode 600; public key ditampilkan sekali)">
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh generate-key "${wg}"
         </ACTION>
@@ -142,7 +142,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no peer"
-            help="Hapus peer WireGuard">
+            help="Delete peer WireGuard">
         <PARAM name="Pubkey"
             help="public key peer"
             ptype="STRING"/>
@@ -160,7 +160,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Kembali ke wireguard mode"
+        help="Back to wireguard mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -169,7 +169,7 @@
     <COMMAND name="allowed-ips"
         help="Allowed IPs peer (CIDR)">
         <PARAM name="Nets"
-            help="prefix yang boleh lewat peer ini"
+            help="prefix that boleh lewat peer ini"
             ptype="IP_ADDR_MASK"/>
         <CONFIG/>
         <ACTION>
@@ -177,7 +177,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no allowed-ips"
-        help="Hapus allowed-ips peer">
+        help="Delete allowed-ips peer">
         <CONFIG operation="unset" pattern="^allowed-ips"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" allowed-ips
@@ -187,7 +187,7 @@
     <COMMAND name="endpoint"
         help="Endpoint peer (host:port)">
         <PARAM name="Ep"
-            help="alamat:port (contoh 203.0.113.5:51820)"
+            help="alamat:port (example 203.0.113.5:51820)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -195,7 +195,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no endpoint"
-        help="Hapus endpoint peer">
+        help="Delete endpoint peer">
         <CONFIG operation="unset" pattern="^endpoint"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" endpoint
@@ -213,7 +213,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no persistent-keepalive"
-        help="Hapus persistent keepalive">
+        help="Delete persistent keepalive">
         <CONFIG operation="unset" pattern="^persistent-keepalive"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" keepalive
@@ -223,7 +223,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show wireguard"
-        help="Status semua interface WireGuard (wg show)"
+        help="Status all interface WireGuard (wg show)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -235,7 +235,7 @@
         lock="false"
         interrupt="true">
         <PARAM name="Name"
-            help="nama interface"
+            help="name interface"
             ptype="WG_IFACE"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh show-one "${Name}"

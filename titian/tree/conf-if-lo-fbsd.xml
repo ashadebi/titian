@@ -171,5 +171,13 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="no description"
+            help="Delete description interface">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ifconfig ${iface} description ""
+        </ACTION>
+    </COMMAND>
+
 </VIEW>
 </CLISH_MODULE>

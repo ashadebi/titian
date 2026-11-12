@@ -16,7 +16,7 @@
         lock="false"
         interrupt="true">
         <PARAM name="iface"
-            help="VXLAN interface (kosong = semua)"
+            help="VXLAN interface (kosong = all)"
             completion="${Get_if_vxlan}"
             optional="true"
             ptype="IFACE_VXLAN"/>

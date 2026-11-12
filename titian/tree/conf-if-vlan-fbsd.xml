@@ -183,8 +183,16 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="no description"
+            help="Delete description interface">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ifconfig ${iface} description ""
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="mtu"
-              help="MTU: ukuran paket terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path.">
+              help="MTU: ukuran packet terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path.">
             <PARAM name="mtu"
                 help="range 68-9000"
                 ptype="MTU"/>
@@ -195,7 +203,7 @@
     </COMMAND>
 
     <COMMAND name="no mtu"
-              help="Hapus setelan MTU Titian (kembali ke nilai sebelum di-set Titian (umumnya 1500); cermin bersih)">
+              help="Delete setting MTU Titian (back to value before at-set Titian (usually 1500); mirror clean)">
         <CONFIG operation="unset" pattern="^mtu"/>
         <ACTION>
             ${RT_SBIN}/titian-tune.sh mtu-del "${iface}"

@@ -12,7 +12,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show routing"
-        help="Routing daemon aktif: BIRD (varian+versi+status+pid) dan FRR"
+        help="Routing daemon aktif: BIRD (varian+versi+status+pid) and FRR"
         lock="false"
         interrupt="true">
         <ACTION>

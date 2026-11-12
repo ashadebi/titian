@@ -30,7 +30,7 @@
         help="BIRD routing daemon (BGP/OSPF/static)"/>
 
     <COMMAND name="router bird enable"
-        help="Enable BIRD (pending commit — service naik saat commit; diblokir bila FRR jalan)">
+        help="Enable BIRD (pending commit — service naik saat commit; diblokir if FRR jalan)">
         <CONFIG priority="0x1500" pattern="^${__line}$"/>
         <ACTION>
             ${RT_SBIN}/titian-bird.sh bird-enable
@@ -45,7 +45,7 @@
     </COMMAND>
 
     <COMMAND name="router bird threads"
-        help="BIRD 3 worker threads (hanya bird3; di bird2 ditolak)">
+        help="BIRD 3 worker threads (hanya bird3; at bird2 ditolak)">
         <PARAM name="count"
             help="jumlah thread 1-32"
             ptype="UINT"/>
@@ -56,7 +56,7 @@
     </COMMAND>
 
     <COMMAND name="router frr enable"
-        help="Enable FRR (pending commit — service naik saat commit; diblokir bila BIRD jalan)">
+        help="Enable FRR (pending commit — service naik saat commit; diblokir if BIRD jalan)">
         <CONFIG priority="0x1510" pattern="^${__line}$"/>
         <ACTION>
             ${RT_SBIN}/titian-frr.sh frr-enable

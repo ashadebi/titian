@@ -39,13 +39,13 @@ ATURAN AMAN (lihat header titian-rename.sh untuk detail):
 <VIEW name="enable-view">
 
     <COMMAND name="rename"
-             help="Rename interface sistem + migrasi state Titian (PERSISTEN + restart service). Contoh: rename wan0 xxve9. JANGAN rename interface mgmt/produksi">
+             help="Rename interface system + migrate state Titian (PERSISTEN + restart service). Example: rename wan0 xxve9. Do not rename interface mgmt/produksi">
         <PARAM name="old"
-               help="Nama interface sekarang (lihat 'show interfaces'; Tab/? untuk daftar)"
+               help="Name interface now (show 'show interfaces'; Tab/? for list)"
                completion="${Get_if_eth}"
                ptype="IFACE_SYS"/>
         <PARAM name="new"
-               help="Nama baru (charset IFACE_SYS; belum dipakai sistem; bukan bond/vxlan/lagg/vlan/lo)"
+               help="New name (charset IFACE_SYS; not yet used system; not bond/vxlan/lagg/vlan/lo)"
                ptype="IFACE_SYS"/>
         <ACTION>${RT_SBIN}/titian-rename.sh "${old}" "${new}"</ACTION>
     </COMMAND>

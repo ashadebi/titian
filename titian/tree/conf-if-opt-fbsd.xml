@@ -33,7 +33,7 @@
     </COMMAND>
 
     <COMMAND name="tso"
-        help="TSO (TCP segmentation offload, ifconfig tso/-tso): NIC memotong segmen TCP besar jadi paket MTU. Efek: hemat CPU untuk trafik yang berasal dari box ini; tidak memengaruhi paket yang di-forward. Tradeoff: off hanya bila dicurigai bug driver/NIC. Default: on (bila didukung driver).">
+        help="TSO (TCP segmentation offload, ifconfig tso/-tso): NIC memotong segmen TCP besar jadi packet MTU. Efek: hemat CPU for traffic that berasal from box ini; not memengaruhi packet that at-forward. Tradeoff: off hanya if dicurigai bug driver/NIC. Default: on (if didukung driver).">
         <PARAM name="tso_method"
             help="on = aktif (default) | off = nonaktif"
             ptype="SUBCOMMAND"
@@ -54,7 +54,7 @@
     </COMMAND>
 
     <COMMAND name="no tso"
-        help="Hapus setelan TSO Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        help="Delete setting TSO Titian (back to value before at-set Titian (usually on); mirror clean)">
         <CONFIG operation="unset" pattern="^tso"/>
         <ACTION>
             ${RT_SBIN}/titian-tune.sh offload-del "${iface}" tso
@@ -62,9 +62,9 @@
     </COMMAND>
 
     <COMMAND name="lro"
-        help="LRO (large receive offload, ifconfig lro/-lro): HARDWARE menggabung paket receive. Efek: hemat CPU receive. Tradeoff: HARUS off di router/bridge — agregasi hardware bisa merusak semantik forwarding. Default: off.">
+        help="LRO (large receive offload, ifconfig lro/-lro): HARDWARE menggabung packet receive. Efek: hemat CPU receive. Tradeoff: Must off at router/bridge — agregasi hardware can merusak semantik forwarding. Default: off.">
         <PARAM name="lro_method"
-            help="on = aktif | off = nonaktif (default untuk router)"
+            help="on = aktif | off = nonaktif (default for router)"
             ptype="SUBCOMMAND"
             mode="switch">
             <PARAM name="on"
@@ -83,7 +83,7 @@
     </COMMAND>
 
     <COMMAND name="no lro"
-        help="Hapus setelan LRO Titian (kembali ke nilai sebelum di-set Titian (umumnya off); cermin bersih)">
+        help="Delete setting LRO Titian (back to value before at-set Titian (usually off); mirror clean)">
         <CONFIG operation="unset" pattern="^lro"/>
         <ACTION>
             ${RT_SBIN}/titian-tune.sh offload-del "${iface}" lro
@@ -91,7 +91,7 @@
     </COMMAND>
 
     <COMMAND name="rx"
-        help="RX checksumming (ifconfig rxcsum/-rxcsum): NIC menghitung checksum paket masuk. Efek: hemat CPU receive. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug checksum driver. Default: on (bila didukung driver).">
+        help="RX checksumming (ifconfig rxcsum/-rxcsum): NIC menghitung checksum packet enter. Efek: hemat CPU receive. Tradeoff: hampir no ; off hanya if dicurigai bug checksum driver. Default: on (if didukung driver).">
         <PARAM name="rx_method"
             help="on = aktif (default) | off = nonaktif"
             ptype="SUBCOMMAND"
@@ -113,7 +113,7 @@
     </COMMAND>
 
     <COMMAND name="no rx"
-        help="Hapus setelan RX checksumming Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        help="Delete setting RX checksumming Titian (back to value before at-set Titian (usually on); mirror clean)">
         <CONFIG operation="unset" pattern="^rx "/>
         <ACTION>
             ${RT_SBIN}/titian-tune.sh offload-del "${iface}" rx
@@ -121,7 +121,7 @@
     </COMMAND>
 
     <COMMAND name="tx"
-        help="TX checksumming (ifconfig txcsum/-txcsum): NIC menghitung checksum paket keluar. Efek: hemat CPU transmit. Tradeoff: hampir tidak ada; off hanya bila dicurigai bug checksum driver. Default: on (bila didukung driver).">
+        help="TX checksumming (ifconfig txcsum/-txcsum): NIC menghitung checksum packet exit. Efek: hemat CPU transmit. Tradeoff: hampir no ; off hanya if dicurigai bug checksum driver. Default: on (if didukung driver).">
         <PARAM name="tx_method"
             help="on = aktif (default) | off = nonaktif"
             ptype="SUBCOMMAND"
@@ -142,7 +142,7 @@
     </COMMAND>
 
     <COMMAND name="no tx"
-        help="Hapus setelan TX checksumming Titian (kembali ke nilai sebelum di-set Titian (umumnya on); cermin bersih)">
+        help="Delete setting TX checksumming Titian (back to value before at-set Titian (usually on); mirror clean)">
         <CONFIG operation="unset" pattern="^tx"/>
         <ACTION>
             ${RT_SBIN}/titian-tune.sh offload-del "${iface}" tx
