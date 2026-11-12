@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- PPPoE server (mpd5 5.9, netgraph) — BSDRP port (BARU).
+         Backend: ${RT_SBIN}/titian-pppoe.sh, config klish di
+         /usr/local/etc/pppoe.conf, config mpd5 yang dihasilkan di
+         /usr/local/etc/mpd5/mpd.conf + mpd.secret (mode 600).
+         `enable` hanya mencatat niat + dirty; service mpd5 naik/
+         berhenti saat `commit`. User/pool/interface berlaku saat
+         commit berikutnya (atau langsung bila service sudah jalan
+         dan commit dijalankan).
+         CATATAN: password user tersimpan di mpd.secret (600) dan
+         tercatat di running-config seperti perintah password router
+         pada umumnya — ganti berkala; jangan expose file itu.
+         Sintaks mpd.conf yang dihasilkan BELUM teruji live di guest
+         (ditulis dari dokumentasi mpd5) — verifikasi live wajib
+         sebelum dipakai produksi. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="pppoe-server"
+            help="PPPoE server (mpd5)"
+            view="configure-pppoe-view"
+            viewid="sysview=pppoe-server"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <CONFIG priority="0x1600" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh check
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no pppoe-server"
+            help="Hapus SELURUH konfigurasi PPPoE server (semua user + pool)">
+        <CONFIG operation="unset" pattern="^pppoe-server$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh flush
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-pppoe-view"
+    prompt="${SYSTEM_NAME}(config-pppoe)# "
+    depth="1">
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Kembali ke configure-view"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Kembali ke enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="enable"
+          help="Enable PPPoE server (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-enable yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no enable"
+          help="Disable PPPoE server (pending commit)">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-enable no
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interface"
+        help="Interface tempat PPPoE server mendengarkan">
+        <PARAM name="If"
+            help="nama interface"
+            ptype="IFACE_SYS"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-interface "${If}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Hapus interface PPPoE server">
+        <CONFIG operation="unset" pattern="^interface"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-interface
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="pool"
+        help="Pool alamat IP untuk klien PPPoE (range start-end)">
+        <PARAM name="Start"
+            help="alamat awal pool"
+            ptype="IP_ADDR"/>
+        <PARAM name="End"
+            help="alamat akhir pool"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-pool "${Start}" "${End}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no pool"
+        help="Hapus pool alamat PPPoE">
+        <CONFIG operation="unset" pattern="^pool"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-pool
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="user"
+            help="User PPPoE (password + IP statis opsional di subview)"
+            view="configure-pppoe-user-view"
+            viewid="pppoe_user=${Name}"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <PARAM name="Name"
+            help="nama user"
+            ptype="STRING"/>
+        <CONFIG priority="0x1610" pattern="^user ${Name}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh user-add "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no user"
+            help="Hapus user PPPoE">
+        <PARAM name="Name"
+            help="nama user"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^user ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh user-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="radius-server"
+        help="Server RADIUS untuk auth PPPoE (tanpa CoA)">
+        <PARAM name="Server"
+            help="alamat IPv4 server RADIUS"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-radius-server "${Server}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-server"
+        help="Hapus server RADIUS (kembali ke auth lokal)">
+        <CONFIG operation="unset" pattern="^radius-server"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-radius-server
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="radius-secret"
+        help="Shared secret RADIUS (tersimpan di mpd.conf, mode 600)">
+        <PARAM name="Secret"
+            help="shared secret"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-radius-secret "${Secret}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-secret"
+        help="Hapus shared secret RADIUS">
+        <CONFIG operation="unset" pattern="^radius-secret"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-radius-secret
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-pppoe-user-view"
+    prompt="${SYSTEM_NAME}(config-pppoe-user-${pppoe_user})# "
+    depth="2">
+    <NAMESPACE ref="configure-pppoe-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Kembali ke pppoe-server mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="password"
+        help="Password user (tersimpan di mpd.secret, mode 600)">
+        <PARAM name="Pass"
+            help="password"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh user-set-password "${pppoe_user}" "${Pass}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ip"
+        help="Alamat IP statis untuk user ini (kosong = dari pool)">
+        <PARAM name="Addr"
+            help="alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh user-set-ip "${pppoe_user}" "${Addr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ip"
+        help="Hapus IP statis user (kembali ke pool)">
+        <CONFIG operation="unset" pattern="^ip"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh user-del-ip "${pppoe_user}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show pppoe-server"
+        help="Status PPPoE server (enable, interface, pool, jumlah user)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh show
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show pppoe-server users"
+        help="Daftar user PPPoE (nama + IP statis; password tidak ditampilkan)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh show-users
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show pppoe-server sessions"
+        help="Sesi PPPoE yang aktif (interface ng*)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh show-sessions
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

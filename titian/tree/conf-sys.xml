@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+
+<VIEW name="configure-view">
+
+	<COMMAND name="system"
+		help="System parameters"/>
+	<COMMAND name="no system"
+		help="no System parameters"/>
+        
+<!-- hostname config (per OS lewat helper) -->
+	<COMMAND name="system hostname"
+		help="Set system's network name">
+		<PARAM name="hostname"
+			help="This system's network name"
+			ptype="STRING"/>
+		<CONFIG priority="0x1001" splitter="true"/>
+		<ACTION>
+			${RT_SBIN}/titian-sys.sh hostname "${hostname}"
+		</ACTION>
+	</COMMAND>
+
+<!-- nameservers config priority="0x1011" file: conf-sys-ns.xml  -->
+
+<!-- time-zone config -->
+	<COMMAND name="system time-zone"
+		help="Set time-zone">
+		<PARAM name="tz_method"
+			help=""
+			ptype="SUBCOMMAND"
+			mode="switch">
+			<PARAM name="Asia/Jakarta"
+				help="WIB|pulau jawa|dsk"
+				ptype="SUBCOMMAND"
+				mode="subcommand"/>
+			<PARAM name="Asia/Makassar"
+				help="WITA|bali|Singapore|Malaysia"
+				ptype="SUBCOMMAND"
+				mode="subcommand"/>
+			<PARAM name="UTC"
+				help="Universal Time Coordinated"
+				ptype="SUBCOMMAND"
+				mode="subcommand"/>
+		</PARAM>
+                <CONFIG priority="0x1021"/>
+		<ACTION>
+			${RT_SBIN}/titian-sys.sh timezone "${tz_method}"
+		</ACTION>
+	</COMMAND>
+
+<!-- sysctl (fitur baru, bukan restorasi rtcli: tree lama tidak punya
+     perintah sysctl). Berlaku SEGERA system-wide (live) + persisten
+     (cermin OS-native: /etc/sysctl.d/99-titian.conf di Linux,
+     blok #-TITIAN-# di /etc/sysctl.conf FreeBSD; plus baris
+     running-config sehingga save+replay membawanya). Key HARUS
+     dikenali kernel yang jalan (net.ipv4.* = Linux, net.inet.* =
+     FreeBSD) — kunci OS lain ditolak bersih. Nilai vektor berspasi
+     (mis. tcp_rmem) ditulis pakai tanda kutip. Arti tiap kunci:
+     `show system sysctl`. -->
+	<COMMAND name="system sysctl"
+		help="Set kernel parameter (live + persisten; arti tiap kunci: show system sysctl)">
+		<PARAM name="key"
+			help="MIB key, ex: net.ipv4.ip_forward (Linux) / net.inet.ip.forwarding (FreeBSD)"
+			ptype="STRING"/>
+		<PARAM name="value"
+			help="Value, ex: 1 (vektor berspasi pakai tanda kutip, ex: &quot;4096 87380 16777216&quot;)"
+			ptype="STRING"/>
+		<CONFIG pattern="system sysctl ${key}"/>
+		<ACTION>
+			${RT_SBIN}/titian-sysctl.sh set "${key}" "${value}"
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no system sysctl"
+		help="Hapus setelan sysctl Titian (cermin bersih; nilai live kembali ke nilai sebelum-set, atau bertahan sampai reboot bila nilai awal tak tercatat)">
+		<PARAM name="key"
+			help="MIB key yang dihapus"
+			ptype="STRING"/>
+		<CONFIG operation="unset" pattern="system sysctl ${key}"/>
+		<ACTION>
+			${RT_SBIN}/titian-sysctl.sh del "${key}"
+		</ACTION>
+	</COMMAND>
+
+
+</VIEW>
+
+</CLISH_MODULE>

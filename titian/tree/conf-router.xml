@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- router bird / router frr — BSDRP port (BARU).
+         Aturan keras (feature-list §2-§3, klish-bird2-bird3.md §2f):
+         BIRD dan FRR TIDAK BOLEH aktif bersamaan. `enable` di sini
+         hanya mencatat niat + menandai dirty; service baru naik saat
+         `commit` (titian-commit.sh), yang memeriksa ulang konflik di
+         sana. `enable` juga memeriksa konflik langsung saat dimasukkan
+         (peringatan + tolak bila lawan jalan).
+         `router bird threads` hanya bird3 — di bird2 ditolak backend
+         dengan pesan jelas (klish-bird2-bird3.md §2c).
+         JANGAN buat perintah `cli` di sini — itu milik FRR/vtysh. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="router"
+        help="Routing daemon configuration (bird / frr)"/>
+
+    <COMMAND name="no router"
+        help="Negate router configuration"/>
+    <COMMAND name="no router bird"
+        help="Negate BIRD router configuration"/>
+    <COMMAND name="no router frr"
+        help="Negate FRR router configuration"/>
+
+    <COMMAND name="router bird"
+        help="BIRD routing daemon (BGP/OSPF/static)"/>
+
+    <COMMAND name="router bird enable"
+        help="Enable BIRD (pending commit — service naik saat commit; diblokir bila FRR jalan)">
+        <CONFIG priority="0x1500" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh bird-enable
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router bird enable"
+        help="Disable BIRD (pending commit — service berhenti saat commit)">
+        <CONFIG operation="unset" pattern="^router bird enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh bird-disable
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="router bird threads"
+        help="BIRD 3 worker threads (hanya bird3; di bird2 ditolak)">
+        <PARAM name="count"
+            help="jumlah thread 1-32"
+            ptype="UINT"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh set-threads "${count}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="router frr enable"
+        help="Enable FRR (pending commit — service naik saat commit; diblokir bila BIRD jalan)">
+        <CONFIG priority="0x1510" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh frr-enable
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router frr enable"
+        help="Disable FRR (pending commit — service berhenti saat commit)">
+        <CONFIG operation="unset" pattern="^router frr enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh frr-disable
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

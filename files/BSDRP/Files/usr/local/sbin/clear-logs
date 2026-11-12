@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# clear-logs - Hapus log untuk membebaskan ruang disk (BSDRP_klish)
+#
+# Dipakai saat `config save` gagal karena disk penuh: log di /var/log
+# (RAM disk) adalah penyebab paling umum. Script ini HANYA menyentuh
+# /var/log: truncate log aktif, hapus log hasil rotasi (.gz/.bz2/.0).
+# TIDAK PERNAH menyentuh /etc, /cfg, atau arsip `config save`.
+#
+# Dipanggil dari klish:  system logs clear
+# Dipanggil dari shell:  clear-logs
+#
+set -u
+
+LOGDIR="/var/log"
+
+echo "Ruang sebelum:"
+df -h "${LOGDIR}" | tail -1
+
+# Truncate log aktif (file tetap ada, isi jadi 0 — daemon tetap bisa tulis)
+for f in "${LOGDIR}"/*.log "${LOGDIR}"/*.txt; do
+	[ -f "$f" ] || continue
+	: > "$f" 2>/dev/null && echo "  truncate: $f"
+done
+
+# Hapus log hasil rotasi (newsyslog: .0, .gz, .bz2, .tgz)
+find "${LOGDIR}" -maxdepth 1 -type f \( -name '*.log.*' -o -name '*.gz' -o -name '*.bz2' -o -name '*.tgz' \) -delete -print 2>/dev/null | sed 's/^/  hapus: /'
+
+echo "Ruang sesudah:"
+df -h "${LOGDIR}" | tail -1
+echo "Selesai. Coba lagi: config save"

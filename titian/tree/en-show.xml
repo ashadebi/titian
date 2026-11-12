@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+
+<VIEW name="enable-view">
+<!-- Show commands -->
+    <COMMAND name="show"
+        help="Show running system information"/>
+
+    <COMMAND name="show ipv6"
+        help="IPv6 information"/>
+
+    <COMMAND name="show running-config"
+        help="Current operating configuration">
+        <CONFIG operation="dump"/>
+        <ACTION>
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show startup-config"
+        help="Contents of startup configuration">
+        <ACTION>cat ${RT_ROOT}/etc/startup-config</ACTION>
+    </COMMAND>
+
+    <COMMAND name="show history"
+        help="Commands history">
+        <ACTION>cat ${HOME}/.clish_history 2>/dev/null || echo "no history"</ACTION>
+    </COMMAND>
+
+    <COMMAND name="show ip"
+        help="IP information"/>
+
+<!-- Show routing (per OS lewat helper) -->
+    <COMMAND name="show ip route"
+        help="IP routing table"
+        lock="false"
+        interrupt="true">
+        <PARAM name="ip"
+                help="ip address or mask"
+                optional="true"
+                ptype="IP_ADDR_ANY"/>
+        <ACTION>
+            ${RT_SBIN}/titian-show.sh route "${ip}"
+            </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show ipv6 route"
+        help="IPv6 routing table"
+        lock="false"
+        interrupt="true">
+        <PARAM name="ip"
+                help="ipv6 address or prefix"
+                optional="true"
+                ptype="IP6_ADDR_ANY"/>
+        <ACTION>
+            ${RT_SBIN}/titian-show.sh route6 "${ip}"
+            </ACTION>
+    </COMMAND>
+
+<!-- Show short if summary + ip (helper: tampilkan inet DAN inet6) -->
+    <COMMAND name="show interfaces"
+            help="Interfaces and Ip information"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-show.sh interfaces
+        </ACTION>
+    </COMMAND>
+
+<!-- Show semua interface sistem: terse = satu baris per interface
+     (admin up/disabled, link up/down); all = blok detail per interface.
+     CATATAN: bentuk singular "show interface ..." SENGAJA tidak dibuat —
+     klish gagal membedakan token "interface" dari "interfaces" (tabrakan
+     prefix) sehingga bentuk singular ditolak "Illegal command line",
+     sementara bentuk plural jalan. Pakai bentuk plural. -->
+    <COMMAND name="show interfaces terse"
+            help="All interfaces, one line each (admin/link status)"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-show.sh terse
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show interfaces all"
+            help="All interfaces, full detail"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-show.sh all
+        </ACTION>
+    </COMMAND>
+
+<!-- Tuning per interface: nilai live (mtu/qlen/speed/offload/coalesce)
+     + satu baris arti tiap nilai. Bentuk singular "show interface"
+     sengaja tidak dibuat (tabrakan prefix dengan "interfaces",
+     lihat catatan di atas). -->
+    <COMMAND name="show interfaces tuning"
+            help="Interface tuning values + meaning (mtu/qlen/speed/offload/coalesce)"
+            lock="false"
+            interrupt="true">
+        <PARAM name="iface"
+                help="Interface"
+                completion="${Get_if_all}"
+                ptype="IFACE_SYS"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh show "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show interfaces ethernet"
+            help="Interface status and configuration" 
+            lock="false"
+            interrupt="true">
+        <PARAM name="iface"
+                help="Interface physical"
+                completion="${Get_if_eth}"
+                ptype="IFACE_SYS"/>
+        <PARAM name="detail"
+                help="Detail hardware information"
+                ptype="SUBCOMMAND"
+                mode="subcommand"
+                optional="true"
+                order="true"/>
+        <ACTION>
+            if test ! -z "${detail}"; then
+                ${RT_SBIN}/titian-show.sh if-detail "${iface}" detail
+            else
+                ${RT_SBIN}/titian-show.sh if-detail "${iface}"
+            fi
+        </ACTION>
+     </COMMAND>
+
+    
+
+    
+
+<!-- Show neighbor/ARP -->
+    <COMMAND name="show ip neighbor"
+        help="IP neighbor/ARP table"
+        lock="false"
+        interrupt="true">
+            <PARAM name="iface"
+                  help="Interface"
+                  completion="${Get_if_all}"
+                  optional="true"
+                  ptype="IFACE_SYS"/>
+        <ACTION>
+            ${RT_SBIN}/titian-show.sh neighbor "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!--services configuration -->
+    <COMMAND name="show service"
+        help="IP information"/>
+
+    <COMMAND name="show service summary"
+            help="services summary"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh services
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show service status"
+            help="service init commands"
+            lock="false"
+            interrupt="true">
+        <PARAM name="service"
+            help="services any"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh service-status "${service}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show pwd"
+            help="Current dir"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            pwd
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

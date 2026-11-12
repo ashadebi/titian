@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- FRR (net/frr10) — BSDRP port (BARU).
+         - Enable/disable di conf-router.xml (`router frr enable`,
+           mutual exclusion vs BIRD di sana + di commit).
+         - File ini: subview `router frr` untuk config dasar via
+           vtysh (router-id, log syslog, write-memory) + show status.
+         - CLI FRR sendiri tetap `vtysh` via perintah `cli` — file
+           ini TIDAK menyentuh/mendefinisikan `cli` (feature-list §3).
+         - Config via vtysh berlaku langsung (running) + `write
+           memory` agar persisten; hanya enable/disable yang menunggu
+           commit. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="router frr"
+            help="FRR routing suite — config dasar via vtysh"
+            view="configure-frr-view"
+            viewid="sysview=frr"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <CONFIG priority="0x1520" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh check
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-frr-view"
+    prompt="${SYSTEM_NAME}(config-frr)# "
+    depth="1">
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Kembali ke configure-view"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Kembali ke enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="log"
+        help="Logging FRR"/>
+
+    <COMMAND name="no log"
+        help="Negate logging configuration"/>
+
+    <COMMAND name="router-id"
+        help="Router ID FRR (dipakai OSPF/BGP)">
+        <PARAM name="id"
+            help="alamat IPv4 router-id"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh set-router-id "${id}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router-id"
+        help="Hapus router-id FRR">
+        <CONFIG operation="unset" pattern="^router-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh del-router-id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="log syslog"
+        help="Log FRR ke syslog">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh set-log syslog
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no log syslog"
+        help="Matikan log FRR ke syslog">
+        <CONFIG operation="unset" pattern="^log syslog"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh set-log none
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="write-memory"
+        help="Tulis running-config FRR ke frr.conf (persisten)">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh write-memory
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show frr"
+        help="Status + versi FRR (enable intent, service, zebra pid)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show frr version"
+        help="Versi FRR + daemon yang jalan"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show-version
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

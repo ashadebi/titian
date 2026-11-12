@@ -1,0 +1,4 @@
+# Placeholder: direktori /usr/local/share/info harus ada SEBELUM pkg install.
+# Post-install script 12 paket memanggil indexinfo dan gagal bila dir ini tidak ada
+# (build ke-5 gagal tahap 4 image-bird2, 11 Nov 2026). Files/ dicopy ke image root
+# oleh poudriere image.sh:532 sebelum pkg install (baris 565).

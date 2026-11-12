@@ -1,0 +1,29 @@
+#!/bin/sh
+#
+# PROVIDE: nfacctd
+# REQUIRE: NETWORKING
+# KEYWORD: nojail
+#
+# Add the following lines to /etc/rc.conf to enable nfacctd:
+#
+# nfacctd_enable (bool):	Set to NO by default.
+#				Set it to YES to enable the NetFlow collector.
+# nfacctd_config (str):	Config file.
+#				Default: /usr/local/etc/nfacctd.conf
+#
+. /etc/rc.subr
+
+name="nfacctd"
+rcvar="${name}_enable"
+
+command="/usr/local/sbin/nfacctd"
+pidfile="/var/run/nfacctd.pid"
+
+load_rc_config ${name}
+
+: ${nfacctd_enable:="NO"}
+: ${nfacctd_config:="/usr/local/etc/nfacctd.conf"}
+
+command_args="-f ${nfacctd_config}"
+
+run_rc_command "$1"

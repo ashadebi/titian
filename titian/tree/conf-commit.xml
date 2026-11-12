@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- commit — BSDRP port (BARU).
+         Semantik (feature-list §1): commit = tulis file + service
+         langsung naik. `save` = `config save` (persist ke partisi
+         cfg); commit tanpa save = jalan sekarang, hilang setelah
+         reboot karena rc.conf ada di RAM disk.
+         Yang dilakukan commit (titian-commit.sh):
+           1. mutual-exclusion bird vs FRR (blokir + pesan jelas
+              bila konflik — dua arah);
+           2. validasi varian bird3 atas bird.conf (braces `case`,
+              atribut `scope`);
+           3. terapkan semua niat yang ditandai dirty: bird/frr
+              (sysrc + service), firewall, traffic-shape, pppoe,
+              wireguard, monitoring.
+         Bila ada langkah yang gagal, commit BERHENTI dan melaporkannya;
+         tidak ada terap paksa. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="commit"
+        help="Terapkan perubahan pending: cek bird-vs-FRR, validasi bird.conf, naikkan service (firewall/traffic-shape/pppoe/wireguard/monitoring/bird/frr)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-commit.sh commit
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="commit check"
+        help="Cek saja (mutual exclusion + validasi bird.conf) tanpa menerapkan apa pun"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-commit.sh check
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

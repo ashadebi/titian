@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+<!--=======================================================
+TITIAN — checkpoint + rollback (view exec, bukan configure view,
+karena ini operasi, bukan konfigurasi — mengikuti pola save).
+
+Checkpoint = TITIK SIMPAN BERNAMA dari konfigurasi. User membuat
+beberapa titik, melihat daftarnya, lalu memilih mau balik ke titik
+yang mana. Bukan "undo satu langkah".
+
+SEMANTIK ROLLBACK (baca sebelum pakai):
+  rollback MENGEMBALIKAN running-config + bird.conf + bird.d +
+  netstate + sysctl ke isi titik, MENULIS JUGA startup-config
+  (jadi rollback BERSIFAT PERSISTEN, bertahan melewati reboot —
+  bukan sekadar live), lalu restart service titian (konfd baru +
+  replay + apply-all tuning + apply-bond + apply-vxlan) + birdc
+  configure untuk bird.conf.
+  Sebelum restart, rollback membersihkan (prune) objek live yang
+  tidak ada di titik (interface buatan yang mengendap, alamat
+  ekstra, kunci tuning ekstra, sysctl ekstra, route statik ekstra).
+  Titik BEKU: `save` biasa tidak mengubah titik yang sudah dibuat.
+  Nama titik: [A-Za-z0-9][A-Za-z0-9_-]* (mengikuti pola nama
+  community list). Nama sudah ada = DITOLAK lantang, tidak ditimpa
+  diam-diam. Nama tidak ada saat rollback/delete = GAGAL lantang
+  TANPA mengubah apa pun.
+=======================================================-->
+
+<VIEW name="enable-view">
+
+    <!-- Induk telanjang (wajib klish: keluarga perintah multi-kata
+         butuh prefix ini agar checkpoint save/list/delete ter-resolve,
+         mengikuti pola community/show/generate di tree lain) -->
+    <COMMAND name="checkpoint"
+             help="Checkpoint management (titik simpan bernama)"/>
+
+    <COMMAND name="checkpoint save"
+             help="Simpan running-config saat ini sebagai titik bernama (beku; save biasa tidak mengubahnya)">
+        <PARAM name="name"
+               help="Nama titik [A-Za-z0-9_-]+"
+               ptype="CHECKPOINT_NAME"/>
+        <ACTION>${RT_SBIN}/titian-checkpoint.sh save "${name}"</ACTION>
+    </COMMAND>
+
+    <COMMAND name="checkpoint list"
+             help="Daftar titik checkpoint (nama + waktu dibuat WIB; * = sama dengan running-config saat ini)">
+        <ACTION>${RT_SBIN}/titian-checkpoint.sh list</ACTION>
+    </COMMAND>
+
+    <COMMAND name="checkpoint delete"
+             help="Hapus satu titik checkpoint">
+        <PARAM name="name"
+               help="Nama titik [A-Za-z0-9_-]+"
+               ptype="CHECKPOINT_NAME"/>
+        <ACTION>${RT_SBIN}/titian-checkpoint.sh delete "${name}"</ACTION>
+    </COMMAND>
+
+    <COMMAND name="show checkpoints"
+             help="Daftar titik checkpoint (sama dengan checkpoint list)">
+        <ACTION>${RT_SBIN}/titian-checkpoint.sh list</ACTION>
+    </COMMAND>
+
+    <COMMAND name="rollback"
+             help="Kembali ke titik checkpoint bernama; tanpa nama = kembali ke startup-config (buang perubahan running yang belum di-save). PERSISTEN: running-config + bird.conf + bird.d + netstate + sysctl dikembalikan ke isi titik, startup-config ditulis dari titik + restart service + birdc configure, bertahan melewati reboot">
+        <PARAM name="name"
+               help="Nama titik [A-Za-z0-9_-]+ (kosong = startup-config)"
+               ptype="CHECKPOINT_NAME"
+               optional="true"/>
+        <ACTION>${RT_SBIN}/titian-checkpoint.sh rollback "${name}"</ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

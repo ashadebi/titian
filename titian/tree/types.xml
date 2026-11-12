@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="/opt/titian/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="/opt/titian/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <PTYPE name="UINT"
+        pattern="[0-9]+"
+        help="Unsigned integer"/>
+    <!--=======================================================-->
+    <PTYPE name="STRING"
+        pattern=".+"
+        help="String"/>
+    <!--=======================================================-->
+    <PTYPE name="SUBCOMMAND"
+        pattern="[^\]+"
+        help="String"/>
+    <!--=======================================================-->
+    <PTYPE name="BOOL"
+        method="select"
+        pattern="true(1) false(0)"
+        help="Boolean choice"/>
+    <!--=======================================================-->
+    <PTYPE name="PROTO"
+        method="select"
+        pattern="ip(ip) ipencap(ipencap) icmp(icmp) igmp(igmp) tcp(tcp) udp(udp)"
+        help="Protocol choice"/>
+    <!--=======================================================-->
+    <PTYPE name="SERVICE"
+        pattern="((ftp)|(telnet)|(sntp)|(smtp)|(http)|([0-9]+))"
+        help="Port"/>
+    <!--=======================================================-->
+    <PTYPE name="PORT_MASK_ANY"
+        pattern="^(([0-9]+(/0x[0-9a-f]+)?)|(any))$"
+        help="Port[/mask]" />
+    <!--=======================================================-->
+    <PTYPE name="SEQ"
+        pattern="^[0-9]*[1-9][0-9]*"
+        help="Entry number"/>
+    <!--=======================================================-->
+    <PTYPE name="CPU_CORE"
+        pattern="(1[0-9]|[0-9]|[0-9]-([0-9]|1[0-9]))" 
+        help="core"/>
+        <!-- 19 core limits -->
+    <!--=======================================================-->
+
+</CLISH_MODULE>

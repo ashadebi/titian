@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- TITIAN: PTYPE IPv6 (baru di Fase 1; PTYPE IPv4 lama di
+         types-dev.xml dipertahankan apa adanya).
+         Pola di sini adalah filter lapis pertama: wajib mengandung
+         ':' dan hanya karakter heksadesimal/titik-dua. Validasi ketat
+         (bentuk terkompresi, jumlah grup, prefix) dilakukan helper
+         titian-if.sh/titian-route.sh lewat `ip -6` (Linux) atau
+         `ifconfig inet6`/`route -6` (FreeBSD) yang menolak input
+         tidak valid — perintah gagal bersih, bukan tersimpan. -->
+    <PTYPE name="IP6_ADDR"
+        pattern="^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$"
+        help="IPv6 address (ex: 2001:db8::1)"/>
+    <!--=======================================================-->
+    <PTYPE name="IP6_ADDR_MASK"
+        pattern="^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}/(12[0-8]|1[0-1][0-9]|[1-9][0-9]|[0-9])$"
+        help="IPv6 address/prefix (ex: 2001:db8::1/64)"/>
+    <PTYPE name="IP6_ADDR_MASK_OPT"
+        pattern="^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(/(12[0-8]|1[0-1][0-9]|[1-9][0-9]|[0-9]))?$"
+        help="IPv6 address or address/prefix (bare = /128; PtP form)"/>
+    <!--=======================================================-->
+    <PTYPE name="IP6_ADDR_ANY"
+        pattern="^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(/(12[0-8]|1[0-1][0-9]|[1-9][0-9]|[0-9]))?$"
+        help="IPv6 address or address/prefix"/>
+    <!-- IFACE_DEV_FBSD dihapus 2 Nov 2026: digantikan IFACE_SYS
+         (types-dev.xml, COMMON) — satu PTYPE interface sistem kedua OS. -->
+    <!--=======================================================-->
+    <PTYPE name="IFACE_VLAN_FBSD"
+        pattern="vlan[0-9]+$"
+        help="vlan[N] (FreeBSD)"/>
+    <!--=======================================================-->
+    <PTYPE name="IFACE_LAGG"
+        pattern="lagg[0-9]+$"
+        help="lagg[N] (FreeBSD)"/>
+    <!--=======================================================-->
+</CLISH_MODULE>

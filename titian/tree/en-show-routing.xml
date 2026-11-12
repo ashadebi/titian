@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- show routing / show version — BSDRP port (BARU).
+         Format mengikuti klish-bird2-bird3.md §2e: selalu sebut
+         nama daemon aktif + versi + varian (bird2/bird3) + status
+         enable + status jalan + pid. Bila bird tidak jalan, barisnya
+         tetap menyebut varian yang terpasang (dari deteksi §1). -->
+
+<VIEW name="enable-view">
+    <COMMAND name="show routing"
+        help="Routing daemon aktif: BIRD (varian+versi+status+pid) dan FRR"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh show-routing
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show version"
+        help="Versi BSDRP + bird_version + versi FRR"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh show-version
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

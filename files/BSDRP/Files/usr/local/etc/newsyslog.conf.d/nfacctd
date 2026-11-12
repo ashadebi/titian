@@ -1,0 +1,1 @@
+/var/log/nfacctd.log 600 7 100 * JB /var/run/nfacctd.pid

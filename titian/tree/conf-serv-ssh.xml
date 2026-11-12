@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="service"
+        help="Service parameters"/>
+
+    <COMMAND name="service ssh"
+            help="Secure SHell (SSH) protocol"
+            view="configure-ssh-view"
+            viewid="sysview=ssh"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <CONFIG priority="0x1200" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh ssh-check
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+<VIEW name="configure-ssh-view"
+    prompt="${SYSTEM_NAME}(config-system-${sysview})# "
+    depth="1">
+
+<!-- Inheritance -->
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Exit configuration mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="port"
+            help="Port for SSH service">
+            <PARAM name="Port"
+                help="[0-9]+"
+                ptype="SERVICE"/>
+        <CONFIG/>
+        <ACTION>
+            Cur_set=$(egrep -v "^#" /etc/ssh/sshd_config |grep ^Port |awk '{print $2}')
+            if [ "$Cur_set" = "${Port}" ]; then
+                exit 0
+            fi
+            ${RT_SBIN}/titian-sys.sh port-in-use "${Port}"
+            if grep -q '^Port' /etc/ssh/sshd_config; then
+                ${RT_SBIN}/titian-sys.sh sed-replace /etc/ssh/sshd_config "s|^Port.*|Port ${Port}|"
+            else
+                echo "Port ${Port}" >> /etc/ssh/sshd_config
+            fi
+            ${RT_SBIN}/titian-sys.sh ssh-restart
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="allow-root"
+          help="Enable root login over ssh">
+        <CONFIG/>
+        <ACTION>
+            Cur_set=$(egrep -v "^#" /etc/ssh/sshd_config |grep PermitRootLogin |awk '{print $2}')
+            if [ "$Cur_set" = "yes" ]; then
+                exit 0
+            fi
+            if grep -q '^PermitRootLogin' /etc/ssh/sshd_config; then
+                ${RT_SBIN}/titian-sys.sh sed-replace /etc/ssh/sshd_config "s|^PermitRootLogin.*|PermitRootLogin yes|"
+            else
+                echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+            fi
+            ${RT_SBIN}/titian-sys.sh ssh-restart
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no allow-root"
+          help="Disable root login over ssh">
+        <CONFIG operation="unset" pattern="^allow-root"/>
+            <ACTION>
+            Cur_set=$(egrep -v "^#" /etc/ssh/sshd_config |grep PermitRootLogin |awk '{print $2}')
+            if [ "$Cur_set" = "no" ]; then
+                exit 0
+            fi
+            if grep -q '^PermitRootLogin' /etc/ssh/sshd_config; then
+                ${RT_SBIN}/titian-sys.sh sed-replace /etc/ssh/sshd_config "s|^PermitRootLogin.*|PermitRootLogin no|"
+            else
+                echo "PermitRootLogin no" >> /etc/ssh/sshd_config
+            fi
+            ${RT_SBIN}/titian-sys.sh ssh-restart
+            </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disable-host-validation"
+          help="Don't validate the remote host name with DNS">
+        <CONFIG/>
+        <ACTION>
+            Cur_stat=$(egrep -v "^#" /etc/ssh/sshd_config |egrep "^UseDNS" |awk '{print $2}')
+            if [ -z "$Cur_stat" ]; then
+                echo "UseDNS no" >> /etc/ssh/sshd_config
+                ${RT_SBIN}/titian-sys.sh ssh-restart
+            elif [ "$Cur_stat" = "no" ]; then
+                exit 0
+            else 
+                ${RT_SBIN}/titian-sys.sh sed-replace /etc/ssh/sshd_config "s|^UseDNS.*|UseDNS no|"
+                ${RT_SBIN}/titian-sys.sh ssh-restart
+            fi
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disable-host-validation"
+          help="Validate the remote host name with DNS">
+        <CONFIG operation="unset" pattern="^disable-host-validation"/>
+            <ACTION>
+            Cur_stat=$(egrep -v "^#" /etc/ssh/sshd_config |egrep "^UseDNS" |awk '{print $2}')
+            if [ -z "$Cur_stat" ]; then
+                echo "UseDNS yes" >> /etc/ssh/sshd_config
+                ${RT_SBIN}/titian-sys.sh ssh-restart
+            elif [ "$Cur_stat" = "yes" ]; then
+                exit 0
+            else
+                ${RT_SBIN}/titian-sys.sh sed-replace /etc/ssh/sshd_config "s|^UseDNS.*|UseDNS yes|"
+                ${RT_SBIN}/titian-sys.sh ssh-restart
+            fi
+            </ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+	<!-- TITIAN Fase 1: keluarga perintah IPv6 (baru; padanan v4
+	     tetap di conf-route.xml Linux / conf-route-fbsd.xml).
+	     Aksi lewat titian-route.sh (cabang Linux ip -6 /
+	     FreeBSD route -6). -->
+
+<VIEW name="configure-view">
+
+    <COMMAND name="ipv6"
+        help="IPv6 configuration"/>
+
+    <COMMAND name="no ipv6"
+        help="Negate IPv6 commands"/>
+
+<!-- Default gateway IPv6 -->
+	<COMMAND name="ipv6 default-gateway"
+		help="Specify IPv6 default gateway">
+		<PARAM name="ip"
+			help="IPv6 address of default gateway"
+			ptype="IP6_ADDR"/>
+		<CONFIG priority="0x9000" splitter="false"/>
+		<ACTION>
+			${RT_SBIN}/titian-route.sh gw6 "${ip}"
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no ipv6 default-gateway"
+		help="Remove IPv6 default gateway">
+		<CONFIG operation="unset" pattern="^ipv6 default-gateway"/>
+		<ACTION>
+			${RT_SBIN}/titian-route.sh gw6-del
+		</ACTION>
+	</COMMAND>
+
+<!-- Static route IPv6 -->
+	<COMMAND name="ipv6 route"
+		help="Establish IPv6 static routes">
+		<PARAM name="ip"
+			help="Destination prefix"
+			ptype="IP6_ADDR_MASK"/>
+		<PARAM name="route_target"
+			help="Route target"
+			ptype="STRING"
+			mode="switch">
+			<PARAM name="dev"
+				help="to interfaces"
+				ptype="SUBCOMMAND"
+				mode="subcommand">
+					<PARAM name="iface_any"
+						help="Target interface"
+						completion="${Get_if_all}"
+						ptype="IFACE_SYS"/>
+			</PARAM>
+			<PARAM name="forward"
+				help="Forwarding router's address"
+				ptype="IP6_ADDR"/>
+		</PARAM>
+		<CONFIG priority="0x9002" pattern="^ipv6 route ${ip} " splitter="false"/>
+		<ACTION>
+		if test "${route_target}" = "dev"; then
+			${RT_SBIN}/titian-route.sh route6-dev "${ip}" "${iface_any}"
+			exit $?
+		elif test "${route_target}" = "forward"; then
+			${RT_SBIN}/titian-route.sh route6-via "${ip}" "${forward}"
+			exit $?
+		fi
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no ipv6 route"
+		help="Remove IPv6 static routes">
+		<PARAM name="ip"
+			help="Destination prefix"
+			ptype="IP6_ADDR_MASK"/>
+		<CONFIG operation="unset" pattern="^ipv6 route ${ip} "/>
+		<ACTION>
+			${RT_SBIN}/titian-route.sh route6-del "${ip}"
+		</ACTION>
+	</COMMAND>
+
+<!-- blackhole IPv6 -->
+	<COMMAND name="ipv6 route blackhole"
+			help="Blackhole IPv6 routes">
+		<PARAM name="ip"
+			help="IPv6 address to blackhole"
+			ptype="IP6_ADDR_ANY"/>
+		<CONFIG priority="0x9003" pattern="ipv6 route blackhole ${ip}" splitter="false"/>
+		<ACTION>
+			${RT_SBIN}/titian-route.sh route6-blackhole "${ip}"
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no ipv6 route blackhole"
+			help="Remove blackhole IPv6 routes">
+		<PARAM name="ip"
+			help="IPv6 address to blackhole"
+			ptype="IP6_ADDR_ANY"/>
+		<CONFIG operation="unset" pattern="ipv6 route blackhole ${ip}"/>
+		<ACTION>
+			${RT_SBIN}/titian-route.sh route6-blackhole-del "${ip}"
+		</ACTION>
+	</COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

@@ -1,0 +1,674 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- traffic-shape (dummynet limiter) — BSDRP_klish.
+         Prepared 2026-11-08, completed 2026-11-08 ~18:00 WIB.
+         MERGED into the BSDRP tree (~/workspace/titian-bsdRP-xml/tree/).
+         Style follows titian-cli/tree (conf-serv-ssh.xml,
+         en-show-hw.xml, types-dev.xml).
+         PTYPEs TS_* are defined here; IFACE_SYS / FW_PROTO /
+         FW_CIDR_OR_ANY / DSTPORT come from the main tree
+         (types-dev.xml).
+         Backend: ${RT_SBIN}/titian-traffic-shape.sh (edit config),
+         /usr/local/sbin/traffic-shape-apply (apply at commit/boot),
+         /usr/local/etc/rc.d/traffic-shape (rc script).
+         Parameter syntax verified against FreeBSD 16 ipfw.8 +
+         sbin/ipfw/dummynet.c (mask specifiers, sched types,
+         AQM forms). Needs a clish syntax check against klish
+         0.2.0 at port time, plus a live test on a guest. -->
+    <!--=======================================================-->
+    <PTYPE name="TS_NAME"
+        pattern="^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
+        help="nama pipe/queue/sched/rule [A-Za-z0-9_-]+ (maks 32)"/>
+    <PTYPE name="TS_RATE"
+        pattern="^[0-9]+(Kbit/s|Mbit/s|Gbit/s|bit/s)$"
+        help="bandwidth, mis. 10Mbit/s, 512Kbit/s, 1Gbit/s"/>
+    <PTYPE name="TS_UINT"
+        pattern="^[0-9]+$"
+        help="bilangan bulat >= 0"/>
+    <PTYPE name="TS_FLOAT"
+        pattern="^(0(\.[0-9]*)?|1(\.0*)?)$"
+        help="angka 0..1 (mis. 0.002)"/>
+    <PTYPE name="TS_PLR"
+        pattern="^(0(\.[0-9]*)?|1(\.0*)?)$"
+        help="packet loss rate 0..1 (mis. 0.01)"/>
+    <PTYPE name="TS_MASK"
+        pattern="^(dst-ip|src-ip|dst-ip6|src-ip6|dst-port|src-port|proto|flow-id|all)$"
+        help="dst-ip | src-ip | dst-ip6 | src-ip6 | dst-port | src-port | proto | flow-id | all"/>
+    <PTYPE name="TS_MASKVAL"
+        pattern="^(/([0-9]|[1-9][0-9]|1[0-2][0-9])|0x[0-9a-fA-F]+|[0-9]+)$"
+        help="nilai mask: /N bit (mis. /32) atau angka 0x... (default = full mask)"/>
+    <PTYPE name="TS_DIR"
+        pattern="^(in|out)$"
+        help="in | out"/>
+    <PTYPE name="TS_SCHEDTYPE"
+        pattern="^(fifo|wf2q\+|rr|qfq|fq_codel|fq_pie)$"
+        help="fifo | wf2q+ | rr | qfq | fq_codel | fq_pie"/>
+
+    <!--==================== configure-view ====================-->
+    <VIEW name="configure-view">
+        <COMMAND name="traffic-shape"
+                help="Traffic shaping (dummynet limiter)"
+                view="configure-ts-view"
+                viewid="sysview=traffic-shape"
+                ptype="SUBCOMMAND"
+                mode="subcommand">
+            <CONFIG priority="0x1300" pattern="^${__line}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh check
+            </ACTION>
+        </COMMAND>
+    </VIEW>
+
+    <!--================= configure-ts-view =================-->
+    <VIEW name="configure-ts-view"
+        prompt="${SYSTEM_NAME}(config-traffic-shape)# "
+        depth="1">
+
+        <NAMESPACE ref="configure-view"
+            help="false"
+            completion="true"/>
+
+        <COMMAND name="exit"
+            help="Exit traffic-shape mode"
+            lock="false">
+            <ACTION builtin="clish_nested_up"/>
+        </COMMAND>
+        <HOTKEY key="^Z" cmd="exit"/>
+
+        <COMMAND name="no"
+            help="Negate a command or set its defaults"/>
+
+        <COMMAND name="enable"
+              help="Enable traffic shaping">
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-enable yes
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no enable"
+              help="Disable traffic shaping">
+            <CONFIG operation="unset" pattern="^enable"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-enable no
+            </ACTION>
+        </COMMAND>
+
+        <COMMAND name="pipe"
+                help="Configure a dummynet pipe (bandwidth cap)"
+                view="configure-ts-pipe-view"
+                viewid="ts_pipe=${Name}"
+                ptype="SUBCOMMAND"
+                mode="subcommand">
+            <PARAM name="Name"
+                help="nama pipe"
+                ptype="TS_NAME"/>
+            <CONFIG priority="0x1310" pattern="^pipe ${Name}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh check-pipe "${Name}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no pipe"
+                help="Delete a dummynet pipe">
+            <PARAM name="Name"
+                help="nama pipe"
+                ptype="TS_NAME"/>
+            <CONFIG operation="unset" pattern="^pipe ${Name}"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh del-pipe "${Name}"
+            </ACTION>
+        </COMMAND>
+
+        <COMMAND name="sched"
+                help="Configure a dummynet scheduler (algorithm)"
+                view="configure-ts-sched-view"
+                viewid="ts_sched=${Name}"
+                ptype="SUBCOMMAND"
+                mode="subcommand">
+            <PARAM name="Name"
+                help="nama scheduler"
+                ptype="TS_NAME"/>
+            <CONFIG priority="0x1315" pattern="^sched ${Name}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh check-sched "${Name}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no sched"
+                help="Delete a dummynet scheduler">
+            <PARAM name="Name"
+                help="nama scheduler"
+                ptype="TS_NAME"/>
+            <CONFIG operation="unset" pattern="^sched ${Name}"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh del-sched "${Name}"
+            </ACTION>
+        </COMMAND>
+
+        <COMMAND name="queue"
+                help="Configure a dummynet queue (per-flow split of a pipe/sched)"
+                view="configure-ts-queue-view"
+                viewid="ts_queue=${Name}"
+                ptype="SUBCOMMAND"
+                mode="subcommand">
+            <PARAM name="Name"
+                help="nama queue"
+                ptype="TS_NAME"/>
+            <CONFIG priority="0x1320" pattern="^queue ${Name}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh check-queue "${Name}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no queue"
+                help="Delete a dummynet queue">
+            <PARAM name="Name"
+                help="nama queue"
+                ptype="TS_NAME"/>
+            <CONFIG operation="unset" pattern="^queue ${Name}"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh del-queue "${Name}"
+            </ACTION>
+        </COMMAND>
+
+        <COMMAND name="rule"
+                help="Divert traffic into a pipe/queue (pf dnpipe)"
+                view="configure-ts-rule-view"
+                viewid="ts_rule=${Name}"
+                ptype="SUBCOMMAND"
+                mode="subcommand">
+            <PARAM name="Name"
+                help="nama rule"
+                ptype="TS_NAME"/>
+            <CONFIG priority="0x1330" pattern="^rule ${Name}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh check-rule "${Name}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no rule"
+                help="Delete a divert rule">
+            <PARAM name="Name"
+                help="nama rule"
+                ptype="TS_NAME"/>
+            <CONFIG operation="unset" pattern="^rule ${Name}"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh del-rule "${Name}"
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+    <!--============== configure-ts-pipe-view ==============-->
+    <VIEW name="configure-ts-pipe-view"
+        prompt="${SYSTEM_NAME}(config-ts-pipe-${ts_pipe})# "
+        depth="2">
+
+        <NAMESPACE ref="configure-ts-view"
+            help="false"
+            completion="true"/>
+
+        <COMMAND name="exit"
+            help="Exit pipe mode"
+            lock="false">
+            <ACTION builtin="clish_nested_up"/>
+        </COMMAND>
+        <HOTKEY key="^Z" cmd="exit"/>
+
+        <COMMAND name="bandwidth"
+                help="Bandwidth cap for this pipe">
+            <PARAM name="Rate"
+                help="mis. 10Mbit/s"
+                ptype="TS_RATE"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" bw "${Rate}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="queue"
+                help="Queue slots for this pipe">
+            <PARAM name="Slots"
+                help="jumlah slot antrean"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" queue "${Slots}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="delay"
+                help="Emulated delay in milliseconds">
+            <PARAM name="Ms"
+                help="delay ms"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" delay "${Ms}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="plr"
+                help="Packet loss rate 0..1">
+            <PARAM name="Rate"
+                help="mis. 0.01"
+                ptype="TS_PLR"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" plr "${Rate}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="burst"
+                help="Burst bytes allowed after idle (0 = none)">
+            <PARAM name="Bytes"
+                help="ukuran burst dalam byte"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" burst "${Bytes}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm"
+                help="AQM queue management (droptail/red/gred/codel/pie)"/>
+
+        <COMMAND name="aqm droptail"
+                help="No AQM (plain tail drop, default)">
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" aqm-clause "aqm droptail"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm red"
+                help="RED queue management">
+            <PARAM name="Wq" help="weight 0..1" ptype="TS_FLOAT"/>
+            <PARAM name="MinTh" help="min threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxTh" help="max threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxP" help="max drop prob 0..1" ptype="TS_FLOAT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" aqm-clause "aqm red ${Wq} ${MinTh} ${MaxTh} ${MaxP}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm gred"
+                help="Gentle RED queue management">
+            <PARAM name="Wq" help="weight 0..1" ptype="TS_FLOAT"/>
+            <PARAM name="MinTh" help="min threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxTh" help="max threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxP" help="max drop prob 0..1" ptype="TS_FLOAT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" aqm-clause "aqm gred ${Wq} ${MinTh} ${MaxTh} ${MaxP}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm codel"
+                help="CoDel queue management (defaults: target 5ms, interval 100ms)">
+            <PARAM name="Target" help="target ms" ptype="TS_UINT" optional="true"/>
+            <PARAM name="Interval" help="interval ms" ptype="TS_UINT" optional="true"/>
+            <CONFIG/>
+            <ACTION>
+                _c="aqm codel"
+                [ -n "${Target}" ] &amp;&amp; _c="$_c target ${Target}"
+                [ -n "${Interval}" ] &amp;&amp; _c="$_c interval ${Interval}"
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" aqm-clause "$_c"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm pie"
+                help="PIE queue management (defaults: target 15ms, tupdate 15ms)">
+            <PARAM name="Target" help="target ms" ptype="TS_UINT" optional="true"/>
+            <PARAM name="Tupdate" help="tupdate ms" ptype="TS_UINT" optional="true"/>
+            <CONFIG/>
+            <ACTION>
+                _c="aqm pie"
+                [ -n "${Target}" ] &amp;&amp; _c="$_c target ${Target}"
+                [ -n "${Tupdate}" ] &amp;&amp; _c="$_c tupdate ${Tupdate}"
+                ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" aqm-clause "$_c"
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+    <!--============= configure-ts-sched-view =============-->
+    <VIEW name="configure-ts-sched-view"
+        prompt="${SYSTEM_NAME}(config-ts-sched-${ts_sched})# "
+        depth="2">
+
+        <NAMESPACE ref="configure-ts-view"
+            help="false"
+            completion="true"/>
+
+        <COMMAND name="exit"
+            help="Exit scheduler mode"
+            lock="false">
+            <ACTION builtin="clish_nested_up"/>
+        </COMMAND>
+        <HOTKEY key="^Z" cmd="exit"/>
+
+        <COMMAND name="type"
+                help="Scheduling algorithm">
+            <PARAM name="Type"
+                help="fifo | wf2q+ | rr | qfq | fq_codel | fq_pie"
+                ptype="TS_SCHEDTYPE"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-sched-field "${ts_sched}" type "${Type}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="bandwidth"
+                help="Bandwidth cap for this scheduler">
+            <PARAM name="Rate"
+                help="mis. 10Mbit/s"
+                ptype="TS_RATE"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-sched-field "${ts_sched}" bw "${Rate}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="quantum"
+                help="FQ quantum in bytes (fq_codel/fq_pie only, default 1514)">
+            <PARAM name="Bytes"
+                help="quantum byte"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-sched-field "${ts_sched}" quantum "${Bytes}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="limit"
+                help="Hard packet limit of all sub-queues (fq_codel/fq_pie only, default 10240)">
+            <PARAM name="Packets"
+                help="jumlah paket"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-sched-field "${ts_sched}" limit "${Packets}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="flows"
+                help="Number of flow sub-queues (fq_codel/fq_pie only, default 1024)">
+            <PARAM name="Count"
+                help="jumlah flow"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-sched-field "${ts_sched}" flows "${Count}"
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+    <!--============= configure-ts-queue-view =============-->
+    <VIEW name="configure-ts-queue-view"
+        prompt="${SYSTEM_NAME}(config-ts-queue-${ts_queue})# "
+        depth="2">
+
+        <NAMESPACE ref="configure-ts-view"
+            help="false"
+            completion="true"/>
+
+        <COMMAND name="exit"
+            help="Exit queue mode"
+            lock="false">
+            <ACTION builtin="clish_nested_up"/>
+        </COMMAND>
+        <HOTKEY key="^Z" cmd="exit"/>
+
+        <COMMAND name="pipe"
+                help="Parent pipe for this queue">
+            <PARAM name="Pipe"
+                help="nama pipe"
+                ptype="TS_NAME"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" pipe "${Pipe}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="sched"
+                help="Parent scheduler for this queue (instead of a pipe)">
+            <PARAM name="Sched"
+                help="nama scheduler"
+                ptype="TS_NAME"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" sched "${Sched}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="mask"
+                help="Per-flow split mask (value defaults to full mask)">
+            <PARAM name="Mask"
+                help="dst-ip | src-ip | dst-ip6 | src-ip6 | dst-port | src-port | proto | flow-id | all"
+                ptype="TS_MASK"/>
+            <PARAM name="Value"
+                help="nilai mask: /N atau angka (kosong = full)"
+                ptype="TS_MASKVAL"
+                optional="true"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" mask "${Mask}" "${Value}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="weight"
+                help="WF2Q+ weight (1-100)">
+            <PARAM name="Weight"
+                help="bobot antrean"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" weight "${Weight}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="queue"
+                help="Queue slots for this queue">
+            <PARAM name="Slots"
+                help="jumlah slot antrean"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" queue "${Slots}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm"
+                help="AQM queue management (droptail/red/gred/codel/pie)"/>
+
+        <COMMAND name="aqm droptail"
+                help="No AQM (plain tail drop, default)">
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" aqm-clause "aqm droptail"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm red"
+                help="RED queue management">
+            <PARAM name="Wq" help="weight 0..1" ptype="TS_FLOAT"/>
+            <PARAM name="MinTh" help="min threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxTh" help="max threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxP" help="max drop prob 0..1" ptype="TS_FLOAT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" aqm-clause "aqm red ${Wq} ${MinTh} ${MaxTh} ${MaxP}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm gred"
+                help="Gentle RED queue management">
+            <PARAM name="Wq" help="weight 0..1" ptype="TS_FLOAT"/>
+            <PARAM name="MinTh" help="min threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxTh" help="max threshold" ptype="TS_UINT"/>
+            <PARAM name="MaxP" help="max drop prob 0..1" ptype="TS_FLOAT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" aqm-clause "aqm gred ${Wq} ${MinTh} ${MaxTh} ${MaxP}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm codel"
+                help="CoDel queue management (defaults: target 5ms, interval 100ms)">
+            <PARAM name="Target" help="target ms" ptype="TS_UINT" optional="true"/>
+            <PARAM name="Interval" help="interval ms" ptype="TS_UINT" optional="true"/>
+            <CONFIG/>
+            <ACTION>
+                _c="aqm codel"
+                [ -n "${Target}" ] &amp;&amp; _c="$_c target ${Target}"
+                [ -n "${Interval}" ] &amp;&amp; _c="$_c interval ${Interval}"
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" aqm-clause "$_c"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="aqm pie"
+                help="PIE queue management (defaults: target 15ms, tupdate 15ms)">
+            <PARAM name="Target" help="target ms" ptype="TS_UINT" optional="true"/>
+            <PARAM name="Tupdate" help="tupdate ms" ptype="TS_UINT" optional="true"/>
+            <CONFIG/>
+            <ACTION>
+                _c="aqm pie"
+                [ -n "${Target}" ] &amp;&amp; _c="$_c target ${Target}"
+                [ -n "${Tupdate}" ] &amp;&amp; _c="$_c tupdate ${Tupdate}"
+                ${RT_SBIN}/titian-traffic-shape.sh set-queue-field "${ts_queue}" aqm-clause "$_c"
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+    <!--============= configure-ts-rule-view ==============-->
+    <VIEW name="configure-ts-rule-view"
+        prompt="${SYSTEM_NAME}(config-ts-rule-${ts_rule})# "
+        depth="2">
+
+        <NAMESPACE ref="configure-ts-view"
+            help="false"
+            completion="true"/>
+
+        <COMMAND name="exit"
+            help="Exit rule mode"
+            lock="false">
+            <ACTION builtin="clish_nested_up"/>
+        </COMMAND>
+        <HOTKEY key="^Z" cmd="exit"/>
+
+        <COMMAND name="interface"
+                help="Interface + direction to shape">
+            <PARAM name="If"
+                help="nama interface"
+                ptype="IFACE_SYS"/>
+            <PARAM name="Dir"
+                help="in | out"
+                ptype="TS_DIR"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" interface "${If}" "${Dir}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="pipe"
+                help="Divert into a pipe">
+            <PARAM name="Pipe"
+                help="nama pipe"
+                ptype="TS_NAME"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" target pipe "${Pipe}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="queue"
+                help="Divert into a queue">
+            <PARAM name="Queue"
+                help="nama queue"
+                ptype="TS_NAME"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" target queue "${Queue}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="src"
+                help="Match source address (CIDR atau any)">
+            <PARAM name="Addr"
+                help="CIDR atau any"
+                ptype="FW_CIDR_OR_ANY"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" src "${Addr}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="dst"
+                help="Match destination address (CIDR atau any)">
+            <PARAM name="Addr"
+                help="CIDR atau any"
+                ptype="FW_CIDR_OR_ANY"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" dst "${Addr}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="proto"
+                help="Match protocol">
+            <PARAM name="Proto"
+                help="tcp | udp | icmp | all"
+                ptype="FW_PROTO"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" proto "${Proto}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="dport"
+                help="Match destination port (butuh proto tcp/udp)">
+            <PARAM name="Port"
+                help="1-65535"
+                ptype="DSTPORT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-rule-field "${ts_rule}" dport "${Port}"
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+    <!--=================== exec (show) ===================-->
+    <!-- BSDRP port: show commands live in the main tree exec view
+         (enable-view); backend is now ${RT_SBIN}/titian-traffic-shape.sh
+         (merged traffic-shape-cfg + traffic-shape-apply). -->
+    <VIEW name="enable-view">
+
+        <COMMAND name="show traffic-shape"
+                help="Show traffic shaping configuration"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh show
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show traffic-shape pipe"
+                help="Show dummynet pipes"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh show-pipe
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show traffic-shape sched"
+                help="Show dummynet schedulers"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh show-sched
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show traffic-shape queue"
+                help="Show dummynet queues"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh show-queue
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show traffic-shape rule"
+                help="Show divert rules"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh show-rule
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show traffic-shape statistics"
+                help="Show pipe/sched/queue counters (ipfw pipe/sched/queue show)"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh stats
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+</CLISH_MODULE>

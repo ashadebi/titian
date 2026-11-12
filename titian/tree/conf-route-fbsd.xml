@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+	<!-- TITIAN Fase 1: padanan FreeBSD dari conf-route.xml
+	     (route(8)). Hanya diinstal di FreeBSD. -->
+
+<VIEW name="configure-view">
+
+<!-- Default gateway -->
+	<COMMAND name="ip default-gateway"
+		help="Specify default gateway (if not routing IP)">
+		<PARAM name="ip"
+			help="IP address of default gateway"
+			ptype="IP_ADDR"/>
+		<CONFIG priority="0x9000" splitter="false"/>
+		<ACTION>
+			route -n get default >/dev/null 2>&amp;1 &amp;&amp; route change default ${ip} || route add default ${ip}
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no ip default-gateway"
+		help="Specify default gateway (if not routing IP)">
+		<CONFIG operation="unset" pattern="^ip default-gateway"/>
+		<ACTION>
+			route delete default
+		</ACTION>
+	</COMMAND>
+
+<!-- Static route -->
+	<COMMAND name="ip route"
+		help="Establish static routes">
+		<PARAM name="ip"
+			help="Destination prefix"
+			ptype="IP_ADDR_MASK"/>
+		<PARAM name="route_target"
+			help="Route target"
+			ptype="STRING"
+			mode="switch">
+			<PARAM name="dev"
+				help="to interfaces"
+				ptype="SUBCOMMAND"
+				mode="subcommand">
+					<PARAM name="iface_any"
+						help="Target interface"
+						completion="${Get_if_all}"
+						ptype="IFACE_SYS"/>
+			</PARAM>
+			<PARAM name="forward"
+				help="Forwarding router's address"
+				ptype="IP_ADDR"/>
+		</PARAM>
+		<CONFIG priority="0x9002" pattern="^ip route ${ip} " splitter="false"/>
+		<ACTION>
+		if test "${route_target}" = "dev"; then
+			route change -inet ${ip} -interface ${iface_any} 2>/dev/null || route add -inet ${ip} -interface ${iface_any}
+			exit $?
+		elif test "${route_target}" = "forward"; then
+			route change -inet ${ip} ${forward} 2>/dev/null || route add -inet ${ip} ${forward}
+			exit $?
+		fi
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no ip route"
+		help="Establish static routes">
+		<PARAM name="ip"
+			help="Destination prefix"
+			ptype="IP_ADDR_MASK"/>
+		<CONFIG operation="unset" pattern="^ip route ${ip} "/>
+		<ACTION>
+			route delete -inet ${ip}
+		</ACTION>
+	</COMMAND>
+
+<!-- blackhole/ -->
+	<COMMAND name="ip route blackhole"
+			help="Blackhole routes">
+		<PARAM name="ip"
+			help="IP address to blackhole"
+			ptype="IP_ADDR_ANY"/>
+		<CONFIG priority="0x9003" pattern="ip route blackhole ${ip}" splitter="false"/>
+		<ACTION>
+			route add -inet ${ip} 127.0.0.1 -blackhole
+		</ACTION>
+	</COMMAND>
+
+	<COMMAND name="no ip route blackhole"
+			help="Specify default gateway (if not routing IP)">
+		<PARAM name="ip"
+			help="IP address to blackhole"
+			ptype="IP_ADDR_ANY"/>
+		<CONFIG operation="unset" pattern="ip route blackhole ${ip}"/>
+		<ACTION>
+			route delete -inet ${ip}
+		</ACTION>
+	</COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

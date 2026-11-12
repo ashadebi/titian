@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- TITIAN Fase 1: padanan FreeBSD dari en-show-if-bond.xml
+         (lagg). Hanya diinstal di FreeBSD. -->
+
+<VIEW name="enable-view">
+
+    <COMMAND name="show interfaces lagg"
+            help="Lagg status and configuration"
+            lock="false"
+            interrupt="true">
+        <PARAM name="iface"
+                help="Interface lagg"
+                completion="${Get_if_lagg}"
+                ptype="IFACE_LAGG"/>
+        <PARAM name="detail"
+                help="Detail information"
+                ptype="SUBCOMMAND"
+                mode="subcommand"
+                optional="true"
+                order="true"/>
+        <ACTION>
+            if test ! -z "${detail}"; then
+                ${RT_SBIN}/titian-show.sh if-detail "${iface}" detail
+            else
+                ${RT_SBIN}/titian-show.sh if-detail "${iface}"
+            fi
+        </ACTION>
+     </COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

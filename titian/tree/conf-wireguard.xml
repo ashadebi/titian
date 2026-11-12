@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- WireGuard native (if_wg) — BSDRP port (BARU).
+         Backend: ${RT_SBIN}/titian-wireguard.sh. State klish di
+         /opt/titian/etc/netstate/wireguard/<nama>.conf; private key
+         di /opt/titian/etc/wireguard/<nama>.key (mode 600, TIDAK
+         pernah dicetak ulang — `generate-key` hanya menampilkan
+         public key sekali).
+         `enable` hanya mencatat niat + dirty; interface dibuat +
+         peer dipasang saat `commit` (atau boot via titian-boot.sh
+         apply-all). `generate-key` + perubahan peer berlaku saat
+         commit berikutnya.
+         Sintaks ifconfig wg (wgkey/wgport/wgpeer/wgaip/wgendpoint/
+         wgpka) ditulis dari dokumentasi FreeBSD if_wg/ifconfig —
+         verifikasi live di guest wajib sebelum produksi. -->
+
+    <PTYPE name="WG_IFACE"
+        pattern="wg[0-9]+$"
+        help="wg[N] (interface WireGuard)"/>
+
+<VIEW name="configure-view">
+    <COMMAND name="wireguard"
+            help="WireGuard interface (native if_wg)"
+            view="configure-wg-view"
+            viewid="wg=${Name}"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <PARAM name="Name"
+            help="nama interface (wg0, wg1, ...)"
+            ptype="WG_IFACE"/>
+        <CONFIG priority="0x1700" pattern="^wireguard ${Name}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh check "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no wireguard"
+            help="Hapus SELURUH konfigurasi WireGuard interface ini">
+        <PARAM name="Name"
+            help="nama interface"
+            ptype="WG_IFACE"/>
+        <CONFIG operation="unset" pattern="^wireguard ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh del-iface "${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-wg-view"
+    prompt="${SYSTEM_NAME}(config-wg-${wg})# "
+    depth="1">
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Kembali ke configure-view"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Kembali ke enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="enable"
+          help="Enable interface WireGuard ini (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh set-enable "${wg}" yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no enable"
+          help="Disable interface WireGuard ini (pending commit)">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh set-enable "${wg}" no
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="address"
+        help="Alamat IP interface WireGuard">
+        <PARAM name="Addr"
+            help="alamat/prefix (contoh 10.6.0.1/24)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh set-address "${wg}" "${Addr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no address"
+        help="Hapus alamat IP interface">
+        <CONFIG operation="unset" pattern="^address"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh del-address "${wg}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="listen-port"
+        help="Port UDP listen WireGuard">
+        <PARAM name="Port"
+            help="1-65535"
+            ptype="DSTPORT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh set-listen-port "${wg}" "${Port}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no listen-port"
+        help="Hapus listen-port (default wg 51820)">
+        <CONFIG operation="unset" pattern="^listen-port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh del-listen-port "${wg}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="generate-key"
+        help="Buat keypair baru (private key tersimpan mode 600; public key ditampilkan sekali)">
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh generate-key "${wg}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="peer"
+            help="Peer WireGuard (public key)"
+            view="configure-wg-peer-view"
+            viewid="wg_peer=${Pubkey}"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <PARAM name="Pubkey"
+            help="public key peer (base64)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1710" pattern="^peer ${Pubkey}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-add "${wg}" "${Pubkey}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no peer"
+            help="Hapus peer WireGuard">
+        <PARAM name="Pubkey"
+            help="public key peer"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^peer ${Pubkey}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-del "${wg}" "${Pubkey}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-wg-peer-view"
+    prompt="${SYSTEM_NAME}(config-wg-peer)# "
+    depth="2">
+    <NAMESPACE ref="configure-wg-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Kembali ke wireguard mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="allowed-ips"
+        help="Allowed IPs peer (CIDR)">
+        <PARAM name="Nets"
+            help="prefix yang boleh lewat peer ini"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg}" "${wg_peer}" allowed-ips "${Nets}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no allowed-ips"
+        help="Hapus allowed-ips peer">
+        <CONFIG operation="unset" pattern="^allowed-ips"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" allowed-ips
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="endpoint"
+        help="Endpoint peer (host:port)">
+        <PARAM name="Ep"
+            help="alamat:port (contoh 203.0.113.5:51820)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg}" "${wg_peer}" endpoint "${Ep}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no endpoint"
+        help="Hapus endpoint peer">
+        <CONFIG operation="unset" pattern="^endpoint"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" endpoint
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="persistent-keepalive"
+        help="Persistent keepalive (detik, 0 = mati)">
+        <PARAM name="Secs"
+            help="detik"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg}" "${wg_peer}" keepalive "${Secs}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no persistent-keepalive"
+        help="Hapus persistent keepalive">
+        <CONFIG operation="unset" pattern="^persistent-keepalive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" keepalive
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show wireguard"
+        help="Status semua interface WireGuard (wg show)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh show
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show wireguard interface"
+        help="Status satu interface WireGuard"
+        lock="false"
+        interrupt="true">
+        <PARAM name="Name"
+            help="nama interface"
+            ptype="WG_IFACE"/>
+        <ACTION>
+            ${RT_SBIN}/titian-wireguard.sh show-one "${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

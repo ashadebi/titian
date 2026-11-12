@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+	<!--=======================================================-->
+	<!-- TITIAN Fase 1: padanan FreeBSD dari conf-if-lo.xml
+	     (loopback clone lo1..lo9). Hanya diinstal di FreeBSD. -->
+
+<VIEW name="configure-view">
+
+	<COMMAND name="interface loopback"
+		help="loopback interface"
+		view="configure-lo-view"
+		viewid="iface=${iface_dummy}">
+		<PARAM name="iface_dummy"
+			help=""
+            completion="${Get_if_dummy}"
+			ptype="IFACE_DUMMY"/>
+		<CONFIG priority="0x1999" pattern="^${__line}$"/>
+            <ACTION>
+                if ! ifconfig "${iface_dummy}" >/dev/null 2>&amp;1; then
+                    ifconfig "${iface_dummy}" create
+                    ${RT_SBIN}/titian-persist.sh mark-if "${iface_dummy}"
+                fi
+            </ACTION>
+	</COMMAND>
+
+    <COMMAND name="no interface loopback"
+            help="delete interface loopback">
+            <PARAM name="iface_dummy"
+                    help=""
+                    completion="${Get_if_dummy}"
+                    ptype="IFACE_DUMMY"/>
+        <CONFIG operation="unset" pattern="interface loopback ${iface_dummy}$"/>
+            <ACTION>
+                if ifconfig "${iface_dummy}" >/dev/null 2>&amp;1; then
+                    ifconfig "${iface_dummy}" destroy
+                    ${RT_SBIN}/titian-persist.sh drop-if "${iface_dummy}"
+                else
+                    printf "%s \n" "${iface_dummy} not found.."
+                fi
+            </ACTION>
+    </COMMAND>
+</VIEW>
+
+<!-- configure-lo-view commands -->
+<VIEW name="configure-lo-view"
+	prompt="${SYSTEM_NAME}(config-lo-${iface})# "
+	depth="1">
+    <COMMAND name="ipv6"
+        help="Interface IPv6 config commands"/>
+
+    <COMMAND name="no ipv6"
+        help="Negate IPv6 commands"/>
+
+
+<!-- Inheritance -->
+	<NAMESPACE ref="configure-view"
+		help="false"
+		completion="true"/>
+
+	<COMMAND name="exit"
+		help="Exit from interface configuration mode"
+		lock="false">
+		<ACTION builtin="clish_nested_up"/>
+	</COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+	<COMMAND name="no"
+		help="Negate a command or set its defaults"/>
+
+	<COMMAND name="ip"
+		help="Interface Internet Protocol config commands"/>
+
+	<COMMAND name="no ip"
+		help="Interface Internet Protocol config commands"/>
+
+
+<!-- Enable/Disable -->
+    <COMMAND name="disable"
+          help="Disable the selected interface">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ifconfig ${iface} down
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable"
+        help="Enable the selected interface">
+        <CONFIG/>
+        <ACTION>
+            ifconfig ${iface} up
+        </ACTION>
+    </COMMAND>
+
+<!-- IP address -->
+    <COMMAND name="ip address"
+            help="Set the IP address of an interface">
+            <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="ip address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-set "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ip address"
+           help="Delete IP address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IP address"
+                ptype="IP_ADDR_MASK_OPT"/>
+        <PARAM name="peer"
+                help="Peer address for point-to-point link"
+                optional="true"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="Peer IP address"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="ip address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+<!-- IPv6 address (TITIAN Fase 1; tanpa peer di FreeBSD — gated) -->
+    <COMMAND name="ipv6 address"
+            help="Set the IPv6 address of an interface">
+            <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <CONFIG pattern="ipv6 address ${ip}" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-add "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ipv6 address"
+           help="Delete IPv6 address of an interface"
+           lock="false">
+           <PARAM name="ip"
+                help="IPv6 address"
+                ptype="IP6_ADDR_MASK_OPT"/>
+        <CONFIG operation="unset" pattern="ipv6 address ${ip}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-del "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+            help="human-readable Alias link description">
+        <PARAM name="desc"
+              help="Description/Alias"
+              ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ifconfig ${iface} description "${desc}"
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

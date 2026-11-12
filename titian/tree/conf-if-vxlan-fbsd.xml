@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                        http://clish.sourceforge.net/XMLSchema/clish.xsd">
+
+<!-- VXLAN tunnel endpoint (FreeBSD). Model: setiap perubahan parameter
+     vni/local/remote/group/dstport = recreate interface dari netstate
+     <iface>.vxlan via titian-vxlan.sh (FreeBSD tidak punya negasi
+     -vxlanlocal dkk; vxlanport bukan parameter settable — port tetap
+     4789, nilai lain ditolak helper). Alamat dipulihkan dari
+     <iface>.addr, MTU dari <iface>.tuning, up-state dipulihkan.
+     Recreate = flap singkat + MAC bisa berubah (MAC vxlan acak per
+     pembuatan). Unicast (remote) dan multicast (group+dev) saling
+     eksklusif: set satu menghapus yang lain. Modul if_vxlan dimuat
+     saat create (kldload) dan dipersistenkan via if_vxlan_load="YES"
+     di /boot/loader.conf. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="interface vxlan"
+        help="VXLAN tunnel endpoint (overlay L2 di atas UDP/IP)"
+        view="configure-vxlan-fbsd-view"
+        viewid="iface=${iface_vxlan}">
+        <PARAM name="iface_vxlan"
+            help="VXLAN interface (vxlan[N])"
+            completion="${Get_if_vxlan}"
+            ptype="IFACE_VXLAN"/>
+        <CONFIG priority="0x2001" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh create "${iface_vxlan}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface vxlan"
+        help="delete VXLAN interface">
+        <PARAM name="iface_vxlan"
+            help="VXLAN interface (vxlan[N])"
+            completion="${Get_if_vxlan}"
+            ptype="IFACE_VXLAN"/>
+        <CONFIG operation="unset" pattern="interface vxlan ${iface_vxlan}$"/>
+        <ACTION>
+            if ${RT_SBIN}/titian-vxlan.sh exists "${iface_vxlan}"; then
+                ${RT_SBIN}/titian-vxlan.sh delete "${iface_vxlan}"
+                ${RT_SBIN}/titian-persist.sh drop-if "${iface_vxlan}"
+            else
+                printf "%s \n" "${iface_vxlan} not found."
+            fi
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-vxlan-fbsd-view"
+    prompt="${SYSTEM_NAME}(config-vxlan-${iface})# "
+    depth="1">
+    <PTYPE name="iface" pattern="${iface_vxlan}"/>
+    <NAMESPACE ref="configure-view">
+        <COMMAND name="exit"
+            help="kembali ke configure-view"
+            view="configure-view"/>
+        <COMMAND name="end"
+            help="kembali ke enable-view"
+            view="enable-view"/>
+        <COMMAND name="interface" help="ganti interface"/>
+        <COMMAND name="show" help="lihat status"/>
+    </NAMESPACE>
+    <HOTKEY key="^Z" cmd="exit"/>
+    <COMMAND name="no"
+        help="negasi perintah">
+        <PARAM name="subcommand"
+            help="perintah yang dinegasi"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+    <COMMAND name="ip"
+        help="konfigurasi IP">
+        <PARAM name="subcommand"
+            help="sub-perintah IP"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+    <COMMAND name="no ip"
+        help="negasi konfigurasi IP">
+        <PARAM name="subcommand"
+            help="sub-perintah IP yang dinegasi"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+    <COMMAND name="ipv6"
+        help="konfigurasi IPv6">
+        <PARAM name="subcommand"
+            help="sub-perintah IPv6"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+    <COMMAND name="no ipv6"
+        help="negasi konfigurasi IPv6">
+        <PARAM name="subcommand"
+            help="sub-perintah IPv6 yang dinegasi"
+            ptype="SUBCOMMAND"/>
+    </COMMAND>
+    <COMMAND name="disable"
+        help="matikan interface (admin down)">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ifconfig "${iface}" down
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="enable"
+        help="hidupkan interface (admin up)">
+        <CONFIG/>
+        <ACTION>
+            ifconfig "${iface}" up
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ip address"
+        help="alamat IPv4 overlay (CIDR, atau PtP: addr peer peer)">
+        <PARAM name="addr"
+            help="alamat IPv4 (CIDR, contoh 198.51.110.1/24)"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="peer"
+            help="peer"
+            mode="subcommand"
+            optional="true"
+            ptype="SUBCOMMAND">
+            <PARAM name="peer_ip"
+                help="alamat peer (PtP)"
+                ptype="IP_ADDR"/>
+        </PARAM>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${addr}" "${peer_ip}"
+            ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ip address"
+        help="hapus alamat IPv4 overlay">
+        <PARAM name="addr"
+            help="alamat IPv4"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^ip address ${addr}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr-del "${iface}" "${addr}"
+            ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ipv6 address"
+        help="alamat IPv6 overlay (CIDR; FreeBSD: tanpa peer)">
+        <PARAM name="addr"
+            help="alamat IPv6 (CIDR, contoh 2001:db8:310::1/64)"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-add "${iface}" "${addr}" ""
+            ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv6 address"
+        help="hapus alamat IPv6 overlay">
+        <PARAM name="addr"
+            help="alamat IPv6"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^ipv6 address ${addr}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-if.sh addr6-del "${iface}" "${addr}"
+            ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="description"
+        help="deskripsi interface">
+        <PARAM name="text"
+            help="teks deskripsi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ifconfig "${iface}" description "${text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no description"
+        help="hapus deskripsi interface">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ifconfig "${iface}" -description
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="mtu"
+        help="MTU overlay (batas berguna: 1450 untuk overhead VXLAN ~50B; dibuktikan uji DF, bukan dari dokumen)">
+        <PARAM name="val"
+            help="MTU"
+            ptype="MTU"/>
+        <CONFIG pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu "${iface}" "${val}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mtu"
+        help="hapus MTU kustom (kembali ke default)">
+        <CONFIG operation="unset" pattern="^mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-tune.sh mtu-del "${iface}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="vni"
+        help="VXLAN Network Identifier (1-16777215). Mengubah VNI = recreate interface (flap singkat; MAC stabil per nama di lab)">
+        <PARAM name="vni"
+            help="VNI (1-16777215)"
+            ptype="VNI_ID"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh set "${iface}" vni "${vni}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vni"
+        help="hapus VNI (kembali ke placeholder tanpa vxlanid)">
+        <CONFIG operation="unset" pattern="^vni"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh unset "${iface}" vni
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="local"
+        help="alamat VTEP lokal (underlay, harus terjangkau lawan)">
+        <PARAM name="addr"
+            help="IPv4 VTEP lokal"
+            ptype="IP_ADDR"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh set "${iface}" local "${addr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no local"
+        help="hapus VTEP lokal">
+        <CONFIG operation="unset" pattern="^local"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh unset "${iface}" local
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="remote"
+        help="alamat VTEP lawan (unicast). Menghapus group+dev bila ada">
+        <PARAM name="addr"
+            help="IPv4 VTEP lawan"
+            ptype="IP_ADDR"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh set "${iface}" remote "${addr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no remote"
+        help="hapus VTEP lawan">
+        <CONFIG operation="unset" pattern="^remote"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh unset "${iface}" remote
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="group"
+        help="multicast group + underlay device (varian multicast; menghapus remote bila ada)">
+        <PARAM name="mcast"
+            help="alamat multicast 224.0.0.0-239.255.255.255"
+            ptype="IP_ADDR"/>
+        <PARAM name="dev"
+            help="dev"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="dev_iface"
+                help="underlay device"
+                completion="${Get_if_eth}"
+                ptype="IFACE_SYS"/>
+        </PARAM>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh set "${iface}" group "${mcast}" "${dev_iface}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no group"
+        help="hapus multicast group + dev">
+        <CONFIG operation="unset" pattern="^group"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh unset "${iface}" group
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="dstport"
+        help="UDP dstport VXLAN (FreeBSD: tetap 4789, nilai lain ditolak)">
+        <PARAM name="port"
+            help="UDP port (1-65535)"
+            ptype="DSTPORT"/>
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh set "${iface}" dstport "${port}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dstport"
+        help="hapus dstport (kembali ke 4789)">
+        <CONFIG operation="unset" pattern="^dstport"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh unset "${iface}" dstport
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

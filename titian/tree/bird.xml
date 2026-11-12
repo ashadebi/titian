@@ -1,0 +1,519 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+        <!--=======================================================-->
+<VIEW name="bird-view"
+	prompt="cli-${SYSTEM_NAME}(birdc)# "
+	restore="depth">
+ 	<COMMAND name="show"
+                help="Show BIRD information"/>
+	
+	<COMMAND name="show configuration"
+		help="Check config"
+                lock="false"
+                interrupt="true">
+		<PARAM name="function"
+                       help="Function section"
+                       ptype="SUBCOMMAND"
+                       mode="subcommand"
+                       optional="true"/>
+                <PARAM name="filter"
+                       help="Filter section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+                <PARAM name="protocol"
+                       help="Protocol section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+		 <PARAM name="static"
+                       help="Static protocol section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+		 <PARAM name="bgp"
+                       help="BGP section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+		<PARAM name="ospf"
+                       help="OSPF section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+                <ACTION>
+                        # Jalur bird.conf per OS (Debian /etc/bird, FreeBSD /usr/local/etc/bird)
+                        BIRD_CONF="$(${RT_SBIN}/titian-bird.sh conf-path)"
+                        if test -n "${function}"; then
+                                sed -n '/#-FUNCTION-#/, /#-ENDFUNCTION-#/p' "$BIRD_CONF"
+                        elif test -n "${filter}"; then
+                                sed -n '/#-FILTER-#/, /#-ENDFILTER-#/p' "$BIRD_CONF"
+                        elif test -n "${protocol}"; then
+                                sed -n '/#-PROTOCOL-#/, /#-ENDPROTOCOL-#/p' "$BIRD_CONF"
+			elif test -n "${static}"; then
+                                sed -n '/#-PROTOCOL-STATIC-#/, /#-ENDPROTOCOL-STATIC-#/p' "$BIRD_CONF"
+			elif test -n "${bgp}"; then
+                                sed -n '/#-BGP-#/, /#-ENDBGP-#/p' "$BIRD_CONF"
+			elif test -n "${ospf}"; then
+                                sed -n '/#-OSPF-#/, /#-ENDOSPF-#/p' "$BIRD_CONF"
+			else
+                                cat "$BIRD_CONF"
+                        fi
+                </ACTION>
+
+	</COMMAND>
+
+
+<!-- Show routing information -->
+        <COMMAND name="show route"
+                help="Show BIRD routes"/>
+	
+	<COMMAND name="show route ip"
+		help="Show routes for one IP/prefix"
+		lock="false"
+                interrupt="true">
+		<PARAM name="get_ip"
+			help="IP address or prefix"
+			ptype="IP_ADDR_ANY"/>
+		<ACTION>birdc show route for "${get_ip}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="show route all"
+                help="Count Bird Route Count"
+                lock="false"
+                interrupt="true">
+                <ACTION>birdc show route | grep -v "^BIRD"</ACTION>
+        </COMMAND>
+
+        <COMMAND name="show route count"
+                help="Count Bird Route Count"
+                lock="false"
+                interrupt="true">
+                <ACTION>birdc show route count | grep -v "^BIRD"</ACTION>
+        </COMMAND>
+
+ 	<COMMAND name="show protocol"
+                help="Show BIRD protocols"/>
+
+	<COMMAND name="show protocol summary"
+		help="Show protocol summary"
+		lock="false"
+                interrupt="true">
+		<ACTION>birdc show protocol | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="show protocol all"
+		help="Show all protocol details"
+		lock="false"
+                interrupt="true">
+		<ACTION>birdc show protocol all | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="show protocol neighbors"
+		help="Show one protocol in detail"
+		lock="false"
+                interrupt="true">
+		<PARAM name="get_var"
+			help="Protocol name"
+			ptype="STRING"/>
+		<ACTION>birdc show protocol "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<!--<COMMAND name="show route protocol"
+		help="asdd"
+		lock="false"
+                interrupt="true">
+		<PARAM name="get_protocol"
+			help="asddd"
+			ptype="STRING"/>
+		<ACTION>birdc show route protocol "${get_protocol}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>-->
+
+	<!---->
+	<COMMAND name="show route protocol"
+		help="Print the route packets trace to network host"
+		lock="false"
+		interrupt="true">
+		<PARAM name="proto"
+			help="Protocol to use"
+			optional="true"
+			mode="switch"
+			ptype="SUBCOMMAND">
+			<PARAM name="bgp"
+				help="BGP"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="ospf"
+				help="OSPF"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+		</PARAM>
+		<PARAM name="dst"
+			help="BGP Neighbour"
+			ptype="STRING"/>
+		<PARAM name="prefix"
+			help="Source Prefix"
+			optional="true"
+			mode="subcommand"
+			ptype="SUBCOMMAND">
+			<PARAM name="pref"
+				help="Prefix (A.B.C.D/X)"
+				ptype="STRING"/>
+		</PARAM>
+		 <ACTION>
+                        if test -n "${bgp}"; then
+                               birdc show route protocol "${dst} ${pref}" | grep -v "^BIRD"
+                        elif test -n "${ospf}"; then
+                               birdc show route protocol "${dst} ${pref}" | grep -v "^BIRD"        
+			else
+                               birdc show route protocol "${dst}" | grep -v "^BIRD"
+                        fi
+                </ACTION>
+	</COMMAND>
+	<!---->
+	
+	<COMMAND name="show route export"
+		help="Show routes exported to a protocol"
+		lock="false"
+                interrupt="true">
+		<PARAM name="get_export"
+			help="Protocol name"
+			ptype="STRING"/>
+		<ACTION>birdc show route export "${get_export}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<!--Reload-->
+	<COMMAND name="reload"
+                help="Reload a protocol"/>
+
+	<COMMAND name="reload in"
+		help="Reload inbound routes of a protocol">
+		<PARAM name="get_var"
+			help="Protocol name"
+			ptype="STRING"/>
+		<ACTION>birdc reload in "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="reload out"
+		help="Reload outbound routes of a protocol">
+		<PARAM name="get_var"
+			help="Protocol name"
+			ptype="STRING"/>
+		<ACTION>birdc reload out "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<!--Reload filters only: bird2 = `birdc reload`, bird3 = `birdc reload filters`
+	    (backend picks the string by detected variant, klish-bird2-bird3.md §2b).-->
+	<COMMAND name="reload filters"
+		help="Reload filters only (bird2: birdc reload; bird3: birdc reload filters)"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-bird.sh reload-filters</ACTION>
+	</COMMAND>
+
+	<!--Restart-->
+	<COMMAND name="restart"
+		help="Restart a protocol">
+		<PARAM name="get_var"
+			help="Protocol name"
+			ptype="STRING"/>
+		<ACTION>birdc restart "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="restart all"
+		help="Restart all protocols">
+		<ACTION>birdc restart all | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="disable"	help="Disable a protocol">
+	<PARAM name="get_var" help="Protocol name" ptype="STRING"/>
+		<ACTION>birdc disable "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="enable" help="Enable a protocol">
+	<PARAM name="get_var" help="Protocol name" ptype="STRING"/>
+		<ACTION>birdc enable "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<!-- Generator BIRD: render section -> backup -> bird -p -> birdc configure -->
+	<COMMAND name="generate"
+		help="Render, syntax-check, backup and apply one bird.conf section"
+		lock="false"
+		interrupt="true">
+		<PARAM name="section"
+			help="Section to generate"
+			ptype="SUBCOMMAND"
+			mode="switch">
+			<PARAM name="function"
+				help="function section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="filter"
+				help="filter section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="protocol"
+				help="protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="static"
+				help="static protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="bgp"
+				help="BGP section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="ospf"
+				help="OSPF section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="direct"
+				help="Direct protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="bfd"
+				help="BFD protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="pipe"
+				help="Pipe protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+		</PARAM>
+		<ACTION>${RT_SBIN}/titian-bird.sh generate "${section}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="generate check"
+		help="Render and syntax-check one bird.conf section without applying"
+		lock="false"
+		interrupt="true">
+		<PARAM name="section"
+			help="Section to check"
+			ptype="SUBCOMMAND"
+			mode="switch">
+			<PARAM name="function"
+				help="function section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="filter"
+				help="filter section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="protocol"
+				help="protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="static"
+				help="static protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="bgp"
+				help="BGP section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="ospf"
+				help="OSPF section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="direct"
+				help="Direct protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="bfd"
+				help="BFD protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="pipe"
+				help="Pipe protocol section"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+		</PARAM>
+		<ACTION>${RT_SBIN}/titian-bird.sh check "${section}"</ACTION>
+	</COMMAND>
+
+
+	<COMMAND name="community" help="BGP community management"/>
+
+	<COMMAND name="community list" help="Named community lists"/>
+
+	<COMMAND name="community export" help="BGP export communities"/>
+
+	<COMMAND name="community import" help="BGP import community matches"/>
+	<COMMAND name="community list add"
+		help="Define named community list"
+		lock="false"
+		interrupt="true">
+		<PARAM name="name" help="List name" ptype="STRING"/>
+		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-comm.sh list-add "${name}" "${community}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community list delete"
+		help="Delete named community list"
+		lock="false"
+		interrupt="true">
+		<PARAM name="name" help="List name" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-comm.sh list-del "${name}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community list show"
+		help="Show defined community lists"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-comm.sh list-show</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community export add"
+		help="Set community on BGP export (static branch)"
+		lock="false"
+		interrupt="true">
+		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-comm.sh export-add "${community}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community export delete"
+		help="Remove community from BGP export"
+		lock="false"
+		interrupt="true">
+		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-comm.sh export-del "${community}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community export show"
+		help="Show BGP export community filter"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-comm.sh export-show</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community import add"
+		help="Match community on BGP import with action"
+		lock="false"
+		interrupt="true">
+		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<PARAM name="action" help="reject | localpref:N | med:N" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-comm.sh import-add "${community}" "${action}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community import delete"
+		help="Remove community match on BGP import"
+		lock="false"
+		interrupt="true">
+		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-comm.sh import-del "${community}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="community import show"
+		help="Show BGP import community filter"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-comm.sh import-show</ACTION>
+	</COMMAND>
+
+	<COMMAND name="redistribute" help="BGP route redistribution management"/>
+
+	<COMMAND name="redistribute static" help="Static route export to BGP"/>
+
+	<COMMAND name="redistribute direct" help="Direct (connected) route export to BGP"/>
+
+	<COMMAND name="redistribute static enable"
+		help="Enable static route export to BGP"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-redist.sh static-enable</ACTION>
+	</COMMAND>
+
+	<COMMAND name="redistribute static disable"
+		help="Disable static route export to BGP"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-redist.sh static-disable</ACTION>
+	</COMMAND>
+
+	<COMMAND name="redistribute direct enable"
+		help="Enable direct route export to BGP"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-redist.sh direct-enable</ACTION>
+	</COMMAND>
+
+	<COMMAND name="redistribute direct disable"
+		help="Disable direct route export to BGP"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-redist.sh direct-disable</ACTION>
+	</COMMAND>
+
+	<COMMAND name="redistribute show"
+		help="Show redistribution status"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-redist.sh show</ACTION>
+	</COMMAND>
+
+	<COMMAND name="filter" help="Attach/detach BIRD filters to protocols"/>
+
+	<COMMAND name="filter attach"
+		help="Attach a filter to a protocol direction"
+		lock="false"
+		interrupt="true">
+		<PARAM name="protocol" help="Protocol name" ptype="STRING"/>
+		<PARAM name="direction"
+			help="Direction"
+			ptype="SUBCOMMAND"
+			mode="switch">
+			<PARAM name="import"
+				help="Import direction"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="export"
+				help="Export direction"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+		</PARAM>
+		<PARAM name="filter" help="Filter name" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-filter.sh attach "${protocol}" "${direction}" "${filter}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="filter detach"
+		help="Detach a filter from a protocol direction (restore default)"
+		lock="false"
+		interrupt="true">
+		<PARAM name="protocol" help="Protocol name" ptype="STRING"/>
+		<PARAM name="direction"
+			help="Direction"
+			ptype="SUBCOMMAND"
+			mode="switch">
+			<PARAM name="import"
+				help="Import direction"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+			<PARAM name="export"
+				help="Export direction"
+				mode="subcommand"
+				ptype="SUBCOMMAND"/>
+		</PARAM>
+		<ACTION>${RT_SBIN}/titian-filter.sh detach "${protocol}" "${direction}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="filter show"
+		help="Show import/export filters of a protocol"
+		lock="false"
+		interrupt="true">
+		<PARAM name="protocol" help="Protocol name" ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-filter.sh show "${protocol}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="exit"
+		help="Exit from configure mode"
+		view="enable-view"
+		lock="false">
+	</COMMAND>
+
+</VIEW>
+
+</CLISH_MODULE>

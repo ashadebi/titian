@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- Monitoring — BSDRP port (BARU). Semua OFF by default di
+         image (feature-list §9): snmpd (net-snmp, community
+         default bsdrp-ro — GANTI sebelum di-expose), node_exporter
+         (:9100), bird_exporter (:9324), nfacctd/pmacct.
+         `enable` hanya mencatat niat + dirty; service naik/berhenti
+         saat `commit` (titian-commit.sh -> titian-monitoring.sh
+         apply). Community SNMP ditulis ke snmpd.conf saat apply.
+         Nama rc script yang dipakai backend (snmpd, node_exporter,
+         bird_exporter, nfacctd) — verifikasi live di guest: nama
+         service bisa berbeda menurut port yang terpasang. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="monitoring"
+            help="Monitoring: snmpd / node_exporter / bird_exporter / nfacctd (semua OFF by default)"
+            view="configure-monitoring-view"
+            viewid="sysview=monitoring"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <CONFIG priority="0x1800" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh check
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-monitoring-view"
+    prompt="${SYSTEM_NAME}(config-monitoring)# "
+    depth="1">
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Kembali ke configure-view"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Kembali ke enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="snmp"
+        help="SNMP (snmpd)"/>
+    <COMMAND name="node-exporter"
+        help="node_exporter (:9100)"/>
+    <COMMAND name="bird-exporter"
+        help="bird_exporter (:9324)"/>
+    <COMMAND name="nfacctd"
+        help="nfacctd (pmacct)"/>
+
+    <COMMAND name="no snmp"
+        help="Negate SNMP configuration"/>
+    <COMMAND name="no node-exporter"
+        help="Negate node_exporter configuration"/>
+    <COMMAND name="no bird-exporter"
+        help="Negate bird_exporter configuration"/>
+    <COMMAND name="no nfacctd"
+        help="Negate nfacctd configuration"/>
+
+    <COMMAND name="snmp enable"
+          help="Enable snmpd (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set snmp yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no snmp enable"
+          help="Disable snmpd (pending commit)">
+        <CONFIG operation="unset" pattern="^snmp enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set snmp no
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="snmp community"
+        help="Community SNMP read-only (default bsdrp-ro — ganti sebelum expose)">
+        <PARAM name="Comm"
+            help="community string"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set-community "${Comm}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="node-exporter enable"
+          help="Enable node_exporter :9100 (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set node-exporter yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no node-exporter enable"
+          help="Disable node_exporter (pending commit)">
+        <CONFIG operation="unset" pattern="^node-exporter enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set node-exporter no
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bird-exporter enable"
+          help="Enable bird_exporter :9324 (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set bird-exporter yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bird-exporter enable"
+          help="Disable bird_exporter (pending commit)">
+        <CONFIG operation="unset" pattern="^bird-exporter enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set bird-exporter no
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="nfacctd enable"
+          help="Enable nfacctd/pmacct (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set nfacctd yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no nfacctd enable"
+          help="Disable nfacctd (pending commit)">
+        <CONFIG operation="unset" pattern="^nfacctd enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh set nfacctd no
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show monitoring"
+        help="Status monitoring (snmpd, node_exporter, bird_exporter, nfacctd)"
+        lock="false"
+        interrupt="true">
+        <PARAM name="service"
+            help="satu service saja"
+            ptype="SUBCOMMAND"
+            mode="switch"
+            optional="true">
+            <PARAM name="snmp"
+                help="snmpd"
+                mode="subcommand"
+                ptype="SUBCOMMAND"/>
+            <PARAM name="node-exporter"
+                help="node_exporter"
+                mode="subcommand"
+                ptype="SUBCOMMAND"/>
+            <PARAM name="bird-exporter"
+                help="bird_exporter"
+                mode="subcommand"
+                ptype="SUBCOMMAND"/>
+            <PARAM name="nfacctd"
+                help="nfacctd"
+                mode="subcommand"
+                ptype="SUBCOMMAND"/>
+        </PARAM>
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh show "${service}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>
