@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- IPoE server (ISC dhcpd) — DHCP for subscribers.
+         NOTE: mpd5 does NOT support IPoE (PPP only: PPPoE/PPTP/L2TP).
+         IPoE is plain IP over Ethernet, i.e. DHCP. This server uses
+         isc-dhcpd (/usr/local/sbin/dhcpd, already in the image).
+         Backend: ${RT_SBIN}/titian-dhcp.sh, intent in
+         /etc/titian/ipoe.conf, generated config in
+         /usr/local/etc/dhcpd.conf. `enable` records intent; the
+         dhcpd service starts/stops at `commit`. -->
+
+<VIEW name="configure-view">
+    <COMMAND name="ipoe-server"
+            help="IPoE server (ISC DHCP for subscribers)"
+            view="configure-ipoe-view"
+            viewid="sysview=ipoe-server"
+            ptype="SUBCOMMAND"
+            mode="subcommand">
+        <CONFIG priority="0x1600" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh server-status
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipoe-server"
+            help="Delete ALL IPoE server configuration (all pools)">
+        <CONFIG operation="unset" pattern="^ipoe-server$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh server-stop
+            rm -f /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-ipoe-view"
+    prompt="${SYSTEM_NAME}(config-ipoe)# "
+    depth="1">
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Back to configure-view"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="enable"
+          help="Enable IPoE server (pending commit)">
+        <CONFIG/>
+        <ACTION>
+            mkdir -p /etc/titian
+            echo "enable" >> /etc/titian/ipoe.conf
+            sort -u /etc/titian/ipoe.conf -o /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no enable"
+          help="Disable IPoE server (pending commit)">
+        <CONFIG operation="unset" pattern="^enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh server-stop
+            sed -i '' '/^enable$/d' /etc/titian/ipoe.conf 2>/dev/null || sed -i '/^enable$/d' /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interface"
+        help="Interface the IPoE server listens on">
+        <PARAM name="If"
+            help="Interface name"
+            ptype="IFACE_SYS"/>
+        <CONFIG/>
+        <ACTION>
+            mkdir -p /etc/titian
+            echo "interface ${If}" >> /etc/titian/ipoe.conf
+            sort -u /etc/titian/ipoe.conf -o /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Delete IPoE server interface">
+        <CONFIG operation="unset" pattern="^interface"/>
+        <ACTION>
+            sed -i '' '/^interface /d' /etc/titian/ipoe.conf 2>/dev/null || sed -i '/^interface /d' /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="pool"
+        help="IP address pool for IPoE clients (network + range + gateway + DNS)">
+        <PARAM name="Network"
+            help="Subnet in CIDR (example 192.168.10.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="Start"
+            help="First address of the pool"
+            ptype="IP_ADDR"/>
+        <PARAM name="End"
+            help="Last address of the pool"
+            ptype="IP_ADDR"/>
+        <PARAM name="Gateway"
+            help="Default gateway handed to clients"
+            ptype="IP_ADDR"/>
+        <PARAM name="Dns"
+            help="DNS server handed to clients"
+            ptype="IP_ADDR"/>
+        <PARAM name="Lease"
+            help="Lease time in seconds (optional, default 86400)"
+            optional="true"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            mkdir -p /etc/titian
+            echo "pool ${Network} ${Start} ${End} ${Gateway} ${Dns} ${Lease}" >> /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no pool"
+        help="Delete IPoE pool (all pools)">
+        <CONFIG operation="unset" pattern="^pool"/>
+        <ACTION>
+            sed -i '' '/^pool /d' /etc/titian/ipoe.conf 2>/dev/null || sed -i '/^pool /d' /etc/titian/ipoe.conf
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

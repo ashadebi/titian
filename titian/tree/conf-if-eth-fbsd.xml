@@ -98,6 +98,22 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="ip address dhcp"
+            help="IPoE client: get address via DHCP (dhclient)">
+        <CONFIG pattern="ip address dhcp" splitter="false"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh client-start "${iface}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ip address dhcp"
+            help="Stop IPoE client (DHCP) on this interface">
+        <CONFIG operation="unset" pattern="^ip address dhcp$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh client-stop "${iface}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="no ip address"
            help="Delete IP address of an interface"
            lock="false">

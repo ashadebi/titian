@@ -1,6 +1,6 @@
 #!/bin/sh
 # TITIAN Fase 1 — boot service: jalankan konfd (bila belum jalan)
-# lalu replay startup-config gaya rtcli init-rtcli.
+# lalu replay startup-config gaya titian init-titian.
 # Dipanggil systemd unit (Debian) / rc script (FreeBSD).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}

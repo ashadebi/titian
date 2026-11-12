@@ -9,7 +9,7 @@
 # atribut `scope`) -> backup config lama -> bird -p -c (cek sintaks;
 # gagal = BERHENTI, tidak ada terap paksa) -> birdc configure.
 # Section hidup di /etc/titian/bird.d/<section>.conf; bird.conf
-# dipotong per marker gaya rtcli (#-BGP-# ... #-ENDBGP-#, dst).
+# dipotong per marker gaya titian (#-BGP-# ... #-ENDBGP-#, dst).
 # Satu section ditulis ulang tanpa menyentuh section lain.
 #
 # Enable/disable BIRD TIDAK langsung start/stop service: perintah

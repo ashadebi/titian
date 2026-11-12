@@ -1,6 +1,6 @@
 #!/bin/sh
 # TITIAN — perintah `system sysctl` (kernel parameter, kedua OS).
-# Bukan restorasi rtcli: tree lama TIDAK punya perintah sysctl sama
+# Bukan restorasi titian: tree lama TIDAK punya perintah sysctl sama
 # sekali; ini fitur baru.
 #
 # Jalur persistensi (tanpa daemon/service baru):

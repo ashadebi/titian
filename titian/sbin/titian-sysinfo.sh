@@ -1,6 +1,6 @@
 #!/bin/sh
 # TITIAN Fase 1 — banner startup clish (pengganti ACTION Linux-only
-# di startup.xml rtcli: free, /proc/loadavg).
+# di startup.xml titian: free, /proc/loadavg).
 # POSIX sh.
 OS=$(uname -s)
 date

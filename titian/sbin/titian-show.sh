@@ -1,6 +1,6 @@
 #!/bin/sh
 # TITIAN Fase 1 — perintah show (interfaces, route, neighbor).
-# Perbedaan dari rtcli: show interfaces MENAMPILKAN inet6 (rtcli
+# Perbedaan dari titian: show interfaces MENAMPILKAN inet6 (titian
 # sengaja membuangnya dengan egrep -v inet6).
 # POSIX sh.
 OS=$(uname -s)

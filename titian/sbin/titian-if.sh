@@ -140,7 +140,7 @@ addr_add() {
 }
 
 addr_set() {
-    # seperti addr-add tapi menggantikan semua alamat v4 iface (semantik lo rtcli)
+    # seperti addr-add tapi menggantikan semua alamat v4 iface (semantik lo titian)
     local iface=$1 cidr=$2 peer=$3
     if [ "$OS" = "FreeBSD" ]; then
         # hapus semua inet (bukan inet6) yang ada di iface
