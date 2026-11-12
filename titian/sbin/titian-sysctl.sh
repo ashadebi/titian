@@ -105,8 +105,8 @@ mirror_linux() {
     local f=/etc/sysctl.d/99-titian.conf
     mkdir -p /etc/sysctl.d 2>/dev/null || { warn "tidak bisa mkdir /etc/sysctl.d"; return 0; }
     {
-        echo "# TITIAN — dikelola perintah 'system sysctl'; jangan edit manual"
-        echo "# (diterapkan saat boot oleh systemd-sysctl; hapus lewat 'no system sysctl <key>')"
+        echo "# TITIAN — dikelola perintah 'system sysctl'; do not edit manual"
+        echo "# (diterapkan saat boot by systemd-sysctl; delete lewat 'no system sysctl <key>')"
         if [ -f "$STATE" ]; then
             # grep exit 1 bila state kosong (semua key dihapus) — itu
             # BUKAN gagal tulis; jangan biarkan statusnya menggagalkan mv
@@ -166,9 +166,9 @@ sysctl_del() {
         else
             sysctl -w "$key=$prev" >/dev/null 2>&1 || warn "gagal kembalikan $key live ke $prev"
         fi
-        echo "sysctl $key: dihapus dari cermin, nilai live dikembalikan ke $prev"
+        echo "sysctl $key: deleted from mirror, value live dikembalikan to $prev"
     else
-        echo "sysctl $key: dihapus dari cermin; nilai live bertahan sampai reboot (boot berikutnya memakai default OS)"
+        echo "sysctl $key: deleted from mirror; value live bertahan sampai reboot (boot berikutnya memakai default OS)"
     fi
 }
 
@@ -187,9 +187,9 @@ meaning() {
     esac
 }
 sysctl_show() {
-    echo "Sysctl yang dikelola Titian ($OS) — nilai live saat ini:"
+    echo "Sysctl that dikelola Titian ($OS) — value live current:"
     if [ ! -s "$STATE" ]; then
-        echo "  (belum ada — pakai 'system sysctl <key> <value>' untuk menambah)"
+        echo "  (none yet — pakai 'system sysctl <key> <value>' for menambah)"
         return 0
     fi
     while IFS='=' read -r k v; do

@@ -180,7 +180,7 @@ case "${1:-}" in
         if command -v dmidecode >/dev/null 2>&1; then
             dmidecode 2>/dev/null | head -60
         else
-            echo "dmidecode tidak tersedia (Debian: apt install dmidecode; FreeBSD: pkg install dmidecode)"
+            echo "dmidecode not tersedia (Debian: apt install dmidecode; FreeBSD: pkg install dmidecode)"
         fi
         ;;
     connections)
@@ -205,7 +205,7 @@ case "${1:-}" in
         printf "Kernel........: %s\n" "$(uname -r 2>/dev/null)"
         printf "Kernel build..: %s\n" "$(uname -v 2>/dev/null)"
         printf "Arsitektur....: %s\n" "$(uname -m 2>/dev/null)"
-        printf "Waktu sistem..: %s\n" "$(date 2>/dev/null)"
+        printf "Waktu system..: %s\n" "$(date 2>/dev/null)"
         printf "Waktu WIB.....: %s\n" "$(TZ=Asia/Jakarta date 2>/dev/null)"
         if [ "$OS" = "FreeBSD" ]; then
             printf "Uptime........: %s\n" "$(uptime 2>/dev/null | sed 's/^ *//')"

@@ -56,12 +56,14 @@ upsert() {
     mark_dirty
 }
 
-# delete lines matching regex; fail if none matched
+# delete lines matching regex; idempotent — tidak gagal bila tidak ada
+# (agar `no pipe/rule/...` tetap membersihkan entri CONFIG klish meski
+# baris di conf sudah hilang duluan).
 dellines() {
     _re="$1"; _what="$2"
     touch_conf
     if ! grep -q "$_re" "$CONF" 2>/dev/null; then
-        die "$_what not found"
+        return 0
     fi
     _tmp="$CONF.tmp.$$"
     grep -v "$_re" "$CONF" > "$_tmp" || true
