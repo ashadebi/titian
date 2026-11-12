@@ -9,8 +9,9 @@
 # POSIX sh. Dipanggil dari bird-view sebagai ${RT_SBIN}/titian-redist.sh.
 DIR=$(dirname "$0")
 ROOT=$(dirname "$DIR")
-FILTER="$ROOT/etc/bird.d/filter.conf"
-DIRECT="$ROOT/etc/bird.d/direct.conf"
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+FILTER="$STATE_ROOT/bird.d/filter.conf"
+DIRECT="$STATE_ROOT/bird.d/direct.conf"
 BIRD_SH="$DIR/titian-bird.sh"
 err() { echo "Error: $*" >&2; exit 33; }
 [ -f "$FILTER" ] || err "filter.conf tidak ada: $FILTER"

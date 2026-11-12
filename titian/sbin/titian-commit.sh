@@ -14,6 +14,7 @@
 # diterapkan (dilaporkan apa adanya).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
 FRR_SH="$SBIN_DIR/titian-frr.sh"
@@ -25,8 +26,8 @@ MON_SH="$SBIN_DIR/titian-monitoring.sh"
 err() { echo "Error(commit): $*" >&2; exit 33; }
 
 apply_routing() {
-    # Niat bird/frr dari $ROOT/etc/netstate/routing.intent.
-    local intent="$ROOT/etc/netstate/routing.intent"
+    # Niat bird/frr dari $STATE_ROOT/netstate/routing.intent.
+    local intent="$STATE_ROOT/netstate/routing.intent"
     [ -f /var/run/routing.dirty ] || [ -f "$intent" ] || return 0
     _bird=$(sed -n 's/^bird //p' "$intent" 2>/dev/null | head -1)
     _frr=$(sed -n 's/^frr //p' "$intent" 2>/dev/null | head -1)

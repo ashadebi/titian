@@ -1,7 +1,7 @@
 #!/bin/sh
 # TITIAN BSDRP — monitoring: snmpd / node_exporter / bird_exporter / nfacctd.
 # Semua OFF by default (feature-list §9). `set` hanya mencatat niat di
-# $ROOT/etc/netstate/monitoring.intent + menandai dirty; service
+# $STATE_ROOT/netstate/monitoring.intent + menandai dirty; service
 # naik/berhenti saat `commit` (apply di sini). Community SNMP ditulis
 # ke /usr/local/etc/snmp/snmpd.conf saat apply (rocommunity).
 # Format intent:
@@ -15,7 +15,8 @@
 # di guest: nama service/port bisa berbeda menurut port yang terpasang.
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
-INTENT="$ROOT/etc/netstate/monitoring.intent"
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+INTENT="$STATE_ROOT/netstate/monitoring.intent"
 DIRTY=/var/run/monitoring.dirty
 SNMP_CONF=/usr/local/etc/snmp/snmpd.conf
 PROG="titian-monitoring"
@@ -104,6 +105,34 @@ cmd_show() {
     exit 0
 }
 
+# --- bandwidth (bwm-ng) ---
+fmt_bps() {
+    # $1 = bytes/detik (dari bwm-ng) -> bit/detik, tampil bps/Kbps/Mbps/Gbps (desimal, 1000)
+    _v=${1:-0}
+    awk -v v="$_v" 'BEGIN {
+        b = v * 8
+        if (b >= 1000000000) printf "%.2f Gbps", b/1000000000
+        else if (b >= 1000000) printf "%.2f Mbps", b/1000000
+        else if (b >= 1000) printf "%.2f Kbps", b/1000
+        else printf "%.0f bps", b
+    }'
+}
+
+cmd_bandwidth() {
+    if ! command -v bwm-ng >/dev/null 2>&1; then
+        die "bwm-ng tidak terpasang (FreeBSD: pkg install net-mgmt/bwm-ng; Debian: apt install bwm-ng)"
+    fi
+    _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
+    if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
+    printf 'Bandwidth (bwm-ng, snapshot 1 detik, bps):\n'
+    printf '  %-12s %-12s %-12s %-12s\n' "Interface" "RX" "TX" "Total"
+    printf '%s\n' "$_out" | while IFS=';' read -r _ts _iface _rx _tx _tot _rest; do
+        [ -n "$_iface" ] || continue
+        printf '  %-12s %-12s %-12s %-12s\n' "$_iface" "$(fmt_bps "$_rx")" "$(fmt_bps "$_tx")" "$(fmt_bps "$_tot")"
+    done
+    exit 0
+}
+
 # --- mutations ---
 cmd_set() {
     # $1=service $2=yes|no
@@ -164,9 +193,10 @@ cmd_apply() {
 case "${1:-}" in
     check) cmd_check ;;
     show) cmd_show "${2:-}" ;;
+    bandwidth) cmd_bandwidth ;;
     set) cmd_set "${2:-}" "${3:-}" ;;
     set-community) cmd_set_community "${2:-}" ;;
     apply) cmd_apply ;;
     apply-all) cmd_apply ;;
-    *) echo "Usage: $0 {check|show [service]|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {check|show [service]|bandwidth|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
 esac

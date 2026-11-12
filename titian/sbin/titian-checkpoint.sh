@@ -4,7 +4,7 @@
 # beberapa titik, melihat daftarnya, lalu memilih mau balik ke titik
 # yang mana. Bukan "undo satu langkah".
 #
-# Isi satu checkpoint (di /opt/titian/etc/checkpoints/<nama>/):
+# Isi satu checkpoint (di /etc/titian/checkpoints/<nama>/):
 #   running-config  — dump running-config saat titik dibuat, TANPA
 #                     baris stempel (! version / ! last commit).
 #                     Alasan: stempel adalah metadata save, bukan
@@ -67,11 +67,12 @@
 set -u
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 BIN=$ROOT/bin
 if [ ! -x "$BIN/clish" ] && [ -x /usr/local/bin/clish ]; then BIN=/usr/local/bin; fi
 SBIN=${RT_SBIN:-$ROOT/sbin}
-STATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
-CKPT_DIR=$ROOT/etc/checkpoints
+STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
+CKPT_DIR=$STATE_ROOT/checkpoints
 SOCKFILE=/tmp/konfd.socket
 
 err() { echo "Error: $*" >&2; exit 33; }
@@ -141,7 +142,7 @@ snapshot_files() {
         mv "$d/running-config.tmp" "$d/running-config" || return 1
     [ -f "$conf" ] && cp -f "$conf" "$d/bird.conf"
     mkdir -p "$d/bird.d" "$d/netstate" || return 1
-    for f in "$ROOT/etc/bird.d/"*.conf; do
+    for f in "$STATE_ROOT/bird.d/"*.conf; do
         [ -e "$f" ] || continue
         case "$f" in *.cli-bak|*.pkgsave) continue ;; esac
         cp -f "$f" "$d/bird.d/" 2>/dev/null || true
@@ -152,8 +153,8 @@ snapshot_files() {
             cp -f "$f" "$d/netstate/" 2>/dev/null || true
         done
     fi
-    [ -f "$ROOT/etc/sysctl.titian" ] && cp -f "$ROOT/etc/sysctl.titian" "$d/sysctl.titian"
-    [ -f "$ROOT/etc/sysctl.titian.prev" ] && cp -f "$ROOT/etc/sysctl.titian.prev" "$d/sysctl.titian.prev"
+    [ -f "$STATE_ROOT/sysctl.titian" ] && cp -f "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
+    [ -f "$STATE_ROOT/sysctl.titian.prev" ] && cp -f "$STATE_ROOT/sysctl.titian.prev" "$d/sysctl.titian.prev"
     chmod 700 "$d" "$d/bird.d" "$d/netstate" 2>/dev/null || true
     chmod 600 "$d/running-config" "$d/bird.conf" "$d/meta" 2>/dev/null || true
     return 0
@@ -197,7 +198,7 @@ cmd_snapshot_last_save() {
     local d="$CKPT_DIR/.last-save"
     mkdir -p "$CKPT_DIR" 2>/dev/null || { warn "gagal mkdir $CKPT_DIR"; return 0; }
     mkdir -p "$d" 2>/dev/null || { warn "gagal mkdir $d"; return 0; }
-    if ! snapshot_files "$d" "$ROOT/etc/startup-config"; then
+    if ! snapshot_files "$d" "$STATE_ROOT/startup-config"; then
         warn "gagal memotret .last-save (save tetap berhasil)"
         return 0
     fi
@@ -410,7 +411,7 @@ prune_all() {
         done
     fi
     # (d) sysctl global ekstra
-    prune_sysctls "$ROOT/etc/sysctl.titian" "$d/sysctl.titian"
+    prune_sysctls "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
     # (e) interface buatan Titian yang mengendap — TERAKHIR:
     #     header seksi `interface <tipe> <nama>` di dump saat ini
     #     tapi tidak di titik
@@ -442,7 +443,7 @@ restore_files() {
     # netstate + sysctl dari titik (menimpa penuh)
     local d=$1 conf f
     conf=$(bird_conf_path)
-    cp -f "$d/running-config" "$ROOT/etc/startup-config" || return 1
+    cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
     # MODE FILE LIVE (perbaikan 2 Nov 2026): cp FreeBSD MENULAR mode
     # sumber ke tujuan yang sudah ada (terbukti di lab: cp -f src600
     # dst644 -> dst 600), sementara file snapshot sengaja 600
@@ -452,24 +453,24 @@ restore_files() {
     # checkpoint (1 Nov 22:29). GNU cp Linux mempertahankan mode
     # tujuan, jadi chmod ini no-op di sana; tapi tetap ditulis
     # eksplisit agar restore tidak bergantung pada perilaku cp.
-    # Mode live yang benar: 644 (semua saudara file di /opt/titian/etc
+    # Mode live yang benar: 644 (semua saudara file di /etc/titian
     # dan /usr/local/etc FreeBSD 644; startup-config Debian 644).
     # bird.conf Debian DIKECUALIKAN: normanya 640 bird:bird di dir
     # 750 (hanya via sudo) — jangan dilebarkan.
-    chmod 644 "$ROOT/etc/startup-config" 2>/dev/null || true
+    chmod 644 "$STATE_ROOT/startup-config" 2>/dev/null || true
     if [ -f "$d/bird.conf" ]; then
         cp -f "$d/bird.conf" "$conf" || return 1
         if [ "$OS" = "FreeBSD" ]; then chmod 644 "$conf" 2>/dev/null || true; fi
     fi
     if [ -d "$d/bird.d" ]; then
-        for f in "$ROOT/etc/bird.d/"*.conf; do
+        for f in "$STATE_ROOT/bird.d/"*.conf; do
             [ -e "$f" ] || continue
             case "$f" in *.cli-bak|*.pkgsave) continue ;; esac
             rm -f "$f"
         done
         for f in "$d/bird.d/"*.conf; do
             [ -e "$f" ] || continue
-            cp -f "$f" "$ROOT/etc/bird.d/" 2>/dev/null || true
+            cp -f "$f" "$STATE_ROOT/bird.d/" 2>/dev/null || true
         done
     fi
     rm -rf "$STATE_DIR" 2>/dev/null || true
@@ -480,10 +481,10 @@ restore_files() {
             cp -f "$f" "$STATE_DIR/" 2>/dev/null || true
         done
     fi
-    if [ -f "$d/sysctl.titian" ]; then cp -f "$d/sysctl.titian" "$ROOT/etc/sysctl.titian";
-    else rm -f "$ROOT/etc/sysctl.titian"; fi
-    if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$ROOT/etc/sysctl.titian.prev";
-    else rm -f "$ROOT/etc/sysctl.titian.prev"; fi
+    if [ -f "$d/sysctl.titian" ]; then cp -f "$d/sysctl.titian" "$STATE_ROOT/sysctl.titian";
+    else rm -f "$STATE_ROOT/sysctl.titian"; fi
+    if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$STATE_ROOT/sysctl.titian.prev";
+    else rm -f "$STATE_ROOT/sysctl.titian.prev"; fi
     return 0
 }
 

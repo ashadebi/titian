@@ -8,7 +8,7 @@
 # Urutan wajib generate: render -> validasi varian (braces `case` +
 # atribut `scope`) -> backup config lama -> bird -p -c (cek sintaks;
 # gagal = BERHENTI, tidak ada terap paksa) -> birdc configure.
-# Section hidup di /opt/titian/etc/bird.d/<section>.conf; bird.conf
+# Section hidup di /etc/titian/bird.d/<section>.conf; bird.conf
 # dipotong per marker gaya rtcli (#-BGP-# ... #-ENDBGP-#, dst).
 # Satu section ditulis ulang tanpa menyentuh section lain.
 #
@@ -21,9 +21,10 @@
 # POSIX sh.
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
-INTENT="$ROOT/etc/netstate/routing.intent"
+INTENT="$STATE_ROOT/netstate/routing.intent"
 DIRTY=/var/run/routing.dirty
 err() { echo "Error: $*" >&2; exit 33; }
 
@@ -281,7 +282,7 @@ render() {
     sm="#-${mark}-#"
     em="#-END${mark}-#"
     conf=$(conf_path)
-    src="$ROOT/etc/bird.d/$section.conf"
+    src="$STATE_ROOT/bird.d/$section.conf"
     [ -f "$src" ] || err "sumber section tidak ada: $src"
     [ -f "$conf" ] || err "bird.conf tidak ada: $conf"
     grep -qF -- "$sm" "$conf" || err "marker $sm tidak ditemukan di $conf"
@@ -326,7 +327,7 @@ do_generate() {
         exit 33
     fi
     conf=$(conf_path)
-    bakdir="$ROOT/etc/bird-backup"
+    bakdir="$STATE_ROOT/bird-backup"
     mkdir -p "$bakdir" || err "gagal mkdir $bakdir"
     ts=$(date +%Y%m%d-%H%M%S)
     cp -f "$conf" "$bakdir/bird.conf.$ts" || { rm -f "$tmp"; err "gagal backup $conf"; }
@@ -385,7 +386,7 @@ do_set_threads() {
         echo "$out" >&2; rm -f "$_tmp"
         err "parse GAGAL: threads $n (bird.conf tidak diubah)"
     fi
-    cp -f "$conf" "$ROOT/etc/bird-backup/bird.conf.threads-bak" 2>/dev/null || true
+    cp -f "$conf" "$STATE_ROOT/bird-backup/bird.conf.threads-bak" 2>/dev/null || true
     cat "$_tmp" > "$conf" || { rm -f "$_tmp"; err "gagal tulis $conf"; }
     rm -f "$_tmp"
     echo "threads $n ditulis ke $conf"

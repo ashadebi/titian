@@ -42,7 +42,7 @@
 <!--// save running config, insert ver + track commit //-->
   <COMMAND name="save"
           help="Save running-config to startup-config">
-    <CONFIG operation="dump" file="/opt/titian/etc/startup-config"/>
+    <CONFIG operation="dump" file="/etc/titian/startup-config"/>
       <ACTION>
             if test ! -S "${RT_SOCK}"; then
                 echo "error: socket not ready.."

@@ -11,7 +11,7 @@
 #       FreeBSD: blok marker #-TITIAN-# ... #-ENDTITIAN-# di
 #               /etc/sysctl.conf (rc sysctl). Baris di luar blok
 #               tidak pernah disentuh.
-#  Sumber cermin = state file $ROOT/etc/sysctl.titian (bukan parsing
+#  Sumber cermin = state file $STATE_ROOT/sysctl.titian (bukan parsing
 #  file OS). Nilai sebelum-set pertama dicatat di sysctl.titian.prev
 #  agar `no system sysctl` bisa mengembalikan nilai live semula;
 #  bila nilai awal tidak tercatat, nilai live bertahan sampai reboot
@@ -27,8 +27,9 @@
 set -u
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE="$ROOT/etc/sysctl.titian"
-PREV="$ROOT/etc/sysctl.titian.prev"
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE="$STATE_ROOT/sysctl.titian"
+PREV="$STATE_ROOT/sysctl.titian.prev"
 
 err() { echo "Error: $*" >&2; exit 33; }
 warn() { echo "Warning(sysctl): $*" >&2; }

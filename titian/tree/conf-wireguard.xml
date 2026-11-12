@@ -6,8 +6,8 @@
     <!--=======================================================-->
     <!-- WireGuard native (if_wg) — BSDRP port (BARU).
          Backend: ${RT_SBIN}/titian-wireguard.sh. State klish di
-         /opt/titian/etc/netstate/wireguard/<nama>.conf; private key
-         di /opt/titian/etc/wireguard/<nama>.key (mode 600, TIDAK
+         /etc/titian/netstate/wireguard/<nama>.conf; private key
+         di /etc/titian/wireguard/<nama>.key (mode 600, TIDAK
          pernah dicetak ulang — `generate-key` hanya menampilkan
          public key sekali).
          `enable` hanya mencatat niat + dirty; interface dibuat +

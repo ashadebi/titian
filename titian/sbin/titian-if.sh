@@ -82,7 +82,7 @@ valid_prefix_v6() {
 }
 
 # --- state persisten (sumber regenerasi .network/rc.conf) ---
-STATE_DIR=${TITIAN_STATE_DIR:-/opt/titian/etc/netstate}
+STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 state_add() {
     # $1=iface $2=line ("inet <cidr>" | "inet <local> peer <peer>" | "inet6 <cidr>")
     mkdir -p "$STATE_DIR" 2>/dev/null || return 0

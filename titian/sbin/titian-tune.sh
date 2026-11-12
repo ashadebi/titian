@@ -55,7 +55,8 @@
 set -u
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 PERSIST=${RT_SBIN:-$ROOT/sbin}/titian-persist.sh
 
 err() { echo "Error: $*" >&2; exit 33; }

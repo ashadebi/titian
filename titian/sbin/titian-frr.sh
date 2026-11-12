@@ -1,7 +1,7 @@
 #!/bin/sh
 # TITIAN BSDRP — FRR (net/frr10) via klish.
 # - Enable/disable TIDAK langsung start/stop service: hanya mencatat
-#   niat di $ROOT/etc/netstate/routing.intent (format sama dengan
+#   niat di $STATE_ROOT/netstate/routing.intent (format sama dengan
 #   titian-bird.sh) + menandai /var/run/routing.dirty; yang menaikkan
 #   service adalah `commit` (titian-commit.sh -> frr-apply di sini).
 #   Alasan: commit = tulis file + service langsung naik.
@@ -12,9 +12,10 @@
 # POSIX sh.
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
-INTENT="$ROOT/etc/netstate/routing.intent"
+INTENT="$STATE_ROOT/netstate/routing.intent"
 DIRTY=/var/run/routing.dirty
 FRR_CONF=/usr/local/etc/frr/frr.conf
 err() { echo "Error: $*" >&2; exit 33; }

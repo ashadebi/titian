@@ -169,6 +169,15 @@
             ${RT_SBIN}/titian-monitoring.sh show "${service}"
         </ACTION>
     </COMMAND>
+
+    <COMMAND name="show monitoring bandwidth"
+        help="Bandwidth live per interface (bwm-ng, snapshot 1 detik)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-monitoring.sh bandwidth
+        </ACTION>
+    </COMMAND>
 </VIEW>
 
 </CLISH_MODULE>

@@ -461,7 +461,7 @@ X
 Xrun_rc_command "$1"
 4b1d54a73151e108ee1f21ef05eba0e0
 echo x - net/titian/files/sbin/titian-bird.sh
-sed 's/^X//' >net/titian/files/sbin/titian-bird.sh << 'cc2f168c410baf438ffbc38f333b1c99'
+sed 's/^X//' >net/titian/files/sbin/titian-bird.sh << 'a58b662331094dd8dba5455f298a0b05'
 X#!/bin/sh
 X# TITIAN BSDRP — BIRD per-section generator + deteksi varian bird2/bird3
 X# + mutual exclusion bird vs FRR.
@@ -472,7 +472,7 @@ X#
 X# Urutan wajib generate: render -> validasi varian (braces `case` +
 X# atribut `scope`) -> backup config lama -> bird -p -c (cek sintaks;
 X# gagal = BERHENTI, tidak ada terap paksa) -> birdc configure.
-X# Section hidup di /opt/titian/etc/bird.d/<section>.conf; bird.conf
+X# Section hidup di /etc/titian/bird.d/<section>.conf; bird.conf
 X# dipotong per marker gaya rtcli (#-BGP-# ... #-ENDBGP-#, dst).
 X# Satu section ditulis ulang tanpa menyentuh section lain.
 X#
@@ -485,9 +485,10 @@ X# sesi tanpa commit tidak boleh mengubah service yang jalan.
 X# POSIX sh.
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XSBIN_DIR=$(dirname "$0")
 XBIRD_SH="$SBIN_DIR/titian-bird.sh"
-XINTENT="$ROOT/etc/netstate/routing.intent"
+XINTENT="$STATE_ROOT/netstate/routing.intent"
 XDIRTY=/var/run/routing.dirty
 Xerr() { echo "Error: $*" >&2; exit 33; }
 X
@@ -745,7 +746,7 @@ X    mark=$(marker_of "$section")
 X    sm="#-${mark}-#"
 X    em="#-END${mark}-#"
 X    conf=$(conf_path)
-X    src="$ROOT/etc/bird.d/$section.conf"
+X    src="$STATE_ROOT/bird.d/$section.conf"
 X    [ -f "$src" ] || err "sumber section tidak ada: $src"
 X    [ -f "$conf" ] || err "bird.conf tidak ada: $conf"
 X    grep -qF -- "$sm" "$conf" || err "marker $sm tidak ditemukan di $conf"
@@ -790,7 +791,7 @@ X        rm -f "$tmp"
 X        exit 33
 X    fi
 X    conf=$(conf_path)
-X    bakdir="$ROOT/etc/bird-backup"
+X    bakdir="$STATE_ROOT/bird-backup"
 X    mkdir -p "$bakdir" || err "gagal mkdir $bakdir"
 X    ts=$(date +%Y%m%d-%H%M%S)
 X    cp -f "$conf" "$bakdir/bird.conf.$ts" || { rm -f "$tmp"; err "gagal backup $conf"; }
@@ -849,7 +850,7 @@ X    if ! out=$("$(bird_bin)" -p -c "$_tmp" 2>&1); then
 X        echo "$out" >&2; rm -f "$_tmp"
 X        err "parse GAGAL: threads $n (bird.conf tidak diubah)"
 X    fi
-X    cp -f "$conf" "$ROOT/etc/bird-backup/bird.conf.threads-bak" 2>/dev/null || true
+X    cp -f "$conf" "$STATE_ROOT/bird-backup/bird.conf.threads-bak" 2>/dev/null || true
 X    cat "$_tmp" > "$conf" || { rm -f "$_tmp"; err "gagal tulis $conf"; }
 X    rm -f "$_tmp"
 X    echo "threads $n ditulis ke $conf"
@@ -929,15 +930,16 @@ X    show-routing) do_show_routing ;;
 X    show-version) do_show_version ;;
 X    *) echo "Usage: $0 {conf-path|detect|check|generate|reload-filters|set-threads N|bird-enable|bird-disable|check-exclusion bird|frr|commit|show-routing|show-version} [section]" >&2; exit 2 ;;
 Xesac
-cc2f168c410baf438ffbc38f333b1c99
+a58b662331094dd8dba5455f298a0b05
 echo x - net/titian/files/sbin/titian-boot.sh
-sed 's/^X//' >net/titian/files/sbin/titian-boot.sh << '4938d9f81eb2c0d8fa38d4bd3f77944f'
+sed 's/^X//' >net/titian/files/sbin/titian-boot.sh << 'c0014d811ca525b442086d07eff8f132'
 X#!/bin/sh
 X# TITIAN Fase 1 — boot service: jalankan konfd (bila belum jalan)
 X# lalu replay startup-config gaya rtcli init-rtcli.
 X# Dipanggil systemd unit (Debian) / rc script (FreeBSD).
 X# POSIX sh.
 XROOT=${TITIAN_ROOT:-/opt/titian}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XBIN=$ROOT/bin
 Xif [ ! -x "$BIN/konfd" ] && [ -x /usr/local/bin/konfd ]; then
 X    BIN=/usr/local/bin
@@ -987,8 +989,8 @@ X    kldload if_vxlan 2>/dev/null || true
 Xfi
 X
 X# replay startup-config (bila ada) — idempotent (replace semantics)
-Xif [ -f "$ROOT/etc/startup-config" ]; then
-X    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$ROOT/etc/startup-config" 2>&1 | tee /var/log/titian-replay.log
+Xif [ -f "$STATE_ROOT/startup-config" ]; then
+X    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$STATE_ROOT/startup-config" 2>&1 | tee /var/log/titian-replay.log
 Xfi
 X
 X# jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat
@@ -1035,16 +1037,16 @@ Xif [ -x "$ROOT/sbin/titian-commit.sh" ]; then
 X    "$ROOT/sbin/titian-commit.sh" apply-all 2>/dev/null || true
 Xfi
 Xexit 0
-4938d9f81eb2c0d8fa38d4bd3f77944f
+c0014d811ca525b442086d07eff8f132
 echo x - net/titian/files/sbin/titian-checkpoint.sh
-sed 's/^X//' >net/titian/files/sbin/titian-checkpoint.sh << '269f43508c08ddd43ea99346dbc7dcb2'
+sed 's/^X//' >net/titian/files/sbin/titian-checkpoint.sh << 'cd6125caeb19fa0f1428455ffc46eba4'
 X#!/bin/sh
 X# TITIAN — checkpoint + rollback.
 X# Checkpoint = TITIK SIMPAN BERNAMA dari konfigurasi. User membuat
 X# beberapa titik, melihat daftarnya, lalu memilih mau balik ke titik
 X# yang mana. Bukan "undo satu langkah".
 X#
-X# Isi satu checkpoint (di /opt/titian/etc/checkpoints/<nama>/):
+X# Isi satu checkpoint (di /etc/titian/checkpoints/<nama>/):
 X#   running-config  — dump running-config saat titik dibuat, TANPA
 X#                     baris stempel (! version / ! last commit).
 X#                     Alasan: stempel adalah metadata save, bukan
@@ -1107,11 +1109,12 @@ X# POSIX sh (jalan di dash Debian dan sh FreeBSD).
 Xset -u
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XBIN=$ROOT/bin
 Xif [ ! -x "$BIN/clish" ] && [ -x /usr/local/bin/clish ]; then BIN=/usr/local/bin; fi
 XSBIN=${RT_SBIN:-$ROOT/sbin}
-XSTATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
-XCKPT_DIR=$ROOT/etc/checkpoints
+XSTATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
+XCKPT_DIR=$STATE_ROOT/checkpoints
 XSOCKFILE=/tmp/konfd.socket
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
@@ -1181,7 +1184,7 @@ X    grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$src" > "
 X        mv "$d/running-config.tmp" "$d/running-config" || return 1
 X    [ -f "$conf" ] && cp -f "$conf" "$d/bird.conf"
 X    mkdir -p "$d/bird.d" "$d/netstate" || return 1
-X    for f in "$ROOT/etc/bird.d/"*.conf; do
+X    for f in "$STATE_ROOT/bird.d/"*.conf; do
 X        [ -e "$f" ] || continue
 X        case "$f" in *.cli-bak|*.pkgsave) continue ;; esac
 X        cp -f "$f" "$d/bird.d/" 2>/dev/null || true
@@ -1192,8 +1195,8 @@ X            [ -e "$f" ] || continue
 X            cp -f "$f" "$d/netstate/" 2>/dev/null || true
 X        done
 X    fi
-X    [ -f "$ROOT/etc/sysctl.titian" ] && cp -f "$ROOT/etc/sysctl.titian" "$d/sysctl.titian"
-X    [ -f "$ROOT/etc/sysctl.titian.prev" ] && cp -f "$ROOT/etc/sysctl.titian.prev" "$d/sysctl.titian.prev"
+X    [ -f "$STATE_ROOT/sysctl.titian" ] && cp -f "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
+X    [ -f "$STATE_ROOT/sysctl.titian.prev" ] && cp -f "$STATE_ROOT/sysctl.titian.prev" "$d/sysctl.titian.prev"
 X    chmod 700 "$d" "$d/bird.d" "$d/netstate" 2>/dev/null || true
 X    chmod 600 "$d/running-config" "$d/bird.conf" "$d/meta" 2>/dev/null || true
 X    return 0
@@ -1237,7 +1240,7 @@ X    # Sumber running-config = startup-config yang baru ditulis save.
 X    local d="$CKPT_DIR/.last-save"
 X    mkdir -p "$CKPT_DIR" 2>/dev/null || { warn "gagal mkdir $CKPT_DIR"; return 0; }
 X    mkdir -p "$d" 2>/dev/null || { warn "gagal mkdir $d"; return 0; }
-X    if ! snapshot_files "$d" "$ROOT/etc/startup-config"; then
+X    if ! snapshot_files "$d" "$STATE_ROOT/startup-config"; then
 X        warn "gagal memotret .last-save (save tetap berhasil)"
 X        return 0
 X    fi
@@ -1450,7 +1453,7 @@ X            prune_tuning "$name" "$f" "$d/netstate/$name.tuning"
 X        done
 X    fi
 X    # (d) sysctl global ekstra
-X    prune_sysctls "$ROOT/etc/sysctl.titian" "$d/sysctl.titian"
+X    prune_sysctls "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
 X    # (e) interface buatan Titian yang mengendap — TERAKHIR:
 X    #     header seksi `interface <tipe> <nama>` di dump saat ini
 X    #     tapi tidak di titik
@@ -1482,7 +1485,7 @@ X    # $1=dir-titik — tulis startup-config + bird.conf + bird.d +
 X    # netstate + sysctl dari titik (menimpa penuh)
 X    local d=$1 conf f
 X    conf=$(bird_conf_path)
-X    cp -f "$d/running-config" "$ROOT/etc/startup-config" || return 1
+X    cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
 X    # MODE FILE LIVE (perbaikan 2 Nov 2026): cp FreeBSD MENULAR mode
 X    # sumber ke tujuan yang sudah ada (terbukti di lab: cp -f src600
 X    # dst644 -> dst 600), sementara file snapshot sengaja 600
@@ -1492,24 +1495,24 @@ X    # terjadi pada bird.conf + startup-config FreeBSD sesudah fitur
 X    # checkpoint (1 Nov 22:29). GNU cp Linux mempertahankan mode
 X    # tujuan, jadi chmod ini no-op di sana; tapi tetap ditulis
 X    # eksplisit agar restore tidak bergantung pada perilaku cp.
-X    # Mode live yang benar: 644 (semua saudara file di /opt/titian/etc
+X    # Mode live yang benar: 644 (semua saudara file di /etc/titian
 X    # dan /usr/local/etc FreeBSD 644; startup-config Debian 644).
 X    # bird.conf Debian DIKECUALIKAN: normanya 640 bird:bird di dir
 X    # 750 (hanya via sudo) — jangan dilebarkan.
-X    chmod 644 "$ROOT/etc/startup-config" 2>/dev/null || true
+X    chmod 644 "$STATE_ROOT/startup-config" 2>/dev/null || true
 X    if [ -f "$d/bird.conf" ]; then
 X        cp -f "$d/bird.conf" "$conf" || return 1
 X        if [ "$OS" = "FreeBSD" ]; then chmod 644 "$conf" 2>/dev/null || true; fi
 X    fi
 X    if [ -d "$d/bird.d" ]; then
-X        for f in "$ROOT/etc/bird.d/"*.conf; do
+X        for f in "$STATE_ROOT/bird.d/"*.conf; do
 X            [ -e "$f" ] || continue
 X            case "$f" in *.cli-bak|*.pkgsave) continue ;; esac
 X            rm -f "$f"
 X        done
 X        for f in "$d/bird.d/"*.conf; do
 X            [ -e "$f" ] || continue
-X            cp -f "$f" "$ROOT/etc/bird.d/" 2>/dev/null || true
+X            cp -f "$f" "$STATE_ROOT/bird.d/" 2>/dev/null || true
 X        done
 X    fi
 X    rm -rf "$STATE_DIR" 2>/dev/null || true
@@ -1520,10 +1523,10 @@ X            [ -e "$f" ] || continue
 X            cp -f "$f" "$STATE_DIR/" 2>/dev/null || true
 X        done
 X    fi
-X    if [ -f "$d/sysctl.titian" ]; then cp -f "$d/sysctl.titian" "$ROOT/etc/sysctl.titian";
-X    else rm -f "$ROOT/etc/sysctl.titian"; fi
-X    if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$ROOT/etc/sysctl.titian.prev";
-X    else rm -f "$ROOT/etc/sysctl.titian.prev"; fi
+X    if [ -f "$d/sysctl.titian" ]; then cp -f "$d/sysctl.titian" "$STATE_ROOT/sysctl.titian";
+X    else rm -f "$STATE_ROOT/sysctl.titian"; fi
+X    if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$STATE_ROOT/sysctl.titian.prev";
+X    else rm -f "$STATE_ROOT/sysctl.titian.prev"; fi
 X    return 0
 X}
 X
@@ -1640,9 +1643,9 @@ X    rollback) cmd_rollback "${2:-}" ;;
 X    dump-running) dump_running "${2:-/dev/stdout}" ;;
 X    *) echo "Usage: $0 {save <nama>|snapshot-last-save|list|delete <nama>|rollback [nama]|dump-running <file>}" >&2; exit 2 ;;
 Xesac
-269f43508c08ddd43ea99346dbc7dcb2
+cd6125caeb19fa0f1428455ffc46eba4
 echo x - net/titian/files/sbin/titian-comm.sh
-sed 's/^X//' >net/titian/files/sbin/titian-comm.sh << '1c1d09dd0ca0825a4ecbcaf697623597'
+sed 's/^X//' >net/titian/files/sbin/titian-comm.sh << '23a974ecc59f8dfd247435854540a23e'
 X#!/bin/sh
 X# TITIAN — kelola community BGP lewat CLI (bird-view).
 X# Pola: edit bird.d/filter.conf -> generate check filter (parse saja) ->
@@ -1657,7 +1660,8 @@ X# Aksi import-match: reject | localpref:N | med:N
 X# POSIX sh. Dipanggil dari bird-view sebagai ${RT_SBIN}/titian-comm.sh.
 XDIR=$(dirname "$0")
 XROOT=$(dirname "$DIR")
-XFILTER="$ROOT/etc/bird.d/filter.conf"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XFILTER="$STATE_ROOT/bird.d/filter.conf"
 XBIRD_SH="$DIR/titian-bird.sh"
 Xerr() { echo "Error: $*" >&2; exit 33; }
 X[ -f "$FILTER" ] || err "filter.conf tidak ada: $FILTER"
@@ -1866,9 +1870,9 @@ X    import-del)   import_del "$2" ;;
 X    import-show)  import_show ;;
 X    *) echo "Usage: $0 {list-add|list-del|list-show|export-add|export-del|export-show|import-add|import-del|import-show} ..." >&2; exit 2 ;;
 Xesac
-1c1d09dd0ca0825a4ecbcaf697623597
+23a974ecc59f8dfd247435854540a23e
 echo x - net/titian/files/sbin/titian-commit.sh
-sed 's/^X//' >net/titian/files/sbin/titian-commit.sh << '9febba63481ecfb2dee9cb35f85ae4bf'
+sed 's/^X//' >net/titian/files/sbin/titian-commit.sh << '78ddc3facc906af5cd922cf1c78abcad'
 X#!/bin/sh
 X# TITIAN BSDRP — commit: terapkan semua niat pending + cek penghalang.
 X# Semantik (feature-list §1): commit = tulis file + service langsung
@@ -1885,6 +1889,7 @@ X# untuk langkah itu; langkah sebelumnya yang sudah diterapkan tetap
 X# diterapkan (dilaporkan apa adanya).
 X# POSIX sh.
 XROOT=${TITIAN_ROOT:-/opt/titian}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XSBIN_DIR=$(dirname "$0")
 XBIRD_SH="$SBIN_DIR/titian-bird.sh"
 XFRR_SH="$SBIN_DIR/titian-frr.sh"
@@ -1896,8 +1901,8 @@ XMON_SH="$SBIN_DIR/titian-monitoring.sh"
 Xerr() { echo "Error(commit): $*" >&2; exit 33; }
 X
 Xapply_routing() {
-X    # Niat bird/frr dari $ROOT/etc/netstate/routing.intent.
-X    local intent="$ROOT/etc/netstate/routing.intent"
+X    # Niat bird/frr dari $STATE_ROOT/netstate/routing.intent.
+X    local intent="$STATE_ROOT/netstate/routing.intent"
 X    [ -f /var/run/routing.dirty ] || [ -f "$intent" ] || return 0
 X    _bird=$(sed -n 's/^bird //p' "$intent" 2>/dev/null | head -1)
 X    _frr=$(sed -n 's/^frr //p' "$intent" 2>/dev/null | head -1)
@@ -2011,9 +2016,9 @@ X    commit) do_commit ;;
 X    apply-all) do_apply_all ;;
 X    *) echo "Usage: $0 {check|commit|apply-all}" >&2; exit 2 ;;
 Xesac
-9febba63481ecfb2dee9cb35f85ae4bf
+78ddc3facc906af5cd922cf1c78abcad
 echo x - net/titian/files/sbin/titian-filter.sh
-sed 's/^X//' >net/titian/files/sbin/titian-filter.sh << '7cfe35d6635eb21afd548553febf0439'
+sed 's/^X//' >net/titian/files/sbin/titian-filter.sh << 'a05e9c083126d48003cc6ba9c015176c'
 X#!/bin/sh
 X# TITIAN — tempel/lepas filter BIRD ke protokol lewat CLI (bird-view).
 X# Pola: cari blok protokol di bird.d/*.conf -> edit baris import/export
@@ -2035,7 +2040,8 @@ X# multi-baris (import filter { ... }) ditolak tertutup, tanpa perubahan.
 X# POSIX sh. Dipanggil dari bird-view sebagai ${RT_SBIN}/titian-filter.sh.
 XDIR=$(dirname "$0")
 XROOT=$(dirname "$DIR")
-XBIRDD="$ROOT/etc/bird.d"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XBIRDD="$STATE_ROOT/bird.d"
 XFILTER="$BIRDD/filter.conf"
 XBIRD_SH="$DIR/titian-bird.sh"
 Xerr() { echo "Error: $*" >&2; exit 33; }
@@ -2284,13 +2290,13 @@ X    detach) do_detach "$2" "$3" ;;
 X    show)   do_show "$2" ;;
 X    *) echo "Usage: $0 {attach <proto> <import|export> <filter>|detach <proto> <import|export>|show <proto>}" >&2; exit 2 ;;
 Xesac
-7cfe35d6635eb21afd548553febf0439
+a05e9c083126d48003cc6ba9c015176c
 echo x - net/titian/files/sbin/titian-frr.sh
-sed 's/^X//' >net/titian/files/sbin/titian-frr.sh << 'cdb9848e1fa6fbbd5dcee3ee615deecc'
+sed 's/^X//' >net/titian/files/sbin/titian-frr.sh << '36ca47f45615e6251e0216b63a1899b8'
 X#!/bin/sh
 X# TITIAN BSDRP — FRR (net/frr10) via klish.
 X# - Enable/disable TIDAK langsung start/stop service: hanya mencatat
-X#   niat di $ROOT/etc/netstate/routing.intent (format sama dengan
+X#   niat di $STATE_ROOT/netstate/routing.intent (format sama dengan
 X#   titian-bird.sh) + menandai /var/run/routing.dirty; yang menaikkan
 X#   service adalah `commit` (titian-commit.sh -> frr-apply di sini).
 X#   Alasan: commit = tulis file + service langsung naik.
@@ -2301,9 +2307,10 @@ X#   TIDAK mendefinisikan/menyentuh `cli`.
 X# POSIX sh.
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XSBIN_DIR=$(dirname "$0")
 XBIRD_SH="$SBIN_DIR/titian-bird.sh"
-XINTENT="$ROOT/etc/netstate/routing.intent"
+XINTENT="$STATE_ROOT/netstate/routing.intent"
 XDIRTY=/var/run/routing.dirty
 XFRR_CONF=/usr/local/etc/frr/frr.conf
 Xerr() { echo "Error: $*" >&2; exit 33; }
@@ -2483,7 +2490,7 @@ X    show) do_show ;;
 X    show-version) do_show_version ;;
 X    *) echo "Usage: $0 {check|frr-enable|frr-disable|frr-apply|set-router-id IP|del-router-id|set-log syslog|none|write-memory|show|show-version}" >&2; exit 2 ;;
 Xesac
-cdb9848e1fa6fbbd5dcee3ee615deecc
+36ca47f45615e6251e0216b63a1899b8
 echo x - net/titian/files/sbin/titian-fw.sh
 sed 's/^X//' >net/titian/files/sbin/titian-fw.sh << '2e7410561deaf0cb316d03d10a75e32b'
 X#!/bin/sh
@@ -3115,7 +3122,7 @@ X    *) echo "Usage: $0 {eth|vlan|bond|lagg|dummy|all}" >&2; exit 2 ;;
 Xesac
 0af7efe8cac198c42d578df1c0f2be19
 echo x - net/titian/files/sbin/titian-if.sh
-sed 's/^X//' >net/titian/files/sbin/titian-if.sh << '229879aae358df49eb134deb8a7c95f3'
+sed 's/^X//' >net/titian/files/sbin/titian-if.sh << '2b9cc0312f0ed87b98a174b9081e15a1'
 X#!/bin/sh
 X# TITIAN Fase 1 — operasi address interface (dipakai perintah
 X# `ip address` / `ipv6 address` di semua if-view, Linux + FreeBSD).
@@ -3200,7 +3207,7 @@ X    [ "$1" -ge 0 ] 2>/dev/null && [ "$1" -le 128 ] 2>/dev/null
 X}
 X
 X# --- state persisten (sumber regenerasi .network/rc.conf) ---
-XSTATE_DIR=${TITIAN_STATE_DIR:-/opt/titian/etc/netstate}
+XSTATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 Xstate_add() {
 X    # $1=iface $2=line ("inet <cidr>" | "inet <local> peer <peer>" | "inet6 <cidr>")
 X    mkdir -p "$STATE_DIR" 2>/dev/null || return 0
@@ -3364,13 +3371,13 @@ X    addr6-add) addr6_add "$2" "$3" "${4:-}" ;;
 X    addr6-del) addr6_del "$2" "$3" "${4:-}" ;;
 X    *) echo "Usage: $0 {addr-add|addr-set|addr-del|addr6-add|addr6-del} <iface> <cidr> [peer]" >&2; exit 2 ;;
 Xesac
-229879aae358df49eb134deb8a7c95f3
+2b9cc0312f0ed87b98a174b9081e15a1
 echo x - net/titian/files/sbin/titian-monitoring.sh
-sed 's/^X//' >net/titian/files/sbin/titian-monitoring.sh << '8e6f6f0f1eb4113e7bc4951340a79e31'
+sed 's/^X//' >net/titian/files/sbin/titian-monitoring.sh << '727083b5db7a517affc5dc4ce29b0924'
 X#!/bin/sh
 X# TITIAN BSDRP — monitoring: snmpd / node_exporter / bird_exporter / nfacctd.
 X# Semua OFF by default (feature-list §9). `set` hanya mencatat niat di
-X# $ROOT/etc/netstate/monitoring.intent + menandai dirty; service
+X# $STATE_ROOT/netstate/monitoring.intent + menandai dirty; service
 X# naik/berhenti saat `commit` (apply di sini). Community SNMP ditulis
 X# ke /usr/local/etc/snmp/snmpd.conf saat apply (rocommunity).
 X# Format intent:
@@ -3384,7 +3391,8 @@ X# nfacctd) + port default (161/udp, 9100, 9324, 2100) — verifikasi live
 X# di guest: nama service/port bisa berbeda menurut port yang terpasang.
 X# POSIX sh.
 XROOT=${TITIAN_ROOT:-/opt/titian}
-XINTENT="$ROOT/etc/netstate/monitoring.intent"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XINTENT="$STATE_ROOT/netstate/monitoring.intent"
 XDIRTY=/var/run/monitoring.dirty
 XSNMP_CONF=/usr/local/etc/snmp/snmpd.conf
 XPROG="titian-monitoring"
@@ -3473,6 +3481,34 @@ X    done
 X    exit 0
 X}
 X
+X# --- bandwidth (bwm-ng) ---
+Xfmt_bps() {
+X    # $1 = bytes/detik (dari bwm-ng) -> bit/detik, tampil bps/Kbps/Mbps/Gbps (desimal, 1000)
+X    _v=${1:-0}
+X    awk -v v="$_v" 'BEGIN {
+X        b = v * 8
+X        if (b >= 1000000000) printf "%.2f Gbps", b/1000000000
+X        else if (b >= 1000000) printf "%.2f Mbps", b/1000000
+X        else if (b >= 1000) printf "%.2f Kbps", b/1000
+X        else printf "%.0f bps", b
+X    }'
+X}
+X
+Xcmd_bandwidth() {
+X    if ! command -v bwm-ng >/dev/null 2>&1; then
+X        die "bwm-ng tidak terpasang (FreeBSD: pkg install net-mgmt/bwm-ng; Debian: apt install bwm-ng)"
+X    fi
+X    _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
+X    if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
+X    printf 'Bandwidth (bwm-ng, snapshot 1 detik, bps):\n'
+X    printf '  %-12s %-12s %-12s %-12s\n' "Interface" "RX" "TX" "Total"
+X    printf '%s\n' "$_out" | while IFS=';' read -r _ts _iface _rx _tx _tot _rest; do
+X        [ -n "$_iface" ] || continue
+X        printf '  %-12s %-12s %-12s %-12s\n' "$_iface" "$(fmt_bps "$_rx")" "$(fmt_bps "$_tx")" "$(fmt_bps "$_tot")"
+X    done
+X    exit 0
+X}
+X
 X# --- mutations ---
 Xcmd_set() {
 X    # $1=service $2=yes|no
@@ -3533,22 +3569,23 @@ X
 Xcase "${1:-}" in
 X    check) cmd_check ;;
 X    show) cmd_show "${2:-}" ;;
+X    bandwidth) cmd_bandwidth ;;
 X    set) cmd_set "${2:-}" "${3:-}" ;;
 X    set-community) cmd_set_community "${2:-}" ;;
 X    apply) cmd_apply ;;
 X    apply-all) cmd_apply ;;
-X    *) echo "Usage: $0 {check|show [service]|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
+X    *) echo "Usage: $0 {check|show [service]|bandwidth|set <service> yes|no|set-community <string>|apply} ..." >&2; exit 2 ;;
 Xesac
-8e6f6f0f1eb4113e7bc4951340a79e31
+727083b5db7a517affc5dc4ce29b0924
 echo x - net/titian/files/sbin/titian-persist.sh
-sed 's/^X//' >net/titian/files/sbin/titian-persist.sh << 'd7a6a4b622a857d1e0362a5edb558e5c'
+sed 's/^X//' >net/titian/files/sbin/titian-persist.sh << '864ff31c1a211aae53a617d34ceaf61e'
 X#!/bin/sh
 X# TITIAN Fase 1 — cermin persistensi untuk interface yang DIBUAT titian.
 X#  - Debian: /etc/systemd/network/00-titian-<iface>.network (networkd
 X#    hanya me-match interface titian; NIC sistem tidak pernah ditulis).
 X#  - FreeBSD: blok marker #-TITIAN-# ... #-ENDTITIAN-# di /etc/rc.conf
 X#    (baris di luar blok tidak pernah disentuh; backup + sh -n tiap tulis).
-X# Sumber kebenaran = state file /opt/titian/etc/netstate/<iface>.addr
+X# Sumber kebenaran = state file /etc/titian/netstate/<iface>.addr
 X# yang ditulis titian-if.sh (bukan parsing output tool).
 X# Persistensi utama tetap replay startup-config saat boot; cermin ini
 X# adalah artefak deklaratif kedua (keputusan default Fase 1).
@@ -3557,7 +3594,8 @@ X# CLI tidak boleh gagal hanya karena cermin gagal).
 X# POSIX sh.
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
-XSTATE_DIR="$ROOT/etc/netstate"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XSTATE_DIR="$STATE_ROOT/netstate"
 Xwarn() { echo "Warning(persist): $*" >&2; }
 X
 Xmark_if() {
@@ -3829,7 +3867,7 @@ X        ;;
 X    *) echo "Usage: $0 {mark-if|drop-if|sync-if|bond-if|unbond-if|attach-bond|apply-bond} <iface> [bond]" >&2; exit 2 ;;
 Xesac
 Xexit 0
-d7a6a4b622a857d1e0362a5edb558e5c
+864ff31c1a211aae53a617d34ceaf61e
 echo x - net/titian/files/sbin/titian-pppoe.sh
 sed 's/^X//' >net/titian/files/sbin/titian-pppoe.sh << '437d91a5b0d62eaf428b3a576d53faf4'
 X#!/bin/sh
@@ -4159,7 +4197,7 @@ X    *) echo "Usage: $0 {check|show|show-users|show-sessions|set-enable|set-inte
 Xesac
 437d91a5b0d62eaf428b3a576d53faf4
 echo x - net/titian/files/sbin/titian-redist.sh
-sed 's/^X//' >net/titian/files/sbin/titian-redist.sh << '28e24742f5e789591679f08864bdc567'
+sed 's/^X//' >net/titian/files/sbin/titian-redist.sh << '3c6c066de2def7cdd6f3f1cdf25209d5'
 X#!/bin/sh
 X# TITIAN — kelola redistribusi route ke peer BGP lewat CLI (bird-view).
 X#   redistribute static enable|disable : ekspor route RTS_STATIC ke BGP
@@ -4171,8 +4209,9 @@ X# Pola: edit section -> generate check (parse saja) -> lolos baru generate.
 X# POSIX sh. Dipanggil dari bird-view sebagai ${RT_SBIN}/titian-redist.sh.
 XDIR=$(dirname "$0")
 XROOT=$(dirname "$DIR")
-XFILTER="$ROOT/etc/bird.d/filter.conf"
-XDIRECT="$ROOT/etc/bird.d/direct.conf"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XFILTER="$STATE_ROOT/bird.d/filter.conf"
+XDIRECT="$STATE_ROOT/bird.d/direct.conf"
 XBIRD_SH="$DIR/titian-bird.sh"
 Xerr() { echo "Error: $*" >&2; exit 33; }
 X[ -f "$FILTER" ] || err "filter.conf tidak ada: $FILTER"
@@ -4277,9 +4316,9 @@ X    direct-disable) direct_disable ;;
 X    show)           redist_show ;;
 X    *) echo "Usage: $0 {static-enable|static-disable|direct-enable [iface]|direct-disable|show}" >&2; exit 2 ;;
 Xesac
-28e24742f5e789591679f08864bdc567
+3c6c066de2def7cdd6f3f1cdf25209d5
 echo x - net/titian/files/sbin/titian-rename.sh
-sed 's/^X//' >net/titian/files/sbin/titian-rename.sh << '81549e89b8561d0f18ddb463cdf44759'
+sed 's/^X//' >net/titian/files/sbin/titian-rename.sh << 'd9a16a23afb0a862e27d59477b6703f5'
 X#!/bin/sh
 X# TITIAN — rename interface sistem + migrasi state Titian (Linux + FreeBSD).
 X# Dipanggil perintah exec `rename <lama> <baru>` (tree/en-rename.xml).
@@ -4340,8 +4379,9 @@ X#  - bird.conf TIDAK disentuh (pola interface di bird, bila ada,
 X#    adalah glob, bukan referensi nama — di luar cakupan rename).
 X# POSIX sh.
 XROOT=${TITIAN_ROOT:-/opt/titian}
-XSTATE_DIR=$ROOT/etc/netstate
-XSTARTUP=$ROOT/etc/startup-config
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XSTATE_DIR=$STATE_ROOT/netstate
+XSTARTUP=$STATE_ROOT/startup-config
 XSBIN=$ROOT/sbin
 XSOCKFILE=/tmp/konfd.socket
 XPATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH
@@ -4623,7 +4663,7 @@ Xelse
 X    warn "verifikasi pasca-restart tidak keduanya benar ($new ada / $old hilang) — periksa 'show interfaces' + 'show running-config'"
 Xfi
 Xexit 0
-81549e89b8561d0f18ddb463cdf44759
+d9a16a23afb0a862e27d59477b6703f5
 echo x - net/titian/files/sbin/titian-route.sh
 sed 's/^X//' >net/titian/files/sbin/titian-route.sh << '09b9862eae960fd6d1b9fe072d7b0aa8'
 X#!/bin/sh
@@ -5264,7 +5304,7 @@ X    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|port-in-use|ser
 Xesac
 c54185f92322000bb91d7b656e4292c1
 echo x - net/titian/files/sbin/titian-sysctl.sh
-sed 's/^X//' >net/titian/files/sbin/titian-sysctl.sh << 'f0cb037cfc7adc7cfc8139d74750ab60'
+sed 's/^X//' >net/titian/files/sbin/titian-sysctl.sh << '29a82f1d3c7bf399cc29ddab809ea67b'
 X#!/bin/sh
 X# TITIAN — perintah `system sysctl` (kernel parameter, kedua OS).
 X# Bukan restorasi rtcli: tree lama TIDAK punya perintah sysctl sama
@@ -5278,7 +5318,7 @@ X#       Debian: /etc/sysctl.d/99-titian.conf (systemd-sysctl)
 X#       FreeBSD: blok marker #-TITIAN-# ... #-ENDTITIAN-# di
 X#               /etc/sysctl.conf (rc sysctl). Baris di luar blok
 X#               tidak pernah disentuh.
-X#  Sumber cermin = state file $ROOT/etc/sysctl.titian (bukan parsing
+X#  Sumber cermin = state file $STATE_ROOT/sysctl.titian (bukan parsing
 X#  file OS). Nilai sebelum-set pertama dicatat di sysctl.titian.prev
 X#  agar `no system sysctl` bisa mengembalikan nilai live semula;
 X#  bila nilai awal tidak tercatat, nilai live bertahan sampai reboot
@@ -5294,8 +5334,9 @@ X# POSIX sh (jalan di dash Debian dan sh FreeBSD).
 Xset -u
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
-XSTATE="$ROOT/etc/sysctl.titian"
-XPREV="$ROOT/etc/sysctl.titian.prev"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XSTATE="$STATE_ROOT/sysctl.titian"
+XPREV="$STATE_ROOT/sysctl.titian.prev"
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
 Xwarn() { echo "Warning(sysctl): $*" >&2; }
@@ -5484,7 +5525,7 @@ X    apply) sysctl_apply ;;
 X    mirror) mirror ;;
 X    *) echo "Usage: $0 {set|del|show|apply|mirror} ..." >&2; exit 2 ;;
 Xesac
-f0cb037cfc7adc7cfc8139d74750ab60
+29a82f1d3c7bf399cc29ddab809ea67b
 echo x - net/titian/files/sbin/titian-sysinfo.sh
 sed 's/^X//' >net/titian/files/sbin/titian-sysinfo.sh << 'c56f0d6ca522607df513e237fc7597b2'
 X#!/bin/sh
@@ -6518,7 +6559,7 @@ Xsay ""
 Xsay "Selesai. Jalankan perintah REKOMENDASI di atas lewat CLI Titian bila setuju — tool ini tidak mengubah apa-apa."
 87b63c8b9b9b7fe8810570c225aaf379
 echo x - net/titian/files/sbin/titian-tune.sh
-sed 's/^X//' >net/titian/files/sbin/titian-tune.sh << '4ef2f011a3a4b72bf57f7c99c6d60117'
+sed 's/^X//' >net/titian/files/sbin/titian-tune.sh << 'c72ff4921cf25e4af2c139cb3136f034'
 X#!/bin/sh
 X# TITIAN — parameter tuning interface (mtu, qlen, speed, offload, coalesce).
 X# Dipakai perintah `mtu`/`qlen`/`speed` di semua if-view dan perintah di view
@@ -6576,7 +6617,8 @@ X# POSIX sh (jalan di dash Debian dan sh FreeBSD).
 Xset -u
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
-XSTATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XSTATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 XPERSIST=${RT_SBIN:-$ROOT/sbin}/titian-persist.sh
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
@@ -7136,9 +7178,9 @@ X    apply-all) apply_all ;;
 X    show) show_iface "$2" ;;
 X    *) echo "Usage: $0 {mtu|mtu-del|qlen|qlen-del|offload|offload-del|coalesce|coalesce-del|speed|speed-del|apply|apply-all|show} ..." >&2; exit 2 ;;
 Xesac
-4ef2f011a3a4b72bf57f7c99c6d60117
+c72ff4921cf25e4af2c139cb3136f034
 echo x - net/titian/files/sbin/titian-vxlan.sh
-sed 's/^X//' >net/titian/files/sbin/titian-vxlan.sh << '354ed9fd46d9d282217a167c02f1ebd0'
+sed 's/^X//' >net/titian/files/sbin/titian-vxlan.sh << '7d5eb7e668aaff6c2236db7687043623'
 X#!/bin/sh
 X# TITIAN — operasi interface VXLAN (Linux + FreeBSD).
 X# Model: netstate <iface>.vxlan (baris "kunci nilai") = sumber kebenaran
@@ -7162,8 +7204,9 @@ X# POSIX sh (jalan di dash Debian dan sh FreeBSD).
 Xset -u
 XOS=$(uname -s)
 XROOT=${TITIAN_ROOT:-/opt/titian}
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 XSBIN=$ROOT/sbin
-XSTATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
+XSTATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 X
 Xerr() { echo "Error: $*" >&2; exit 33; }
 Xwarn() { echo "Warning(vxlan): $*" >&2; }
@@ -7542,13 +7585,13 @@ X    show) do_show "${2:-}" ;;
 X    *) echo "Usage: $0 {create|set|unset|delete|exists|recreate|apply-all|show} <iface> [key value...]" >&2; exit 2 ;;
 Xesac
 Xexit 0
-354ed9fd46d9d282217a167c02f1ebd0
+7d5eb7e668aaff6c2236db7687043623
 echo x - net/titian/files/sbin/titian-wireguard.sh
-sed 's/^X//' >net/titian/files/sbin/titian-wireguard.sh << '8b62d9d3414f6262c0d0c1fa59d68e95'
+sed 's/^X//' >net/titian/files/sbin/titian-wireguard.sh << '8d4a0df8f0c3c006be09d208ef0f614a'
 X#!/bin/sh
 X# TITIAN BSDRP — WireGuard native (if_wg).
-X# State klish: $ROOT/etc/netstate/wireguard/<nama>.conf (satu baris
-X# per item); private key: $ROOT/etc/wireguard/<nama>.key (mode 600,
+X# State klish: $STATE_ROOT/netstate/wireguard/<nama>.conf (satu baris
+X# per item); private key: $STATE_ROOT/wireguard/<nama>.key (mode 600,
 X# TIDAK PERNAH dicetak ulang — generate-key hanya menampilkan public
 X# key sekali).
 X# Format state:
@@ -7565,8 +7608,9 @@ X# ditulis dari dokumentasi FreeBSD if_wg/ifconfig — verifikasi live
 X# di guest wajib sebelum produksi.
 X# POSIX sh.
 XROOT=${TITIAN_ROOT:-/opt/titian}
-XSTATE_DIR="$ROOT/etc/netstate/wireguard"
-XKEY_DIR="$ROOT/etc/wireguard"
+XSTATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+XSTATE_DIR="$STATE_ROOT/netstate/wireguard"
+XKEY_DIR="$STATE_ROOT/wireguard"
 XDIRTY=/var/run/wireguard.dirty
 XPROG="titian-wireguard"
 Xerr() { echo "Error($PROG): $*" >&2; exit 33; }
@@ -7842,7 +7886,7 @@ X    del-iface) cmd_del_iface "${2:-}" ;;
 X    apply-all) cmd_apply_all ;;
 X    *) echo "Usage: $0 {check|show|show-one|set-enable|set-address|del-address|set-listen-port|del-listen-port|generate-key|peer-add|peer-del|peer-set|peer-del-field|del-iface|apply-all} ..." >&2; exit 2 ;;
 Xesac
-8b62d9d3414f6262c0d0c1fa59d68e95
+8d4a0df8f0c3c006be09d208ef0f614a
 echo x - net/titian/files/titian-tune-recommend.in
 sed 's/^X//' >net/titian/files/titian-tune-recommend.in << '427c9b6fa3cdb5f11eeec0a872c28624'
 X#!/bin/sh
@@ -10312,7 +10356,7 @@ X
 X</CLISH_MODULE>
 f59099df84dee653a22a4a5747129afd
 echo x - net/titian/files/tree/conf-monitoring.xml
-sed 's/^X//' >net/titian/files/tree/conf-monitoring.xml << 'dc967275ab0c037974445dd4e92809f2'
+sed 's/^X//' >net/titian/files/tree/conf-monitoring.xml << '93b263e163e88e211d50449878687486'
 X<?xml version="1.0" encoding="UTF-8"?>
 X<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
 X          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -10484,10 +10528,19 @@ X        <ACTION>
 X            ${RT_SBIN}/titian-monitoring.sh show "${service}"
 X        </ACTION>
 X    </COMMAND>
+X
+X    <COMMAND name="show monitoring bandwidth"
+X        help="Bandwidth live per interface (bwm-ng, snapshot 1 detik)"
+X        lock="false"
+X        interrupt="true">
+X        <ACTION>
+X            ${RT_SBIN}/titian-monitoring.sh bandwidth
+X        </ACTION>
+X    </COMMAND>
 X</VIEW>
 X
 X</CLISH_MODULE>
-dc967275ab0c037974445dd4e92809f2
+93b263e163e88e211d50449878687486
 echo x - net/titian/files/tree/conf-pppoe.xml
 sed 's/^X//' >net/titian/files/tree/conf-pppoe.xml << 'cf571a15cab4506e154a9fec424630b1'
 X<?xml version="1.0" encoding="UTF-8"?>
@@ -11358,7 +11411,7 @@ X
 X</CLISH_MODULE>
 0a2908b5b496bb96619775019085dfb6
 echo x - net/titian/files/tree/conf-wireguard.xml
-sed 's/^X//' >net/titian/files/tree/conf-wireguard.xml << 'be61c384977560e07fe57d076ff29bb0'
+sed 's/^X//' >net/titian/files/tree/conf-wireguard.xml << '425f90289294bfa95311fa384de02379'
 X<?xml version="1.0" encoding="UTF-8"?>
 X<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
 X          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -11367,8 +11420,8 @@ X                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
 X    <!--=======================================================-->
 X    <!-- WireGuard native (if_wg) — BSDRP port (BARU).
 X         Backend: ${RT_SBIN}/titian-wireguard.sh. State klish di
-X         /opt/titian/etc/netstate/wireguard/<nama>.conf; private key
-X         di /opt/titian/etc/wireguard/<nama>.key (mode 600, TIDAK
+X         /etc/titian/netstate/wireguard/<nama>.conf; private key
+X         di /etc/titian/wireguard/<nama>.key (mode 600, TIDAK
 X         pernah dicetak ulang — `generate-key` hanya menampilkan
 X         public key sekali).
 X         `enable` hanya mencatat niat + dirty; interface dibuat +
@@ -11605,7 +11658,7 @@ X    </COMMAND>
 X</VIEW>
 X
 X</CLISH_MODULE>
-be61c384977560e07fe57d076ff29bb0
+425f90289294bfa95311fa384de02379
 echo x - net/titian/files/tree/configure-mode.xml
 sed 's/^X//' >net/titian/files/tree/configure-mode.xml << '2dcaf606bcd7ec8a1ded95de433df671'
 X<?xml version="1.0" encoding="UTF-8"?>
@@ -12277,7 +12330,7 @@ X
 X</CLISH_MODULE>
 35fa2b11395ea61e43c15676ffaf2446
 echo x - net/titian/files/tree/enable-mode.xml
-sed 's/^X//' >net/titian/files/tree/enable-mode.xml << 'f086165bca5eba5b7b3f3c7b406d39e1'
+sed 's/^X//' >net/titian/files/tree/enable-mode.xml << 'a7d8c4d422ee5169f01f58b4c20b488b'
 X<?xml version="1.0" encoding="UTF-8"?>
 X<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema" 
 X          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
@@ -12322,7 +12375,7 @@ X
 X<!--// save running config, insert ver + track commit //-->
 X  <COMMAND name="save"
 X          help="Save running-config to startup-config">
-X    <CONFIG operation="dump" file="/opt/titian/etc/startup-config"/>
+X    <CONFIG operation="dump" file="/etc/titian/startup-config"/>
 X      <ACTION>
 X            if test ! -S "${RT_SOCK}"; then
 X                echo "error: socket not ready.."
@@ -12352,7 +12405,7 @@ X    </COMMAND>
 X
 X</VIEW>
 X</CLISH_MODULE>
-f086165bca5eba5b7b3f3c7b406d39e1
+a7d8c4d422ee5169f01f58b4c20b488b
 echo x - net/titian/files/tree/ping.xml
 sed 's/^X//' >net/titian/files/tree/ping.xml << 'a062204621d041b8251bff905e454c18'
 X<?xml version="1.0" encoding="UTF-8"?>

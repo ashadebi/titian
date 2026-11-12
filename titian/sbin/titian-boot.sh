@@ -4,6 +4,7 @@
 # Dipanggil systemd unit (Debian) / rc script (FreeBSD).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 BIN=$ROOT/bin
 if [ ! -x "$BIN/konfd" ] && [ -x /usr/local/bin/konfd ]; then
     BIN=/usr/local/bin
@@ -53,8 +54,8 @@ if [ "$(uname -s)" = "FreeBSD" ]; then
 fi
 
 # replay startup-config (bila ada) — idempotent (replace semantics)
-if [ -f "$ROOT/etc/startup-config" ]; then
-    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$ROOT/etc/startup-config" 2>&1 | tee /var/log/titian-replay.log
+if [ -f "$STATE_ROOT/startup-config" ]; then
+    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$STATE_ROOT/startup-config" 2>&1 | tee /var/log/titian-replay.log
 fi
 
 # jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat

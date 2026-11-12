@@ -1,7 +1,7 @@
 #!/bin/sh
 # TITIAN BSDRP — WireGuard native (if_wg).
-# State klish: $ROOT/etc/netstate/wireguard/<nama>.conf (satu baris
-# per item); private key: $ROOT/etc/wireguard/<nama>.key (mode 600,
+# State klish: $STATE_ROOT/netstate/wireguard/<nama>.conf (satu baris
+# per item); private key: $STATE_ROOT/wireguard/<nama>.key (mode 600,
 # TIDAK PERNAH dicetak ulang — generate-key hanya menampilkan public
 # key sekali).
 # Format state:
@@ -18,8 +18,9 @@
 # di guest wajib sebelum produksi.
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE_DIR="$ROOT/etc/netstate/wireguard"
-KEY_DIR="$ROOT/etc/wireguard"
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE_DIR="$STATE_ROOT/netstate/wireguard"
+KEY_DIR="$STATE_ROOT/wireguard"
 DIRTY=/var/run/wireguard.dirty
 PROG="titian-wireguard"
 err() { echo "Error($PROG): $*" >&2; exit 33; }

@@ -58,8 +58,9 @@
 #    adalah glob, bukan referensi nama — di luar cakupan rename).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE_DIR=$ROOT/etc/netstate
-STARTUP=$ROOT/etc/startup-config
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE_DIR=$STATE_ROOT/netstate
+STARTUP=$STATE_ROOT/startup-config
 SBIN=$ROOT/sbin
 SOCKFILE=/tmp/konfd.socket
 PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH
