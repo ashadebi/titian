@@ -116,8 +116,10 @@
 				if test -z "${resolve}"; then
 					cmd=$cmd" -n"
 				fi
-				# Ping broadcast
-				cmd=$cmd"`expr substr '${ -b :broadcast}' 1 3`"
+				# Ping broadcast (klish conditional langsung — JANGAN
+				# pakai `expr substr` di sini: operand kosong bikin
+				# "expr: syntax error" 2x tiap ping)
+				cmd=$cmd"${ -b :broadcast}"
 				# Packet size
 				cmd=$cmd"${ -s :psize}"
 				# Interval between packets 
@@ -127,10 +129,10 @@
 					cmd=$cmd" -i 1"
 				fi
 				# Flood ping
-				cmd=$cmd"`expr substr '${ -f :flood}' 1 3`"
+				cmd=$cmd"${ -f :flood}"
 			else
 				# Detect MAC duplicate
-				cmd=$cmd"`expr substr '${ -D :duplicate-detect}' 1 3`"
+				cmd=$cmd"${ -D :duplicate-detect}"
 			fi
 			# Interface or address
 			cmd=$cmd"${ -I :src}"

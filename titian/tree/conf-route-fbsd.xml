@@ -50,7 +50,12 @@
 			</PARAM>
 			<PARAM name="forward"
 				help="Forwarding router's address"
-				ptype="IP_ADDR"/>
+				ptype="SUBCOMMAND"
+				mode="subcommand">
+					<PARAM name="gateway"
+						help="Forwarding router's address"
+						ptype="IP_ADDR"/>
+			</PARAM>
 		</PARAM>
 		<CONFIG priority="0x9002" pattern="^ip route ${ip} " splitter="false"/>
 		<ACTION>
@@ -58,7 +63,7 @@
 			route change -inet ${ip} -interface ${iface_any} 2>/dev/null || route add -inet ${ip} -interface ${iface_any}
 			exit $?
 		elif test "${route_target}" = "forward"; then
-			route change -inet ${ip} ${forward} 2>/dev/null || route add -inet ${ip} ${forward}
+			route change -inet ${ip} ${gateway} 2>/dev/null || route add -inet ${ip} ${gateway}
 			exit $?
 		fi
 		</ACTION>

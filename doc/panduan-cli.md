@@ -1533,31 +1533,39 @@ sub-fitur belum); ❌ = BELUM (perintah ada, belum diuji live).
 | 6 | Interface VXLAN | conf-if-vxlan-fbsd.xml | ✅ LIVE | vxlan100, ping 0% loss dua arah |
 | 7 | Interface bridge L2 | conf-if-bridge-fbsd.xml | ✅ LIVE | bridge0 (vxlan100 + vlan99) |
 | 8 | Interface LAGG / LACP | conf-if-lagg-fbsd.xml | ✅ LIVE | LACP E2E + IPv4/IPv6 LOLOS 12 Nov |
-| 9 | Interface loopback | conf-if-lo-fbsd.xml | ❌ BELUM | lo0 dipakai untuk route test via OS, perintah klish loopback belum diverifikasi |
-| 10 | Interface options (tso/lro/rx/tx) | conf-if-opt-fbsd.xml | ❌ BELUM | Belum diuji live |
-| 11 | Static route / gateway (v4 + v6) | conf-route-fbsd.xml, conf-route6.xml | 🟡 SEBAGIAN | Route statik dipakai saat uji (via bird.conf + kernel); perintah klish `ip route` belum diverifikasi eksplisit |
-| 12 | Firewall / NAT (pf) | conf-fw.xml | ❌ BELUM | Perintah ada; pf BELUM ada di image, jadi tidak bisa jalan live |
-| 13 | Traffic-shape / dummynet limiter | traffic-shape.xml | 🟡 SEBAGIAN | Function-test (staged, full masks); belum E2E live |
-| 14 | PPPoE server (mpd5, pool, user, RADIUS) | conf-pppoe.xml | ❌ BELUM | Belum diuji live |
-| 15 | IPoE server (DHCP) | conf-ipoe.xml | 🟡 SEBAGIAN | Server + dhcpd teruji live (PID 82691); lease client E2E BELUM teruji; server kemudian DIMATIKAN + intent dihapus (12 Nov 19:15) |
+| 9 | Interface loopback | conf-if-lo-fbsd.xml | ✅ LIVE | LOLOS 13 Nov ~14:20 (lo1 10.99.88.1/32 muncul di show + ifconfig; `no interface loopback lo1` bersih) |
+| 10 | Interface options (tso/lro/rx/tx) | conf-if-opt-fbsd.xml | ✅ LIVE | LOLOS 13 Nov ~14:20 (xe3: `rx off` ubah options 4e100bb→4c100ba, `rx on` kembali; `tso off` diterima, NIC ixl tidak expose TSO) |
+| 11 | Static route / gateway (v4 + v6) | conf-route-fbsd.xml, conf-route6.xml | 🟡 SEBAGIAN | `ip route ... dev bridge0` LOLOS 13 Nov (muncul di show + netstat, hapus LOLOS). `forward` GAGAL — bug param (IP_ADDR, bukan SUBCOMMAND) — **diperbaiki di repo** (forward jadi subcommand + `gateway`), belum retest live |
+| 12 | Firewall / NAT (pf) | conf-fw.xml | ❌ BELUM | pf.ko ADA + TER-LOAD di mesin test (bukan "belum ada di image" — klaim lama salah). Uji live BLOKIR proxy putus 13 Nov 14:33 |
+| 13 | Traffic-shape / dummynet limiter | traffic-shape.xml | 🟡 SEBAGIAN | Function-test (staged, full masks); uji E2E live BLOKIR proxy putus 13 Nov 14:33 |
+| 14 | PPPoE server (mpd5, pool, user, RADIUS) | conf-pppoe.xml | ❌ GAGAL | **GAGAL 13 Nov**: LCP + auth OK, tapi mpd5 kirim PADT terminate sebelum IPCP (akar belum ketemu, butuh logging verbose). Bug escaping `!` + `no user` **diperbaiki di repo**, retest pending proxy |
+| 15 | IPoE server (DHCP) | conf-ipoe.xml | ✅ LIVE | **LOLOS 13 Nov**: RB3011 (DHCP client) bound 10.99.41.100/24, gw 10.99.41.1, DNS 8.8.8.8, ping 3/3. Akar awal gagal: VTEP RB3011 kosong (broadcast putus) — fix sintaks v7 `/interface vxlan vteps add interface=vxlan100 remote-ip=10.10.2.3` |
 | 16 | WireGuard | conf-wireguard.xml | ❌ BELUM | `ifconfig wg` belum diuji live |
-| 17 | Monitoring (SNMP, node/bird-exporter, nfacctd) | conf-monitoring.xml | ❌ BELUM | Perintah ada (snmp enable/community — lihat §9c.2 untuk SNMP); enable via CLI belum diverifikasi live |
-| 18 | System (hostname, timezone, sysctl) | conf-sys.xml | ❌ BELUM | Hostname di-set via rc.conf OS-level; perintah klish system belum diverifikasi live |
-| 19 | DNS (domain-name, name-servers) | conf-sys-dns.xml | ❌ BELUM | Belum diuji live |
-| 20 | Service SSH (port, allow-root) | conf-serv-ssh.xml | 🟡 SEBAGIAN | SSH jalan (OS-level, port 9393 via NAT); perintah klish `service ssh` belum diverifikasi live |
-| 21 | Checkpoint / rollback | en-checkpoint.xml | ❌ BELUM | Direktori checkpoints ada; rollback belum diuji live |
-| 22 | Rename interface | en-rename.xml | 🟡 SEBAGIAN | Rename igb→ge / ixl→xe LOLOS live via script (SSH); perintah CLI `rename` GAGAL via CLI |
+| 17 | Monitoring (SNMP, node/bird-exporter, nfacctd) | conf-monitoring.xml | ✅ LIVE | **LOLOS 13 Nov**: `snmp enable` + community test + `commit` → snmpd pid 46802, listen 161/udp, snmpget sysDescr OK; `no snmp enable` + community kembali bsdrp-ro, snmpd mati |
+| 18 | System (hostname, timezone, sysctl) | conf-sys.xml | ✅ LIVE | **LOLOS 13 Nov**: hostname/time-zone/sysctl `net.inet.tcp.delayed_ack` 1→0→1 terverifikasi; localtime dihapus kembali |
+| 19 | DNS (domain-name, name-servers) | conf-sys-dns.xml | ✅ LIVE | **LOLOS 13 Nov**: nameserver 8.8.8.8 masuk resolv.conf; `no nameserver` kembali baseline |
+| 20 | Service SSH (port, allow-root) | conf-serv-ssh.xml | 🟡 SEBAGIAN | SSH jalan (OS-level, port 9393 via NAT); perintah klish `service ssh` belum diverifikasi live (BLOKIR proxy putus 13 Nov 14:33) |
+| 21 | Checkpoint / rollback | en-checkpoint.xml | ✅ LIVE | **LOLOS 13 Nov**: `checkpoint save` + ubah deskripsi xe3 + `rollback` kembalikan + `checkpoint delete`; BGP sempat bounce lalu re-Established |
+| 22 | Rename interface | en-rename.xml | 🟡 SEBAGIAN | Rename igb→ge / ixl→xe LOLOS live via script (SSH); perintah CLI `rename` GAGAL via CLI (BLOKIR proxy putus 13 Nov 14:33) |
 | 23 | Terminal / pager (length, no-more) | en-terminal.xml | ✅ LIVE | Pager `less`, sweep 13 Nov 0 syntax error |
 | 24 | Show (dasar, interface, routing, system, hardware) | en-show.xml, en-show-hw.xml, en-show-routing.xml, en-show-if-*.xml | ✅ LIVE | Sweep 13 Nov ~00:11, semua show jalan, 0 syntax error |
-| 25 | Ping / traceroute | ping.xml | 🟡 SEBAGIAN | Ping dipakai ekstensif via OS; perintah klish `ping` belum diverifikasi eksplisit |
+| 25 | Ping / traceroute | ping.xml | ✅ LIVE | **LOLOS 13 Nov**: ping 10.99.40.2 5/5 0% loss ~0,3 ms; ping 8.8.8.8 5/5 ~28 ms; traceroute 1 hop. Bug kosmetik "expr: syntax error" 2x **diperbaiki di repo** (buang `expr substr`, pakai conditional langsung) |
 | 26 | Commit / commit check / save | conf-commit.xml, enable-mode.xml | ✅ LIVE | Commit + save teruji ekstensif (termasuk save 13 Nov 13:55 yang menyinkronkan bgp.conf) |
 | 27 | Boot replay / startup-config | startup.xml, titian-boot.sh, titian-cfg.sh | ✅ LIVE | Replay boot LOLOS (reboot ke-5); persistensi /cfg LOLOS |
 
 **Yang paling terbuka (prioritas uji berikut):** FRR live (daemon +
-BGP via vtysh, §9c.5) · PPPoE penuh · WireGuard · firewall/NAT
-(butuh pf di image) · IPoE lease client E2E · monitoring enable via
-CLI · checkpoint rollback · static route + loopback + interface
-options via klish.
+BGP via vtysh, §9c.5) · PPPoE (GAGAL — akar terminate belum ketemu,
+butuh logging verbose mpd5) · WireGuard · firewall/NAT ·
+traffic-shape · static route `forward` (perbaikan di repo, belum
+retest live) · rename CLI · service SSH. Semuanya BLOKIR proxy SSH
+VM putus sejak 13 Nov 14:33 (masih putus 14:57).
+
+> **Update hitungan (13 Nov ~15:00, sesudah uji live tes 1–10):**
+> dari 27 baris di atas, yang ✅ LIVE = **19**, yang 🟡 SEBAGIAN =
+> **5** (FRR, static route, traffic-shape, SSH, rename), yang ❌
+> BELUM/GAGAL = **3** (firewall/NAT, PPPoE GAGAL, WireGuard).
+> Sebelum uji: 11/7/9. Detail uji: `~/workspace/
+> titian-live-test-20261113/HASIL.md` (di VM, bukan di repo).
 
 ---
 
