@@ -1397,6 +1397,28 @@ Untuk user tanpa hak privileged, tersedia view terbatas: `ping`,
 `traceroute`, overview, dan startup. View ini sengaja tidak memuat
 perintah konfigurasi — ia hanya membaca dan menguji konektivitas.
 
+### 10.6 Log console (syslog) — dimatikan di image
+
+FreeBSD default mengirim `*.err`, `kern.warning`, `auth.notice` ke
+`/dev/console` (`/etc/syslog.conf` baris 7). Akibatnya log konfd habis
+restart, pesan kernel (`bridge0: promiscuous mode`, dst.), dan error
+daemon lain muncul di monitor/terminal dan mengganggu kerja di console.
+
+Di image Titian/BSDRP baris itu **dihapus** — console bersih, log tetap
+masuk file (`/var/log/messages`, `/var/log/daemon.log`, dst.). File-nya:
+`files/BSDRP/Files/etc/syslog.conf` (overlay image; disalin ke
+`/etc/syslog.conf` saat build). Pesan darurat (`*.emerg`) tetap
+diberitahukan ke semua user yang login (baris `*.emerg *` dipertahankan).
+
+Di mesin yang sudah berjalan, perbaikannya: salin file di atas ke
+`/etc/syslog.conf` lalu `service syslogd reload`. Agar selamat dari
+reboot (karena `/etc` = tmpfs), simpan salinannya di `/cfg/syslog.conf`
+dan tambahkan hook di `/cfg/rc.local`:
+
+```
+if [ -f /cfg/syslog.conf ]; then cp /cfg/syslog.conf /etc/syslog.conf; service syslogd reload; fi
+```
+
 ---
 
 ## 11. Tuning — ringkas pemakaian
