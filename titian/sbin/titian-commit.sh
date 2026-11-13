@@ -102,6 +102,16 @@ apply_ipoe() {
     fi
 }
 
+apply_bgp() {
+    # BGP (BIRD): generate section bila bgp.conf ada + local-as diset.
+    # Bila tidak ada neighbor, generate tetap jalan (section kosong) agar
+    # marker BGP di bird.conf tetap valid; birdc configure no-op.
+    _intent="${STATE_ROOT:-/etc/titian}/bgp.conf"
+    if [ -f "$_intent" ] && grep -q "^local-as " "$_intent" 2>/dev/null; then
+        sh "$SBIN_DIR/titian-bgp.sh" generate || exit 33
+    fi
+}
+
 apply_wireguard() {
     [ -f /var/run/wireguard.dirty ] || return 0
     sh "$WG_SH" apply-all || exit 33
@@ -130,6 +140,7 @@ do_commit() {
     apply_traffic_shape || exit 33
     apply_pppoe || exit 33
     apply_ipoe || exit 33
+    apply_bgp || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
     echo "commit: done"
@@ -144,6 +155,7 @@ do_apply_all() {
     apply_traffic_shape || exit 33
     apply_pppoe || exit 33
     apply_ipoe || exit 33
+    apply_bgp || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
     echo "commit apply-all: done"

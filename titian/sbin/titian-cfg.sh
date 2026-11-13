@@ -62,7 +62,7 @@ cmd_save() {
     fi
     # terminal-length (pager) + ipoe.conf (IPoE server intent) ikut
     # dipersistenkan — keduanya di /etc (tmpfs) dan hilang saat reboot.
-    for _f in terminal-length ipoe.conf; do
+    for _f in terminal-length ipoe.conf bgp.conf; do
         [ -f "$STATE_DIR/$_f" ] && cp -f "$STATE_DIR/$_f" "$CFG_DIR/$_f" 2>/dev/null || true
     done
     echo "titian config dipersistenkan to $CFG_DIR (survive reboot)"
@@ -82,7 +82,7 @@ cmd_restore() {
         mkdir -p "$STATE_DIR/netstate" 2>/dev/null
         cp -f "$CFG_DIR/netstate/"* "$STATE_DIR/netstate/" 2>/dev/null || true
     fi
-    for _f in terminal-length ipoe.conf; do
+    for _f in terminal-length ipoe.conf bgp.conf; do
         [ -f "$CFG_DIR/$_f" ] && cp -f "$CFG_DIR/$_f" "$STATE_DIR/$_f" 2>/dev/null || true
     done
     echo "titian config at-restore from $CFG_DIR"

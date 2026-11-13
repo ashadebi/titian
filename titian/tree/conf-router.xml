@@ -27,7 +27,16 @@
         help="Negate FRR router configuration"/>
 
     <COMMAND name="router bird"
-        help="BIRD routing daemon (BGP/OSPF/static)"/>
+        help="BIRD routing daemon (BGP/OSPF/static) — masuk ke bird view"
+        view="configure-bird-view"
+        viewid="sysview=bird"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1500" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh show-routing
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="router bird enable"
         help="Enable BIRD (pending commit — service naik saat commit; diblokir if FRR jalan)">

@@ -941,6 +941,160 @@ commit
 
 ---
 
+## 9b. BGP — neighbor, filter, atribut (BIRD)
+
+BGP dikonfigurasi lewat view `router bird` (configure-view). Intent
+disimpan di `/etc/titian/bgp.conf` (dipersistenkan ke `/cfg/titian/`
+oleh `save`), di-generate menjadi section BIRD
+`/etc/titian/bird.d/bgp.conf`, lalu diterapkan ke `bird.conf` lewat
+marker `#-BGP-#` … `#-ENDBGP-#` oleh `titian-bird.sh generate bgp`
+saat `commit`. BIRD **tidak** perlu di-restart — `birdc configure`
+cukup (commit sudah memanggilnya).
+
+### 9b.1 Alur dasar — satu neighbor eBGP
+
+```
+configure terminal
+router bird
+router-id 10.99.40.1
+local-as 65000
+neighbor 10.99.40.2
+remote-as 65001
+description RB3011-TEST
+local-pref 100
+med 50
+prepend 2
+community 65000:100
+exit
+network 10.99.40.0/24
+end
+configure terminal
+commit
+save
+```
+
+Perintah di dalam view `neighbor` (prompt
+`(config-bird-neighbor-<IP>)#`):
+
+| Perintah | Arti |
+|---|---|
+| `remote-as <AS>` | AS neighbor (wajib — neighbor baru dibuat di sini, import/export default `all`) |
+| `description <teks>` | Deskripsi (satu kata; tampil di bird.conf) |
+| `import all` / `import none` | Terima semua / tidak ada route |
+| `import filter <NAMA>` | Terima hanya route yang lolos filter NAMA |
+| `export all` / `export none` | Kirim semua / tidak ada route |
+| `export filter <NAMA>` | Kirim hanya route yang lolos filter NAMA |
+| `local-pref <N>` | Local-preference default untuk route dari neighbor ini |
+| `med <N>` | MED yang dikirim ke neighbor ini |
+| `prepend <N>` | Jumlah AS-path prepend saat export (panggil `bgp_path.prepend()` N kali) |
+| `community <AS:NN>` | Community yang ditambahkan saat export |
+
+### 9b.2 Filter
+
+```
+configure terminal
+router bird
+filter F-RB3011-IN
+accept 10.0.0.0/8
+reject 192.168.0.0/16
+exit
+neighbor 10.99.40.2
+import filter F-RB3011-IN
+exit
+end
+configure terminal
+commit
+```
+
+Perintah di dalam view `filter` (prompt
+`(config-bird-filter-<NAMA>)#`):
+
+| Perintah | Arti |
+|---|---|
+| `accept <prefix>` | Terima prefix ini |
+| `reject <prefix>` | Tolak prefix ini |
+| `accept community <AS:NN>` | Terima route dengan community ini |
+| `reject community <AS:NN>` | Tolak route dengan community ini |
+
+Filter selalu diakhiri `reject;` (default-deny). Nama filter boleh
+mengandung `-` di CLI, tapi di-generate menjadi `_` di bird.conf
+(BIRD menolak `-` di nama identifier).
+
+### 9b.3 Network yang diiklankan
+
+```
+router bird
+network 10.99.40.0/24
+```
+
+Prefix harus ada di tabel routing (connected / kernel / static)
+dan lolos export filter. Bila `export all`, semua route di tabel
+teriklankan; bila `export filter`, pastikan filter menerima prefix
+tersebut.
+
+### 9b.4 Verifikasi
+
+```
+show bgp                    # intent bgp.conf + section bird.d/bgp.conf
+show protocol               # status protokol BIRD (birdc)
+show protocol bgp           # detail sesi BGP
+birdc show route protocol bgp_10_99_40_2
+```
+
+Status sesi BGP di `show protocol`: `Active` = BIRD mencoba
+connect ke peer (belum Established — peer belum konfig / belum
+listen port 179). `Established` = sesi jalan, route bertukar.
+`Socket: Connection refused` = peer reachable tapi port 179
+belum ada yang listen (BGP belum dikonfigurasi di sisi peer).
+
+### 9b.5 Gotcha (ditemukan saat uji live 13 Nov 2026)
+
+- **import/export WAJIB di dalam channel `ipv4 { }`.** BIRD 2.20.0
+  menolak `import all;` langsung di dalam `protocol bgp`
+  (`syntax error, unexpected IMPORT`). Generator selalu menulis
+  channel `ipv4 { }`.
+- **`router id` adalah setting GLOBAL**, bukan per-protocol.
+  Generator menulisnya ke bird.conf di luar section BGP.
+- **`bgp_path.prepend()` hanya terima 1 argumen (AS).**
+  Untuk prepend N kali, generator memanggilnya N kali.
+- **Nama filter/protocol tidak boleh mengandung `-`** di BIRD.
+  Generator mengubah `-` menjadi `_` (konsisten di definisi
+  dan referensi).
+- **Prefix set di filter WAJIB pakai suffix `+`.**
+  `if net ~ [ 10.0.0.0/8 ]` (tanpa `+`) TIDAK match prefix yang
+  lebih spesifik (mis. 10.99.98.0/24) — filter menolak semua route.
+  Yang benar: `if net ~ [ 10.0.0.0/8+ ]` (prefix ini atau lebih
+  spesifik). Sama untuk community: `bgp_community ~ [ (65000,100) ]`.
+- **`network` di Titian hanya mencatat niat (komentar di bird.conf),
+  bukan route BIRD.** Prefix baru diiklankan bila ada di tabel routing
+  BIRD (via kernel/direct/static) DAN lolos export filter. Catatan:
+  protocol `kernel` di bird.conf stock TIDAK punya `learn;` — route
+  statik kernel (mis. `route add`) TIDAK masuk tabel BIRD. Untuk
+  mengiklankan prefix baru, definisikan via protocol `static` di
+  bird.conf (`route <prefix> via <nexthop>;`).
+- **`router bird` (masuk view) vs `router bird enable`.**
+  `router bird` saja masuk ke `(config-bird)#`; `router bird
+  enable` tetap perintah di configure-view (mengaktifkan BIRD).
+- **BGP section marker** `#-BGP-#` … `#-ENDBGP-#` harus ada di
+  bird.conf (ditambahkan sekali saat deploy; stock bird.conf
+  tidak memilikinya).
+
+### 9b.6 Hapus
+
+```
+configure terminal
+router bird
+no neighbor 10.99.40.2
+no network 10.99.40.0/24
+no filter F-RB3011-IN
+end
+configure terminal
+commit
+save
+```
+
+---
+
 ## 10. System, DNS, dan SSH — alur pakai
 
 ### 10.1 Identitas dan waktu

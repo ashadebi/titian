@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- BGP (BIRD) — konfigurasi neighbor, filter, atribut.    -->
+    <!-- Pola sama seperti IPoE (conf-ipoe.xml): `router bird`   -->
+    <!-- masuk ke configure-bird-view; `neighbor <IP>` masuk ke  -->
+    <!-- configure-bird-neighbor-view; `filter <NAME>` masuk ke  -->
+    <!-- configure-bird-filter-view. Intent di /etc/titian/      -->
+    <!-- bgp.conf; generate via titian-bgp.sh (menulis section   -->
+    <!-- bird.d/bgp.conf lalu titian-bird.sh generate bgp).      -->
+    <!-- Service BIRD naik/berubah saat `commit` (apply_bgp di   -->
+    <!-- titian-commit.sh).                                      -->
+    <!--                                                         -->
+    <!-- CATATAN: `router bird` (masuk view) didefinisikan di    -->
+    <!-- conf-router.xml; perintah di view ini melengkapinya.    -->
+    <!-- `router bird enable` / `threads` tetap di configure-   -->
+    <!-- view (conf-router.xml) agar kompatibel.                 -->
+
+<VIEW name="configure-bird-view"
+    prompt="${SYSTEM_NAME}(config-bird)# "
+    depth="1">
+    <NAMESPACE ref="configure-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Back to configure-view"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="enable"
+        help="Enable BIRD (pending commit — service naik saat commit; diblokir if FRR jalan)">
+        <CONFIG priority="0x1500" pattern="^router bird enable$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh bird-enable
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no enable"
+        help="Disable BIRD (pending commit)">
+        <CONFIG operation="unset" pattern="^router bird enable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bird.sh bird-disable
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="router-id"
+        help="BIRD router ID (alamat IPv4 unik, mis. IP peering)">
+        <PARAM name="IP"
+            help="Router ID"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh set-router-id "${IP}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local-as"
+        help="Local AS number untuk BGP">
+        <PARAM name="AS"
+            help="Nomor AS (mis. 65000)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh set-local-as "${AS}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="neighbor"
+        help="BGP neighbor (masuk ke neighbor view)"
+        view="configure-bird-neighbor-view"
+        viewid="bgp_neighbor=${IP}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="IP"
+            help="Alamat IP neighbor"
+            ptype="IP_ADDR"/>
+        <CONFIG priority="0x1520" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-touch "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no neighbor"
+        help="Delete BGP neighbor">
+        <PARAM name="IP"
+            help="Alamat IP neighbor"
+            ptype="IP_ADDR"/>
+        <CONFIG operation="unset" pattern="^neighbor ${IP}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-del "${IP}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="network"
+        help="Prefix yang diiklankan via BGP (harus ada di tabel routing)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 10.99.40.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh network-add "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no network"
+        help="Stop mengiklankan prefix">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^network ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh network-del "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="filter"
+        help="BGP filter (masuk ke filter view)"
+        view="configure-bird-filter-view"
+        viewid="bgp_filter=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG priority="0x1530" pattern="^${__line}$"/>
+        <ACTION>
+            echo "BGP filter ${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no filter"
+        help="Delete BGP filter">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^filter ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-del "${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-neighbor-view"
+    prompt="${SYSTEM_NAME}(config-bird-neighbor-${bgp_neighbor})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="remote-as"
+        help="Remote AS number neighbor ini">
+        <PARAM name="AS"
+            help="Nomor AS neighbor (mis. 65001)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-add "${bgp_neighbor}" "${AS}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+        help="Deskripsi neighbor">
+        <PARAM name="Text"
+            help="Teks deskripsi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" description "${Text}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import"
+        help="Import policy dari neighbor ini (all / none / filter NAME)"/>
+
+    <COMMAND name="import all"
+        help="Import semua route dari neighbor">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import none"
+        help="Import tidak ada route dari neighbor">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import filter"
+        help="Import hanya route yang lolos filter">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export"
+        help="Export policy ke neighbor ini (all / none / filter NAME)"/>
+
+    <COMMAND name="export all"
+        help="Export semua route ke neighbor">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export none"
+        help="Export tidak ada route ke neighbor">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Export hanya route yang lolos filter">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local-pref"
+        help="Default local-preference untuk route dari neighbor ini">
+        <PARAM name="Value"
+            help="Nilai local-pref (mis. 100)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" local-pref "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="med"
+        help="MED yang dikirim ke neighbor ini">
+        <PARAM name="Value"
+            help="Nilai MED (mis. 50)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" med "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="prepend"
+        help="Jumlah AS-path prepend saat export ke neighbor ini">
+        <PARAM name="Count"
+            help="Jumlah prepend (mis. 2)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" prepend "${Count}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="community"
+        help="Community yang ditambahkan saat export ke neighbor ini">
+        <PARAM name="Value"
+            help="Community AS:NN (mis. 65000:100)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" community "${Value}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-filter-view"
+    prompt="${SYSTEM_NAME}(config-bird-filter-${bgp_filter})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="accept"
+        help="Terima prefix ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 10.0.0.0/8)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject"
+        help="Tolak prefix ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept community"
+        help="Terima route dengan community ini">
+        <PARAM name="Value"
+            help="Community AS:NN (mis. 65000:100)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept community "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject community"
+        help="Tolak route dengan community ini">
+        <PARAM name="Value"
+            help="Community AS:NN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject community "${Value}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show bgp"
+        help="Status BGP (intent + section + protocol BIRD)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>
