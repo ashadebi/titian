@@ -747,7 +747,12 @@ cmd_apply() {
                         *) die "rule $_rname: dport needs proto tcp|udp" ;;
                     esac
                 fi
-                printf '%s %s\n' "$_rule" "$_act" >> "$_anchor_tmp"
+                # pf default for `pass` on TCP is stateful (flags S/SA keep
+                # state): only the SYN matches the rule, bulk data matches
+                # the state and BYPASSES dnpipe. Proven live 13 Nov 2026
+                # (tes 11): manual `... dnpipe 1 no state` shaped 10 Mbit/s
+                # to ~9.5 Mbit/s (7323 pkts); the stateful rule shaped 0.
+                printf '%s %s no state\n' "$_rule" "$_act" >> "$_anchor_tmp"
                 ;;
         esac
     done < "$CONF"

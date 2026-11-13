@@ -13,7 +13,7 @@
          - pf only (no nftables — BSDRP is FreeBSD-only).
          - output chain usable: in=any + out=<iface> (Titian rejected
            out for all chains on FreeBSD).
-         - anti-lockout `protected` interface list (default em0).
+         - anti-lockout `protected` interface list (default ge0).
          PTYPEs FW_* are defined here; IFACE_SYS / IP_ADDR /
          IP_ADDR_MASK / DSTPORT come from the main tree (types-dev.xml).
          If the main tree already defines an FW_* ptype, REMOVE the
