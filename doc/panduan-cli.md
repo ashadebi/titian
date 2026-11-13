@@ -800,6 +800,45 @@ Batasan pf yang ditolak mentah-mentah (bukan diem-diem diubah):
 
 Tanpa IPv6, tanpa redirect, tanpa shaping/scrub di versi ini.
 
+### 8.6 ipfw — allow SSH + ping WAJIB sebelum main firewall
+
+Traffic-shape memakai **ipfw + dummynet**. ipfw punya aturan default 65535:
+
+```
+65535 deny ip from any to any
+```
+
+Saat ipfw aktif tanpa aturan allow, **semua trafik ditolak** — termasuk SSH
+dan ping (ge0 dapat IP via `dhclient` tapi ping RTO, 13 Nov 2026). Karena
+itu, pasang dulu aturan allow SSH + ping **sebelum** mengaktifkan ipfw atau
+main firewall:
+
+```sh
+ipfw add 100 allow tcp from any to any 22
+ipfw add 110 allow tcp from any 22 to any
+ipfw add 120 allow icmp from any to any
+```
+
+| Aturan | Fungsi |
+|---|---|
+| 100 | SSH masuk (TCP tujuan port 22) |
+| 110 | SSH keluar / balasan (TCP sumber port 22) |
+| 120 | Ping / ICMP (dua arah) |
+
+Verifikasi: `ipfw show` (ketiga aturan ada) + `sysctl net.inet.ip.fw.enable`
+(1 = aktif, 0 = nonaktif). Darurat bila terkunci:
+
+```sh
+ipfw add 65535 allow ip from any to any   # ubah default deny → allow
+service ipfw stop                          # atau matikan ipfw sekalian
+```
+
+Catatan: aturan ipfw **tidak persisten** (hilang saat reboot) — pasang ulang
+saat boot bila perlu. Aturan ini hanya melindungi SSH + ping; saat ipfw aktif
+dengan default deny, trafik lain (BGP TCP 179, VXLAN UDP 4789, DNS, dst.)
+tetap ditolak kecuali ada aturan allow-nya. Firewall fitur Titian (§8.1–8.5)
+memakai **pf**, bukan ipfw — ipfw di sini hanya pengaman akses.
+
 ---
 
 ## 9. Checkpoint, rollback, dan rename (mode exec)
