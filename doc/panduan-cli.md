@@ -1095,6 +1095,244 @@ save
 
 ---
 
+## 9c. FRR — routing suite alternatif (bukan BIRD)
+
+FRR (`net/frr10`, versi 10.7.1 di image) adalah routing suite
+alternatif pengganti BIRD. BIRD dan FRR **tidak bisa jalan bersamaan**
+— mutual exclusion keras dua arah (exit 33): `router bird enable` +
+`router frr enable` bersamaan ditolak, dicek dari tiga sumber
+(`bird_enable`/`frr_enable` di rc.conf, status service, proses
+`bird`/`zebra` yang jalan, dan niat pending di
+`/etc/titian/netstate/routing.intent`).
+
+**Perbedaan penting vs BIRD — fiturnya TIDAK sama di lapisan klish:**
+
+| Aspek | BIRD (klish) | FRR (klish) |
+|---|---|---|
+| BGP neighbor, filter, network | Ya — lengkap via `router bird` (§9b) | Tidak — tidak ada perintah neighbor/filter di klish |
+| Atribut (local-pref, MED, prepend, community) | Ya — per-neighbor | Tidak — tidak ada di klish |
+| Enable/disable + `commit` | Ya | Ya (`router frr enable`) |
+| Config dasar (router-id, log) | Ya (`router-id`, via bird.conf) | Ya — langsung via `vtysh` + `write memory` |
+| Show status/versi | Ya (`show bird`, `show route`) | Ya (`show frr`, `show frr version`) |
+
+Konfigurasi routing protocol FRR (BGP neighbor, route-map,
+prefix-list, community, local-pref, MED, AS-path prepend) dilakukan
+**langsung di `vtysh`** (perintah `cli` di Titian masuk ke vtysh),
+bukan lewat klish. Model native FRR: config via vtysh berlaku
+langsung (running) + `write memory` agar persisten ke
+`/usr/local/etc/frr/frr.conf`. Daemon FRR sendiri mendukung semua
+fitur itu (route-map, prefix-list, community standard/large,
+local-pref, MED, prepend) — hanya saja jalurnya vtysh, bukan klish.
+
+### 9c.1 Enable — BIRD harus mati dulu (dua commit terpisah)
+
+Exclusion dicek terhadap service/proses yang **masih jalan**, bukan
+hanya niat. Jadi matikan BIRD + `commit` dulu, baru enable FRR:
+
+```
+! Langkah 1 — matikan BIRD
+configure terminal
+no router bird enable
+end
+configure terminal
+commit
+save
+! Langkah 2 — baru enable FRR
+configure terminal
+router frr enable
+end
+configure terminal
+commit
+save
+```
+
+`commit` langkah 2 menjalankan `titian-frr.sh frr-apply`:
+`sysrc frr_enable="YES"` + `service frr start` (daemon `zebra` naik
+dulu; `bgpd`/`ospfd` naik bila dikonfigurasi di `frr.conf`).
+Matikan FRR: `no router frr enable` + `commit` + `save`
+(`service frr onestop` + `frr_enable="NO"`).
+
+**Di balik layar (FreeBSD `net/frr10`, rc script resmi `frr.in`):**
+`service frr start` → `watchfrr` → restart semua daemon di
+`frr_daemons` → `vtysh -b` memuat boot config. Variabel rc.conf
+yang relevan (default dari `frr.in`):
+
+```
+frr_enable="YES"
+frr_daemons="mgmtd zebra staticd bgpd"   # minimal untuk BGP; default = semua daemon
+frr_vtysh_boot="YES"                     # default; config terpadu (frr.conf)
+watchfrr_enable="YES"                    # default; watchfrr mengawasi & me-restart daemon
+frr_default_profile="traditional"        # alternatif: "datacenter"
+zebra_flags="-A 127.0.0.1"               # default
+```
+
+Urutan `frr_daemons` penting — `mgmtd` dulu, lalu `zebra`. Saat
+start dengan `frr_vtysh_boot=YES`, rc script otomatis membuat
+`/usr/local/etc/frr/vtysh.conf` (`service integrated-vtysh-config`)
+dan `/usr/local/etc/frr/frr.conf` (`log syslog informational`) bila
+belum ada (owner `frr:frr`). Config terpadu di
+`/usr/local/etc/frr/frr.conf` (header lazim: `frr version 10.x` +
+`frr defaults traditional` + `hostname <nama>`). Socket/PID daemon:
+`/var/run/frr/`. Reload tanpa restart: `service frr reload` (butuh
+paket `frr10-pythontools`).
+
+**BSDRP (dokumentasi resmi):** BSDRP menyertakan KEDUA daemon —
+*"For a routing protocol daemon, you can choose between Bird and
+FRRouting."* Cara enable di BSDRP (User Guide, Quick start):
+`sysrc frr_enable=yes` → `service frr start` → `cli` (masuk CLI
+FRR) → `wr` (simpan) → `exit` → `config save` (persist `/etc` +
+`/usr/local/etc`, keduanya di RAM disk BSDRP). Ada service
+`autosave` (`sysrc autosave_enable=yes`) agar `config save` jalan
+otomatis tiap ada perubahan. BSDRP 2.0 = bird 2.17 + frr 10.4.1;
+lab terbaru menyebut Bird 3 + FRRouting 10.
+
+**Kenapa tidak bisa bersamaan:** BIRD (protocol bgp) dan FRR
+`bgpd` sama-sama listen TCP 179 untuk sesi BGP masuk — dua proses
+tidak bisa bind port yang sama. BSDRP memperlakukan keduanya
+sebagai **alternatif** ("choose between"), bukan untuk dijalankan
+bersamaan. Interop BIRD↔FRR terbukti di level protokol (lab BSDRP
+route-reflector + confederation mencampur Bird 3 dan FRR 10 sebagai
+peer BGP) — tapi itu di **router berbeda**, bukan satu host.
+
+### 9c.2 Config dasar via klish (langsung vtysh + write memory)
+
+```
+configure terminal
+router frr
+router-id 10.99.40.1
+log syslog
+write-memory
+exit
+end
+```
+
+| Perintah | Arti |
+|---|---|
+| `router-id <IPv4>` | Router ID FRR (dipakai OSPF/BGP) — langsung via vtysh + `write memory` |
+| `no router-id` | Hapus router-id |
+| `log syslog` / `no log syslog` | Log FRR ke syslog / matikan |
+| `write-memory` | Tulis running-config FRR ke `/usr/local/etc/frr/frr.conf` (persisten) |
+
+Perintah ini berlaku **langsung** (tidak menunggu `commit`) —
+hanya enable/disable yang menunggu `commit`.
+
+### 9c.3 Show
+
+```
+show frr
+show frr version
+```
+
+`show frr` menampilkan versi, intent, `frr_enable` di rc.conf,
+status service, dan pid `zebra` bila jalan. `show frr version`
+menampilkan versi + output `vtysh show version`.
+
+### 9c.4 BGP via vtysh — contoh (bukan klish)
+
+Masuk ke vtysh lewat perintah `cli` di Titian, lalu konfigurasi
+BGP seperti biasa di FRR (contoh eBGP ke RB3011, AS 65001 — padanan
+persis konfigurasi BIRD §9b.1):
+
+```
+! di vtysh (lewat `cli`)
+configure terminal
+router bgp 65000
+ bgp router-id 10.99.40.1
+ bgp default local-preference 100
+ neighbor 10.99.40.2 remote-as 65001
+ neighbor 10.99.40.2 description RB3011-TEST
+ neighbor 10.99.40.2 send-community
+ neighbor 10.99.40.2 route-map F-RB3011-IN in
+ neighbor 10.99.40.2 route-map EXPORT-OUT out
+ network 10.99.40.0/24
+exit
+ip prefix-list F-RB3011-IN seq 5 permit 10.0.0.0/8 le 32
+ip prefix-list F-RB3011-IN seq 10 deny 192.168.0.0/16 le 32
+ip prefix-list F-RB3011-IN seq 20 deny any
+ip prefix-list EXPORT-NET seq 5 permit 10.99.40.0/24
+route-map F-RB3011-IN permit 10
+ match ip address prefix-list F-RB3011-IN
+ set local-preference 100
+route-map F-RB3011-IN deny 20
+route-map EXPORT-OUT permit 10
+ match ip address prefix-list EXPORT-NET
+ set community 65000:100
+ set metric 50
+ set as-path prepend 65000 65000
+end
+write memory
+```
+
+Padanan atribut BIRD → FRR: `local-pref` = `set
+local-preference` (atau `bgp default local-preference`),
+`med` = `set metric`, `prepend N` = `set as-path prepend`
+(bisa banyak ASN sekaligus), `community` = `set community`
+(+ `neighbor X send-community` agar dikirim ke peer), filter
+import/export = `route-map ... in/out` + `prefix-list` (+
+`match community` bila perlu). Route-map + prefix-list FRR
+**lebih ekspresif** dari filter BIRD karena bisa match
+community/AS-path/metric, bukan hanya prefix. Yang tidak ada
+padanannya 1:1 di FRR: bahasa filter BIRD (`if ... then` di
+`bird.conf`) — di FRR semua policy lewat route-map/prefix-list/
+community-list.
+
+**Community — standard, large, well-known:**
+- Standard: `set community 65000:100`; kirim: `neighbor X
+  send-community`.
+- Large (RFC 8092, format `ASN:V1:V2`): `set large-community
+  65000:100:999` + `neighbor X send-community large` (`both` =
+  standard+large, `all` = +extended).
+- Match: `ip community-list standard NAMA permit 65000:100`
+  lalu `match community NAMA` di route-map.
+- Well-known: `no-export` = 65535:65281 (jangan advertise ke
+  luar confederation); `no-advertise` = 65535:65282 (jangan
+  advertise ke peer mana pun); `local-AS` = 65535:65283;
+  `no-peer` = 65535:65284; `blackhole` = 65535:666 (RFC 7999).
+  Di route-map: `set community no-export`. Tambah tanpa
+  menimpa: `set community ... additive`.
+
+**Verifikasi (vtysh):**
+
+```
+show ip bgp summary
+show ip bgp neighbors 10.99.40.2 advertised-routes
+show ip bgp neighbors 10.99.40.2 received-routes
+show ip bgp community 65000:100
+show ip route
+```
+
+**Quirk FreeBSD (diketahui):** FRR 9.x–10.1.1 di FreeBSD 14
+tidak menampilkan default gateway & static route kernel di
+`show ip route` (issue #17113). Di 10.7.1 kemungkinan sudah
+diperbaiki, tapi saat uji FRR nanti **wajib verifikasi `show ip
+route` memuat route kernel** (default/static), bukan cuma route
+BGP.
+
+### 9c.5 Status uji (jujur)
+
+- CLI FRR (enable, router-id, log, write-memory, show) **ada** dan
+  mutual exclusion vs BIRD **sudah diuji** (gagal rc=33 dua arah).
+- Paket `frr10-10.7.1_1` ter-install di image, rc script `frr` ada.
+- **FRR sebagai routing daemon BELUM pernah jalan live** (13 Nov
+  2026): tidak ada proses `zebra`/`bgpd`/`ospfd`, tidak ada
+  `frr.conf`, `frr_enable` tidak ada di rc.conf. Uji BGP E2E ke
+  RB3011 selama ini semuanya pakai BIRD, bukan FRR.
+- Uji FRR live yang masih terbuka: enable FRR (BIRD mati dulu,
+  §9c.1) → BGP via vtysh ke RB3011 (§9c.4) → verifikasi session
+  Established + route exchange + atribut (seperti uji BIRD §9b) +
+  verifikasi `show ip route` memuat route kernel (quirk §9c.4).
+
+**Referensi:**
+- FreeBSD port `net/frr10`, rc script resmi: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in
+- BSDRP User Guide (pilih Bird atau FRRouting): https://bsdrp.net/documentation/end-users_docs
+- Lab BSDRP (BGP/OSPF/RIP/ISIS/BABEL dengan FRR): https://bsdrp.net/documentation/examples/simple-bgp-rip-ospf-lab/
+- Lab BSDRP (route-reflector + confederation Bird 3 + FRR 10): https://bsdrp.net/documentation/examples/bgp-route-reflector-and-confederation-using-frr-and-bird/
+- Dok resmi FRR 10.0 (BGP): https://docs.frrouting.org/en/stable-10.0/bgp.html
+- Dok resmi FRR 10.0 (route-map): https://docs.frrouting.org/en/stable-10.0/routemap.html
+- Issue FRR #17113 (`show ip route` tidak tampilkan route kernel di FreeBSD): https://github.com/FRRouting/frr/issues/17113
+
+---
+
 ## 10. System, DNS, dan SSH — alur pakai
 
 ### 10.1 Identitas dan waktu
@@ -1274,6 +1512,52 @@ show firewall
 
 Bila ada yang salah: `rollback sebelum-firewall` (lalu `save` bila
 ingin keadaan itu yang permanen).
+
+---
+
+## 14. Inventaris fitur Titian + status uji (13 Nov 2026)
+
+Daftar satu per satu fitur yang sudah dibuat (40 XML, 29 script
+`sbin/`), beserta status ujinya. Legenda: ✅ = LOLOS LIVE (terverifikasi
+end-to-end di mesin test); 🟡 = SEBAGIAN (sudah ada tapi belum penuh
+— mis. function-test saja, via script bukan CLI, atau sebagian
+sub-fitur belum); ❌ = BELUM (perintah ada, belum diuji live).
+
+| # | Fitur | File | Status | Catatan |
+|---|---|---|---|---|
+| 1 | BGP — neighbor, filter, atribut (BIRD) | conf-bgp.xml, titian-bgp.sh, bird.xml | ✅ LIVE | E2E ke RB3011 LOLOS 13 Nov ~02:35: Established, route exchange, prepend 2, MED 50, local-pref 100, community 65000:100, filter F-RB3011-IN |
+| 2 | BIRD — show route/protocol, reload | bird.xml, titian-bird.sh | ✅ LIVE | Sweep 13 Nov ~00:11, 0 syntax error |
+| 3 | FRR — enable, router-id, log, show | conf-frr.xml, titian-frr.sh | 🟡 SEBAGIAN | CLI + mutual exclusion vs BIRD diuji (rc=33 dua arah). Daemon BELUM pernah jalan live; BGP via FRR (vtysh) BELUM diuji — lihat §9c |
+| 4 | Interface ethernet (IP/IPv6, desc, dhcp) | conf-if-eth-fbsd.xml | ✅ LIVE | xe3 (SFP, 10.99.31.1/24 + IPv6), ge0-3 sesudah rename |
+| 5 | Interface VLAN | conf-if-vlan-fbsd.xml | ✅ LIVE | vlan 99 ge3 |
+| 6 | Interface VXLAN | conf-if-vxlan-fbsd.xml | ✅ LIVE | vxlan100, ping 0% loss dua arah |
+| 7 | Interface bridge L2 | conf-if-bridge-fbsd.xml | ✅ LIVE | bridge0 (vxlan100 + vlan99) |
+| 8 | Interface LAGG / LACP | conf-if-lagg-fbsd.xml | ✅ LIVE | LACP E2E + IPv4/IPv6 LOLOS 12 Nov |
+| 9 | Interface loopback | conf-if-lo-fbsd.xml | ❌ BELUM | lo0 dipakai untuk route test via OS, perintah klish loopback belum diverifikasi |
+| 10 | Interface options (tso/lro/rx/tx) | conf-if-opt-fbsd.xml | ❌ BELUM | Belum diuji live |
+| 11 | Static route / gateway (v4 + v6) | conf-route-fbsd.xml, conf-route6.xml | 🟡 SEBAGIAN | Route statik dipakai saat uji (via bird.conf + kernel); perintah klish `ip route` belum diverifikasi eksplisit |
+| 12 | Firewall / NAT (pf) | conf-fw.xml | ❌ BELUM | Perintah ada; pf BELUM ada di image, jadi tidak bisa jalan live |
+| 13 | Traffic-shape / dummynet limiter | traffic-shape.xml | 🟡 SEBAGIAN | Function-test (staged, full masks); belum E2E live |
+| 14 | PPPoE server (mpd5, pool, user, RADIUS) | conf-pppoe.xml | ❌ BELUM | Belum diuji live |
+| 15 | IPoE server (DHCP) | conf-ipoe.xml | 🟡 SEBAGIAN | Server + dhcpd teruji live (PID 82691); lease client E2E BELUM teruji; server kemudian DIMATIKAN + intent dihapus (12 Nov 19:15) |
+| 16 | WireGuard | conf-wireguard.xml | ❌ BELUM | `ifconfig wg` belum diuji live |
+| 17 | Monitoring (SNMP, node/bird-exporter, nfacctd) | conf-monitoring.xml | ❌ BELUM | Perintah ada (snmp enable/community — lihat §9c.2 untuk SNMP); enable via CLI belum diverifikasi live |
+| 18 | System (hostname, timezone, sysctl) | conf-sys.xml | ❌ BELUM | Hostname di-set via rc.conf OS-level; perintah klish system belum diverifikasi live |
+| 19 | DNS (domain-name, name-servers) | conf-sys-dns.xml | ❌ BELUM | Belum diuji live |
+| 20 | Service SSH (port, allow-root) | conf-serv-ssh.xml | 🟡 SEBAGIAN | SSH jalan (OS-level, port 9393 via NAT); perintah klish `service ssh` belum diverifikasi live |
+| 21 | Checkpoint / rollback | en-checkpoint.xml | ❌ BELUM | Direktori checkpoints ada; rollback belum diuji live |
+| 22 | Rename interface | en-rename.xml | 🟡 SEBAGIAN | Rename igb→ge / ixl→xe LOLOS live via script (SSH); perintah CLI `rename` GAGAL via CLI |
+| 23 | Terminal / pager (length, no-more) | en-terminal.xml | ✅ LIVE | Pager `less`, sweep 13 Nov 0 syntax error |
+| 24 | Show (dasar, interface, routing, system, hardware) | en-show.xml, en-show-hw.xml, en-show-routing.xml, en-show-if-*.xml | ✅ LIVE | Sweep 13 Nov ~00:11, semua show jalan, 0 syntax error |
+| 25 | Ping / traceroute | ping.xml | 🟡 SEBAGIAN | Ping dipakai ekstensif via OS; perintah klish `ping` belum diverifikasi eksplisit |
+| 26 | Commit / commit check / save | conf-commit.xml, enable-mode.xml | ✅ LIVE | Commit + save teruji ekstensif (termasuk save 13 Nov 13:55 yang menyinkronkan bgp.conf) |
+| 27 | Boot replay / startup-config | startup.xml, titian-boot.sh, titian-cfg.sh | ✅ LIVE | Replay boot LOLOS (reboot ke-5); persistensi /cfg LOLOS |
+
+**Yang paling terbuka (prioritas uji berikut):** FRR live (daemon +
+BGP via vtysh, §9c.5) · PPPoE penuh · WireGuard · firewall/NAT
+(butuh pf di image) · IPoE lease client E2E · monitoring enable via
+CLI · checkpoint rollback · static route + loopback + interface
+options via klish.
 
 ---
 
