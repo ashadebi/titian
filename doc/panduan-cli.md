@@ -839,6 +839,36 @@ dengan default deny, trafik lain (BGP TCP 179, VXLAN UDP 4789, DNS, dst.)
 tetap ditolak kecuali ada aturan allow-nya. Firewall fitur Titian (§8.1–8.5)
 memakai **pf**, bukan ipfw — ipfw di sini hanya pengaman akses.
 
+### 8.7 protect-interface — guard anti-lockout + migrasi
+
+`protect-interface` melindungi interface mgmt dari rule firewall (rule tidak
+boleh memakai interface itu sebagai in/out). Default: **`ge0`** (mgmt sejak
+rename 12 Nov).
+
+**Migrasi config live TIDAK otomatis.** Setelah deploy script baru (default
+ge0), config lama di `/usr/local/etc/firewall.conf` masih `protected em0`.
+Migrasikan dengan urutan ini:
+
+```
+protect-interface ge0       # tambah DULU
+no protect-interface em0    # baru hapus (hapus butuh minimal 2 entri)
+commit
+save
+```
+
+Dengan ge0 terproteksi, filter di ge0 akan **ditolak** saat add — itu guard
+yang bekerja. Tes firewall di ge0 harus pakai interface non-mgmt, atau
+sengaja unprotect ge0 dulu dengan risiko sendiri.
+
+**Insiden 13 Nov 2026 (SUDAH TERBUKTI):** commit firewall (`filter input
+deny dport 18081 + enable`) menggantung lalu SSH putus total sejak ~17:55
+WIB — **lockout pf** (uptime mesin 6 jam membuktikan bukan crash). Akses
+pulih 22:54 setelah `pfctl -d` di konsol. **Dibersihkan 14 Nov 00:04:**
+rule deny 18081 dihapus, `enable` dimatikan, protected `em0` → `ge0`
+(via klish + commit + save; terverifikasi `show firewall` = no rules,
+protected ge0, pf not running). Jangan ulangi commit firewall sebelum guard
+ge0 terpasang + filter diuji di interface non-mgmt.
+
 ---
 
 ## 9. Checkpoint, rollback, dan rename (mode exec)
