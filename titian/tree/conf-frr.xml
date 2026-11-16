@@ -4,7 +4,7 @@
  xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
                      http://clish.sourceforge.net/XMLSchema/clish.xsd">
     <!--=======================================================-->
-    <!-- FRR (net/frr10) — BSDRP port (BARU).
+    <!-- FRR (net/frr10) — BSDRP port.
          - Enable/disable di conf-router.xml (`router frr enable`,
            mutual exclusion vs BIRD di sana + di commit).
          - File ini: subview `router frr` untuk config dasar via
@@ -13,7 +13,25 @@
            ini TIDAK menyentuh/mendefinisikan `cli` (feature-list §3).
          - Config via vtysh berlaku langsung (running) + `write
            memory` agar persisten; hanya enable/disable yang menunggu
-           commit. -->
+           commit.
+         - FRR LENGKAP (15 Nov 2026): BGP / OSPF / route-map /
+           prefix-list / community-list via klish. Model BEDA
+           dengan config dasar: perintah-perintah ini HANYA
+           menulis intent di /etc/titian/frr.conf; yang
+           menerapkan adalah `commit` (titian-frr.sh
+           frr-apply-config: rekonsiliasi intent vs running-
+           config via vtysh + write memory). Alasan: config
+           bisa dimasukkan sebelum FRR jalan; commit = satu
+           titik apply yang konsisten dengan BIRD; hapus
+           (`no ...`) ikut terhapus dari running-config lewat
+           rekonsiliasi.
+         - WAJIB diingat (tes 14): FRR 10.x menolak eBGP tanpa
+           route-map in DAN out — tanpa itu 0 prefix tukar.
+           Jadi route-map adalah bagian inti, bukan tambahan.
+         - Config manual di vtysh dalam kategori yang dikelola
+           klish (router bgp, router ospf, route-map, ip
+           prefix-list, ip community-list) akan DIHAPUS saat
+           commit bila tidak ada di intent. -->
 
 <VIEW name="configure-view">
     <COMMAND name="router frr"
@@ -94,6 +112,608 @@
             ${RT_SBIN}/titian-frr.sh write-memory
         </ACTION>
     </COMMAND>
+
+    <!-- ============ FRR LENGKAP: BGP ============ -->
+    <COMMAND name="router bgp"
+        help="BGP FRR — masuk ke BGP view (local-as diset di sini; config diterapkan saat commit)"
+        view="configure-frr-bgp-view"
+        viewid="sysview=frr-bgp"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="AS"
+            help="Local AS (mis. 65000)"
+            ptype="UINT"/>
+        <CONFIG priority="0x1520" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-set-local-as "${AS}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router bgp"
+        help="Hapus SEMUA konfigurasi BGP FRR dari intent (neighbor/network ikut terhapus dari running-config saat commit; route-map/prefix-list tetap)">
+        <CONFIG operation="unset" pattern="^router bgp "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-del
+        </ACTION>
+    </COMMAND>
+
+    <!-- ============ FRR LENGKAP: OSPF ============ -->
+    <COMMAND name="router ospf"
+        help="OSPF FRR — masuk ke OSPF view (config diterapkan saat commit)"
+        view="configure-frr-ospf-view"
+        viewid="sysview=frr-ospf"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1525" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-touch
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router ospf"
+        help="Hapus SEMUA konfigurasi OSPF FRR dari intent">
+        <CONFIG operation="unset" pattern="^router ospf "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-del
+        </ACTION>
+    </COMMAND>
+
+    <!-- ============ FRR LENGKAP: route-map ============ -->
+    <COMMAND name="route-map"
+        help="Route-map FRR — masuk ke route-map view (entry permit/deny + seq; WAJIB untuk eBGP FRR 10.x)"
+        view="configure-frr-routemap-view"
+        viewid="frr_rm=${Name}:${Action}:${Seq}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama route-map"
+            ptype="STRING"/>
+        <PARAM name="Action"
+            help="permit | deny"
+            ptype="FW_ACTION"/>
+        <PARAM name="Seq"
+            help="Nomor urut entry (mis. 10)"
+            ptype="UINT"/>
+        <CONFIG priority="0x1530" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-add "${Name}" "${Action}" "${Seq}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-map"
+        help="Hapus route-map (SEMUA entry dengan nama ini)">
+        <PARAM name="Name"
+            help="Nama route-map"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^route-map ${Name} "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- ============ FRR LENGKAP: prefix-list ============ -->
+    <COMMAND name="ip prefix-list"
+        help="Prefix-list FRR: ip prefix-list NAMA seq N permit|deny PREFIX [ge N] [le N]">
+        <PARAM name="Name"
+            help="Nama prefix-list"
+            ptype="STRING"/>
+        <PARAM name="seq"
+            help="seq"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="Seq"
+                help="Nomor urut (mis. 5)"
+                ptype="UINT"/>
+        </PARAM>
+        <PARAM name="Action"
+            help="permit | deny"
+            ptype="FW_ACTION"/>
+        <PARAM name="Prefix"
+            help="Prefix CIDR atau any"
+            ptype="FW_CIDR_OR_ANY"/>
+        <PARAM name="ge"
+            help="ge"
+            mode="subcommand"
+            ptype="SUBCOMMAND"
+            optional="true">
+            <PARAM name="Ge"
+                help="Batas bawah panjang prefix"
+                ptype="UINT"/>
+        </PARAM>
+        <PARAM name="le"
+            help="le"
+            mode="subcommand"
+            ptype="SUBCOMMAND"
+            optional="true">
+            <PARAM name="Le"
+                help="Batas atas panjang prefix"
+                ptype="UINT"/>
+        </PARAM>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh prefix-list-add "${Name}" "${Seq}" "${Action}" "${Prefix}" "${Le}" "${Ge}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ip prefix-list"
+        help="Hapus prefix-list (SEMUA seq dengan nama ini)">
+        <PARAM name="Name"
+            help="Nama prefix-list"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^ip prefix-list ${Name} "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh prefix-list-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- ============ FRR LENGKAP: community-list ============ -->
+    <COMMAND name="ip community-list"
+        help="Community-list FRR (standard)"/>
+    <COMMAND name="ip community-list standard"
+        help="Community-list standard: ip community-list standard NAMA NILAI (permit ditulis otomatis ke intent; contoh: ip community-list standard COMM-65000-100 65000:100)">
+        <PARAM name="Name"
+            help="Nama community-list"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Community AS:NN atau well-known (no-export/no-advertise/local-AS/no-peer/blackhole)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh community-list-add "${Name}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ip community-list"
+        help="Hapus community-list">
+        <PARAM name="Name"
+            help="Nama community-list"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^ip community-list standard ${Name} "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh community-list-del "${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<!-- ============ FRR LENGKAP: BGP view ============ -->
+<VIEW name="configure-frr-bgp-view"
+    prompt="${SYSTEM_NAME}(config-frr-bgp)# "
+    depth="2">
+    <NAMESPACE ref="configure-frr-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Back to frr mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="router-id"
+        help="BGP router-id (menimpa router-id global FRR untuk BGP)">
+        <PARAM name="id"
+            help="alamat IPv4 router-id"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-set-router-id "${id}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router-id"
+        help="Delete BGP router-id">
+        <CONFIG operation="unset" pattern="^router-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-del-router-id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="neighbor"
+        help="BGP neighbor (masuk ke neighbor view)"
+        view="configure-frr-bgp-neighbor-view"
+        viewid="bgp_neighbor=${IP}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="IP"
+            help="Alamat IP neighbor"
+            ptype="IP_ADDR"/>
+        <CONFIG priority="0x1520" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-touch "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no neighbor"
+        help="Delete BGP neighbor">
+        <PARAM name="IP"
+            help="Alamat IP neighbor"
+            ptype="IP_ADDR"/>
+        <CONFIG operation="unset" pattern="^neighbor ${IP}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-del "${IP}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="network"
+        help="Prefix yang diiklankan via BGP (harus ada di tabel routing)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 10.99.40.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-network-add "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no network"
+        help="Stop mengiklankan prefix">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^network ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-network-del "${Prefix}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<!-- ============ FRR LENGKAP: BGP neighbor view ============ -->
+<VIEW name="configure-frr-bgp-neighbor-view"
+    prompt="${SYSTEM_NAME}(config-frr-bgp-neighbor-${bgp_neighbor})# "
+    depth="3">
+    <NAMESPACE ref="configure-frr-bgp-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Back to bgp mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="remote-as"
+        help="Remote AS number neighbor ini">
+        <PARAM name="AS"
+            help="Nomor AS neighbor (mis. 65001)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-add "${bgp_neighbor}" "${AS}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+        help="Deskripsi neighbor">
+        <PARAM name="Text"
+            help="Teks deskripsi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-set "${bgp_neighbor}" description "${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no description"
+        help="Delete deskripsi neighbor">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-unset "${bgp_neighbor}" description
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="route-map"
+        help="Route-map untuk neighbor ini (WAJIB in DAN out untuk eBGP FRR 10.x)">
+        <PARAM name="Name"
+            help="Nama route-map"
+            ptype="STRING"/>
+        <PARAM name="Direction"
+            help="in | out"
+            ptype="FRR_DIRECTION"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-set "${bgp_neighbor}" route-map "${Name}" "${Direction}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-map"
+        help="Lepas route-map dari neighbor ini">
+        <PARAM name="Direction"
+            help="in | out"
+            ptype="FRR_DIRECTION"/>
+        <CONFIG operation="unset" pattern="^route-map [^ ]* ${Direction}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-unset "${bgp_neighbor}" route-map "${Direction}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="prefix-list"
+        help="Prefix-list langsung untuk neighbor ini (tanpa route-map)">
+        <PARAM name="Name"
+            help="Nama prefix-list"
+            ptype="STRING"/>
+        <PARAM name="Direction"
+            help="in | out"
+            ptype="FRR_DIRECTION"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-set "${bgp_neighbor}" prefix-list "${Name}" "${Direction}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no prefix-list"
+        help="Lepas prefix-list dari neighbor ini">
+        <PARAM name="Direction"
+            help="in | out"
+            ptype="FRR_DIRECTION"/>
+        <CONFIG operation="unset" pattern="^prefix-list [^ ]* ${Direction}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-unset "${bgp_neighbor}" prefix-list "${Direction}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="send-community"
+        help="Kirim community standard ke neighbor ini (wajib agar `set community` di route-map sampai ke peer)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-set "${bgp_neighbor}" send-community
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no send-community"
+        help="Stop mengirim community ke neighbor ini">
+        <CONFIG operation="unset" pattern="^send-community"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-unset "${bgp_neighbor}" send-community
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="timers"
+        help="BGP timers neighbor ini (keepalive + holdtime, detik)">
+        <PARAM name="Keepalive"
+            help="Keepalive (detik, mis. 30)"
+            ptype="UINT"/>
+        <PARAM name="Holdtime"
+            help="Holdtime (detik, mis. 90)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-set "${bgp_neighbor}" timers "${Keepalive}" "${Holdtime}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no timers"
+        help="Kembalikan timers neighbor ke default FRR">
+        <CONFIG operation="unset" pattern="^timers"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh bgp-neighbor-unset "${bgp_neighbor}" timers
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<!-- ============ FRR LENGKAP: OSPF view ============ -->
+<VIEW name="configure-frr-ospf-view"
+    prompt="${SYSTEM_NAME}(config-frr-ospf)# "
+    depth="2">
+    <NAMESPACE ref="configure-frr-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Back to frr mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="router-id"
+        help="OSPF router-id">
+        <PARAM name="id"
+            help="alamat IPv4 router-id"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-set-router-id "${id}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router-id"
+        help="Delete OSPF router-id">
+        <CONFIG operation="unset" pattern="^router-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-del-router-id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="network"
+        help="Network OSPF (prefix + area)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 10.99.40.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="area"
+            help="area"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="Area"
+                help="Area OSPF (0 atau 0.0.0.0)"
+                ptype="STRING"/>
+        </PARAM>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-network-add "${Prefix}" "${Area}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no network"
+        help="Hapus network OSPF">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="area"
+            help="area"
+            mode="subcommand"
+            ptype="SUBCOMMAND">
+            <PARAM name="Area"
+                help="Area OSPF"
+                ptype="STRING"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="^network ${Prefix} area ${Area}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-network-del "${Prefix}" "${Area}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="redistribute"
+        help="Redistribute route ke OSPF (connected / static)">
+        <PARAM name="Source"
+            help="connected | static"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="connected"
+                help="Redistribute connected"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="static"
+                help="Redistribute static"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-redist-add "${Source}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no redistribute"
+        help="Stop redistribute ke OSPF">
+        <PARAM name="Source"
+            help="connected | static"
+            ptype="SUBCOMMAND"
+            mode="switch">
+            <PARAM name="connected"
+                help="Redistribute connected"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+            <PARAM name="static"
+                help="Redistribute static"
+                ptype="SUBCOMMAND"
+                mode="subcommand"/>
+        </PARAM>
+        <CONFIG operation="unset" pattern="^redistribute ${Source}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh ospf-redist-del "${Source}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<!-- ============ FRR LENGKAP: route-map view ============ -->
+<VIEW name="configure-frr-routemap-view"
+    prompt="${SYSTEM_NAME}(config-frr-rm-${frr_rm})# "
+    depth="2">
+    <NAMESPACE ref="configure-frr-view"
+        help="false"
+        completion="true"/>
+
+    <COMMAND name="exit"
+        help="Back to frr mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="match"
+        help="Match criteria"/>
+    <COMMAND name="match ip"
+        help="Match IP"/>
+    <COMMAND name="match ip address"
+        help="Match IP address"/>
+    <COMMAND name="match ip address prefix-list"
+        help="Match prefix-list ini">
+        <PARAM name="Name"
+            help="Nama prefix-list"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-set "${frr_rm}" match prefix-list "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="match community"
+        help="Match community-list ini">
+        <PARAM name="Name"
+            help="Nama community-list"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-set "${frr_rm}" match community "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no match"
+        help="Hapus SEMUA match entry ini">
+        <CONFIG operation="unset" pattern="^match "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-unset "${frr_rm}" match
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="set"
+        help="Set actions"/>
+    <COMMAND name="set local-preference"
+        help="Set local-preference (default 100)">
+        <PARAM name="Value"
+            help="Nilai local-preference"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-set "${frr_rm}" set local-preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="set metric"
+        help="Set metric (MED)">
+        <PARAM name="Value"
+            help="Nilai metric"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-set "${frr_rm}" set metric "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="set community"
+        help="Set community (AS:NN atau well-known; tambah `additive` agar tidak menimpa)">
+        <PARAM name="Value"
+            help="Community AS:NN atau no-export/no-advertise/local-AS/no-peer/blackhole"
+            ptype="STRING"/>
+        <PARAM name="additive"
+            help="additive"
+            mode="subcommand"
+            ptype="SUBCOMMAND"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-set "${frr_rm}" set community "${Value}" "${additive}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="set as-path"
+        help="Set AS-path"/>
+    <COMMAND name="set as-path prepend"
+        help='Set AS-path prepend (daftar AS dipisah spasi, pakai tanda kutip: "65000 65000")'>
+        <PARAM name="ASList"
+            help='Daftar AS, mis. "65000 65000"'
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-set "${frr_rm}" set as-path prepend "${ASList}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no set"
+        help="Hapus SEMUA set entry ini">
+        <CONFIG operation="unset" pattern="^set "/>
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh route-map-unset "${frr_rm}" set
+        </ACTION>
+    </COMMAND>
 </VIEW>
 
 <VIEW name="enable-view">
@@ -111,6 +731,46 @@
         interrupt="true">
         <ACTION>
             ${RT_SBIN}/titian-frr.sh show-version
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show ip bgp"
+        help="Tabel BGP FRR (vtysh show ip bgp)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show-ip-bgp
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show ip bgp summary"
+        help="Ringkasan sesi BGP FRR (vtysh show ip bgp summary)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show-ip-bgp-summary
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show ip ospf"
+        help="Status OSPF FRR (vtysh show ip ospf)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show-ip-ospf
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show ip ospf neighbor"
+        help="Neighbor OSPF FRR (vtysh show ip ospf neighbor)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show-ip-ospf-neighbor
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show frr route"
+        help="Tabel route FRR / zebra (vtysh show ip route; `show ip route` yang biasa adalah tabel kernel)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-frr.sh show-ip-route
         </ACTION>
     </COMMAND>
 </VIEW>

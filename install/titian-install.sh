@@ -154,6 +154,8 @@ log "/var/log/bird/bird.log" all;
 #-ENDFUNCTION-#
 #-FILTER-#
 #-ENDFILTER-#
+#-GLOBAL-#
+#-ENDGLOBAL-#
 #-PROTOCOL-#
 protocol device {
     scan time 10;
@@ -177,9 +179,53 @@ protocol kernel {
 #-ENDBFD-#
 #-PIPE-#
 #-ENDPIPE-#
+#-RIP-#
+#-ENDRIP-#
+#-AGGREGATOR-#
+#-ENDAGGREGATOR-#
+#-MRT-#
+#-ENDMRT-#
+#-RADV-#
+#-ENDRADV-#
+#-RPKI-#
+#-ENDRPKI-#
+#-BMP-#
+#-ENDBMP-#
+#-BABEL-#
+#-ENDBABEL-#
+#-L3VPN-#
+#-ENDL3VPN-#
 EOF
     echo "-- seed bird.conf ditulis (router id $PRIMARY)"
 fi
+
+# --- upgrade markers: tambah pasangan marker yang hilang (mesin existing) ---
+# (install lama melewati seed bila #-BGP-# sudah ada, sehingga marker baru
+#  tidak pernah masuk. Pasangan kosong hanya komentar — aman untuk bird -p.
+#  GLOBAL disisipkan sesudah 'router id' karena define/table/template di
+#  dalamnya harus mendahului pemakaian; sisanya di-append di akhir file.)
+for _m in FUNCTION FILTER PROTOCOL PROTOCOL-STATIC BGP OSPF DIRECT BFD RIP PIPE GLOBAL AGGREGATOR MRT RADV RPKI BMP BABEL L3VPN; do
+    _sm="#-${_m}-#"; _em="#-END${_m}-#"
+    _has_sm=0; _has_em=0
+    grep -qF -- "$_sm" "$BIRDCONF" 2>/dev/null && _has_sm=1
+    grep -qF -- "$_em" "$BIRDCONF" 2>/dev/null && _has_em=1
+    if [ "$_has_sm" = "1" ] && [ "$_has_em" = "1" ]; then continue; fi
+    if [ "$_has_sm" = "1" ] || [ "$_has_em" = "1" ]; then
+        echo "-- PERINGATAN: marker $_m tidak lengkap di $BIRDCONF (hanya satu sisi) — dilewati, perbaiki manual" >&2
+        continue
+    fi
+    cp -f "$BIRDCONF" "$ROOT/etc/bird-backup/bird.conf.pre-markers" 2>/dev/null || true
+    if [ "$_m" = "GLOBAL" ]; then
+        if grep -q '^router id ' "$BIRDCONF" 2>/dev/null; then
+            awk -v sm="$_sm" -v em="$_em" '/^router id / && !done { print; print sm; print em; done=1; next } { print }' "$BIRDCONF" > "$BIRDCONF.tmp" && mv "$BIRDCONF.tmp" "$BIRDCONF"
+        else
+            printf '%s\n%s\n' "$_sm" "$_em" >> "$BIRDCONF"
+        fi
+    else
+        printf '%s\n%s\n' "$_sm" "$_em" >> "$BIRDCONF"
+    fi
+    echo "-- marker $_m ditambahkan ke $BIRDCONF"
+done
 
 # --- upgrade header lama: tambah define TITIAN_ASN + log bila belum ada ---
 # (instalasi lama sudah bermarker sehingga seed di atas dilewati.)

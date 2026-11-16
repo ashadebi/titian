@@ -102,6 +102,10 @@
     <PTYPE name="FW_ACTION"
         pattern="^(permit|deny)$"
         help="permit | deny"/>
+    <!-- FRR (15 Nov 2026): arah route-map/prefix-list per neighbor. -->
+    <PTYPE name="FRR_DIRECTION"
+        pattern="^(in|out)$"
+        help="in | out"/>
     <PTYPE name="FW_PROTO"
         pattern="^(tcp|udp|icmp|all)$"
         help="tcp | udp | icmp | all"/>

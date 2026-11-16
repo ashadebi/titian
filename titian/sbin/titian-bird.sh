@@ -296,8 +296,17 @@ marker_of() {
         ospf)     echo "OSPF" ;;
         direct)   echo "DIRECT" ;;
         bfd)      echo "BFD" ;;
+        rip)      echo "RIP" ;;
         pipe)     echo "PIPE" ;;
-        *)        err "section tidak dikenal: $1 (function|filter|protocol|static|bgp|ospf|direct|bfd|pipe)" ;;
+        global)   echo "GLOBAL" ;;
+        aggregator) echo "AGGREGATOR" ;;
+        mrt)      echo "MRT" ;;
+        radv)     echo "RADV" ;;
+        rpki)     echo "RPKI" ;;
+        bmp)      echo "BMP" ;;
+        babel)    echo "BABEL" ;;
+        l3vpn)    echo "L3VPN" ;;
+        *)        err "section tidak dikenal: $1 (function|filter|protocol|static|bgp|ospf|direct|bfd|rip|pipe|global|aggregator|mrt|radv|rpki|bmp|babel|l3vpn)" ;;
     esac
 }
 

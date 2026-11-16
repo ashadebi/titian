@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- BMP BIRD (`protocol bmp`, Bab 6.5 docs, batch B9).    -->
+    <!--   - Masuk dari `router bird` -> `bmp` — SATU instance -->
+    <!--     tetap (viewid bmp_view=bmp), seperti radv.         -->
+    <!--   - station MANDATORY (satu station; docs TIDAK        -->
+    <!--     menjelaskan multi-station/retry/TLS — jangan       -->
+    <!--     ditebak). monitoring rib in pre_policy /           -->
+    <!--     post_policy HANYA dari contoh docs. tx buffer      -->
+    <!--     limit default 1024 MB.                             -->
+    <!--   - PRELIMINARY + TIDAK dikompilasi default (butuh     -->
+    <!--     with-protocols=) + TIDAK siap produksi.           -->
+    <!--   - TIDAK ADA birdc `show bmp` (Bab 4.3) — status      -->
+    <!--     lewat `show protocols [all]`.                       -->
+    <!--   - Intent di /etc/titian/bmp.conf; generate via      -->
+    <!--     titian-bmp.sh (section bird.d/bmp.conf lalu        -->
+    <!--     titian-bird.sh generate bmp). Section ditulis      -->
+    <!--     ulang UTUH tiap apply.                              -->
+
+<VIEW name="configure-bird-bmp-view"
+    prompt="${SYSTEM_NAME}(config-bird-bmp)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="show"
+        help="Show BMP state"/>
+
+    <COMMAND name="station"
+        help="Monitoring station BMP (MANDATORY; IP + port, mis. 198.51.100.10 1790)">
+        <PARAM name="IP"
+            help="Alamat IP station"
+            ptype="STRING"/>
+        <PARAM name="Port"
+            help="Port station 1..65535 (port BMP standar 1790)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh station-set "${IP}" "${Port}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no station"
+        help="Hapus station (station MANDATORY — generate akan menolak)">
+        <CONFIG operation="unset" pattern="^station"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh station-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="monitoring-rib-in"
+        help="Monitor route diterima: pre_policy (sebelum import filter) atau post_policy (lolos import filter)">
+        <PARAM name="Value"
+            help="pre_policy|post_policy"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh monitoring-rib-in-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no monitoring-rib-in"
+        help="Hapus satu monitoring-rib-in">
+        <PARAM name="Value"
+            help="pre_policy|post_policy"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^monitoring-rib-in ${Value}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh monitoring-rib-in-del "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tx-buffer-limit"
+        help="Data di-queue sebelum sesi dianggap stuck dan di-restart, MB (default 1024)">
+        <PARAM name="Value"
+            help="MB 1..4294967295"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh tx-buffer-limit-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tx-buffer-limit"
+        help="Hapus tx-buffer-limit (default BIRD 1024 MB)">
+        <CONFIG operation="unset" pattern="^tx-buffer-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh tx-buffer-limit-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug"
+        help="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="all|off|kelas,kelas,..."
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh debug-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh debug-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump protokol ini (all, off, atau states,messages)">
+        <PARAM name="Value"
+            help="all|off|states,messages"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh mrtdump-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh mrtdump-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show bmp"
+        help="Tampilkan intent + section + status birdc instance ini (via show protocols)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

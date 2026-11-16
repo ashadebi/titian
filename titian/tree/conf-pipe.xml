@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- Pipe (BIRD `protocol pipe`) — penghubung dua routing   -->
+    <!-- table (nettype sama).                                  -->
+    <!--   - Masuk dari `router bird` -> `pipe` (view           -->
+    <!--     configure-bird-pipe-view): `pipe <NAMA>` masuk ke  -->
+    <!--     pipe view (table / peer-table / import / export),  -->
+    <!--     `no pipe <NAMA>`.                                 -->
+    <!--   - Intent di /etc/titian/pipe.conf; generate via      -->
+    <!--     titian-pipe.sh (menulis section bird.d/pipe.conf   -->
+    <!--     lalu titian-bird.sh generate pipe). Section ditulis -->
+    <!--     ulang UTUH tiap apply.                             -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_pipe di titian-commit.sh).                   -->
+    <!--   - Sintaks BIRD 2.16.1 (docs §6.13): protocol pipe   -->
+    <!--     <name> { table <t>; peer table <t>; export         -->
+    <!--     <all|none|filter <n>>; import <all|none|filter    -->
+    <!--     <n>>; }. Blok Pipe langsung berisi opsi channel    -->
+    <!--     (tanpa sub-blok ipv4/ipv6); satu-satunya opsi      -->
+    <!--     khusus Pipe adalah `peer table`. Filter INLINE     -->
+    <!--     tidak diekspos — pakai filter bernama yang sudah   -->
+    <!--     didefinisikan (`filter <NAME>` di bird-view).      -->
+
+<VIEW name="configure-bird-pipe-view"
+    prompt="${SYSTEM_NAME}(config-bird-pipe)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="pipe"
+        help="Pipe (masuk ke pipe view)"
+        view="configure-bird-pipe-detail-view"
+        viewid="pipe_name=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama pipe (mis. pipe-as1-as2)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1555" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-touch "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no pipe"
+        help="Hapus pipe ini">
+        <PARAM name="Name"
+            help="Nama pipe"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^pipe ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-del "${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-pipe-detail-view"
+    prompt="${SYSTEM_NAME}(config-bird-pipe-${pipe_name})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-pipe-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to pipe mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="table"
+        help="Tabel primer pipe ini">
+        <PARAM name="Name"
+            help="Nama tabel BIRD (mis. master4)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" table "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="peer-table"
+        help="Tabel sekunder yang dihubungkan pipe ini">
+        <PARAM name="Name"
+            help="Nama tabel BIRD (mis. as2)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" peer-table "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="debug"
+        help="Debug pipe ini (all|off|states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="Kelas debug (all|off|daftar koma)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh debug-set "${pipe_name}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug pipe ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh debug-del "${pipe_name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump pipe ini (all|off|states,messages)">
+        <PARAM name="Value"
+            help="Kelas mrtdump (all|off|states,messages)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh mrtdump-set "${pipe_name}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump pipe ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh mrtdump-del "${pipe_name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import"
+        help="Filter secondary -&gt; primary (all / none / filter NAME)"/>
+
+    <COMMAND name="import all"
+        help="Import semua route dari peer table">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import none"
+        help="Import tidak ada route dari peer table">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import filter"
+        help="Import hanya route yang lolos filter bernama">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export"
+        help="Filter primary -&gt; secondary (all / none / filter NAME)"/>
+
+    <COMMAND name="export all"
+        help="Export semua route ke peer table">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export none"
+        help="Export tidak ada route ke peer table">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Export hanya route yang lolos filter bernama">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show pipe"
+        help="Status pipe BIRD (intent + section + protokol BIRD)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

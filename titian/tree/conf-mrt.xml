@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- MRT BIRD (`protocol mrt`, Bab 6.10 docs, batch B8).   -->
+    <!--   - Masuk dari `router bird` -> `mrt <NAME>` — SATU   -->
+    <!--     view dipakai semua instance (viewid mrt_inst).    -->
+    <!--   - table (nama/pola wildcard), where ATAU filter-line -->
+    <!--     (dua cara menulis filter — hanya satu), filename   -->
+    <!--     (MANDATORY) + period (MANDATORY), always-add-path. -->
+    <!--   - Intent di /etc/titian/mrt.conf; generate via      -->
+    <!--     titian-mrt.sh (menulis section bird.d/mrt.conf    -->
+    <!--     lalu titian-bird.sh generate mrt). Section ditulis -->
+    <!--     ulang UTUH tiap apply.                            -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_mrt di titian-commit.sh, sesudah            -->
+    <!--     apply_aggregator, sebelum apply_radv).             -->
+    <!--   - Sintaks BIRD 2.16.1 (§6.10, RFC 6396 + RFC 8050):  -->
+    <!--     protocol mrt <name> { table; where/filter;         -->
+    <!--     filename; period; always add path; }. Dump         -->
+    <!--     periodik tabel routing ke file lokal — tidak butuh -->
+    <!--     peer/server, tidak memakai channel.                -->
+    <!--   - filename boleh sequence strftime + %N (nama tabel).-->
+    <!--   - filter-line: baris kode BIRD mentah (maks 8 kata;  -->
+    <!--     terminator `;` ditambah generator — JANGAN ketik   -->
+    <!--     `;` di baris). DITOLAK: `;`, kurawal, komentar,    -->
+    <!--     string, backslash, backtick, $. Validasi sintaks   -->
+    <!--     penuh oleh `bird -p`.                              -->
+    <!--   - Dump on-demand `mrt dump table` dari birdc SUDAH  -->
+    <!--     ada di B7 (titian-birdc.sh). Opsi global `mrtdump` -->
+    <!--     (pesan BGP masuk) ada di global view (B6).         -->
+
+<VIEW name="configure-bird-mrt-view"
+    prompt="${SYSTEM_NAME}(config-bird-mrt-${mrt_inst})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="where"
+        help="Filter dump sebagai ekspresi (alternatif filter-line; maks 8 kata)"/>
+
+    <COMMAND name="filter-line"
+        help="Tambah satu baris kode ke blok filter (maks 8 kata/baris; tanpa ;)"/>
+
+    <COMMAND name="show"
+        help="Show MRT state"/>
+
+    <COMMAND name="table"
+        help="Tabel yang di-dump (nama atau pola wildcard, default master table)">
+        <PARAM name="Value"
+            help="Nama tabel atau pola mis. tab* (master4|master6 atau tabel dari global -> table-add)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh table-set "${mrt_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table"
+        help="Hapus table (default master table)">
+        <CONFIG operation="unset" pattern="^table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh table-del "${mrt_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="where-set"
+        help="Set filter dump sebagai ekspresi (ganti where lama; tidak boleh bersama filter-line)">
+        <PARAM name="W1"
+            help="Kata pertama ekspresi (mis. source)"
+            ptype="STRING"/>
+        <PARAM name="W2"
+            help="Kata kedua (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W3"
+            help="Kata ketiga (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W4"
+            help="Kata keempat (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W5"
+            help="Kata kelima (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W6"
+            help="Kata keenam (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W7"
+            help="Kata ketujuh (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W8"
+            help="Kata kedelapan (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh where-set "${mrt_inst}" "${W1}" "${W2}" "${W3}" "${W4}" "${W5}" "${W6}" "${W7}" "${W8}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no where"
+        help="Hapus where">
+        <CONFIG operation="unset" pattern="^where"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh where-del "${mrt_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="filter-line-add"
+        help="Tambah satu baris kode BIRD mentah ke blok filter (maks 8 kata/baris; tanpa ;)">
+        <PARAM name="W1"
+            help="Kata pertama baris (mis. if)"
+            ptype="STRING"/>
+        <PARAM name="W2"
+            help="Kata kedua (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W3"
+            help="Kata ketiga (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W4"
+            help="Kata keempat (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W5"
+            help="Kata kelima (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W6"
+            help="Kata keenam (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W7"
+            help="Kata ketujuh (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W8"
+            help="Kata kedelapan (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh filter-line-add "${mrt_inst}" "${W1}" "${W2}" "${W3}" "${W4}" "${W5}" "${W6}" "${W7}" "${W8}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="filter-line-del"
+        help="Hapus baris filter ke-N (1-based, lihat urutan di show mrt)">
+        <PARAM name="N"
+            help="Nomor baris (1..)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh filter-line-del "${mrt_inst}" "${N}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no filter-line"
+        help="Hapus SEMUA baris filter">
+        <CONFIG operation="unset" pattern="^filter-line"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh filter-line-clear "${mrt_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="filename"
+        help="File dump MRT (MANDATORY; boleh strftime + %N nama tabel)">
+        <PARAM name="Value"
+            help="Path absolut (mis. /var/log/bird/%N_%F_%T.mrt)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh filename-set "${mrt_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no filename"
+        help="Hapus filename (filename MANDATORY — generate akan menolak)">
+        <CONFIG operation="unset" pattern="^filename"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh filename-del "${mrt_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="period"
+        help="Interval detik antar dump periodik (MANDATORY)">
+        <PARAM name="Value"
+            help="Detik (1..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh period-set "${mrt_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no period"
+        help="Hapus period (period MANDATORY — generate akan menolak)">
+        <CONFIG operation="unset" pattern="^period"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh period-del "${mrt_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="always-add-path"
+        help="Simpan semua route dalam record ADD_PATH (RFC 8050; default BIRD disabled)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh always-add-path-set "${mrt_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no always-add-path"
+        help="Hapus always-add-path (default BIRD disabled)">
+        <CONFIG operation="unset" pattern="^always-add-path"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh always-add-path-del "${mrt_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show mrt"
+        help="Tampilkan intent + section + status birdc instance ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

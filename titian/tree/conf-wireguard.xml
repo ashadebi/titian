@@ -19,7 +19,12 @@
          ini); peer view membawa `wg=${wg}` di viewid — tanpa itu
          ${wg} kosong di peer view (B4) dan semua peer-set gagal.
          Field keepalive: perintah klish `persistent-keepalive`,
-         state/script `keepalive` (alias diterima script). -->
+         state/script `keepalive` (alias diterima script).
+         Refactor persistensi 2026-11-16 (Batch 7): viewid peer
+         multi-var (wg+wg_peer, pola yang terbukti RUSAK di klish
+         2.2.5 — var pertama menelan sisa) diganti single-var
+         colon-encoding `wg_peer_ctx=${wg}:${Pubkey}`; peer-add/del
+         (level iface) tidak berubah. -->
 
     <PTYPE name="WG_IFACE"
         pattern="wg[0-9]+$"
@@ -133,7 +138,7 @@
     <COMMAND name="peer"
             help="Peer WireGuard (public key)"
             view="configure-wg-peer-view"
-            viewid="wg=${wg} wg_peer=${Pubkey}"
+            viewid="wg_peer_ctx=${wg}:${Pubkey}"
             ptype="SUBCOMMAND"
             mode="subcommand">
         <PARAM name="Pubkey"
@@ -176,14 +181,14 @@
             ptype="IP_ADDR_MASK"/>
         <CONFIG/>
         <ACTION>
-            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg}" "${wg_peer}" allowed-ips "${Nets}"
+            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg_peer_ctx}" allowed-ips "${Nets}"
         </ACTION>
     </COMMAND>
     <COMMAND name="no allowed-ips"
         help="Delete allowed-ips peer">
         <CONFIG operation="unset" pattern="^allowed-ips"/>
         <ACTION>
-            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" allowed-ips
+            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg_peer_ctx}" allowed-ips
         </ACTION>
     </COMMAND>
 
@@ -194,14 +199,14 @@
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
-            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg}" "${wg_peer}" endpoint "${Ep}"
+            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg_peer_ctx}" endpoint "${Ep}"
         </ACTION>
     </COMMAND>
     <COMMAND name="no endpoint"
         help="Delete endpoint peer">
         <CONFIG operation="unset" pattern="^endpoint"/>
         <ACTION>
-            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" endpoint
+            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg_peer_ctx}" endpoint
         </ACTION>
     </COMMAND>
 
@@ -212,14 +217,14 @@
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
-            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg}" "${wg_peer}" keepalive "${Secs}"
+            ${RT_SBIN}/titian-wireguard.sh peer-set "${wg_peer_ctx}" keepalive "${Secs}"
         </ACTION>
     </COMMAND>
     <COMMAND name="no persistent-keepalive"
         help="Delete persistent keepalive">
         <CONFIG operation="unset" pattern="^persistent-keepalive"/>
         <ACTION>
-            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg}" "${wg_peer}" keepalive
+            ${RT_SBIN}/titian-wireguard.sh peer-del-field "${wg_peer_ctx}" keepalive
         </ACTION>
     </COMMAND>
 </VIEW>

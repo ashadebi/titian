@@ -178,6 +178,26 @@ cmd_peer_del() {
     exit 0
 }
 
+# --- pemecah ctx single-var (refactor persistensi, pola route-map FRR) ---
+# Konteks peer view di-encode SATU var `wg_peer_ctx` = `<IFACE>:<PUBKEY>`.
+# Split pada `:` PERTAMA — iface `wgN` tanpa `:`, pubkey base64 (A-Za-z0-9+/=)
+# juga tanpa `:`; jadi split pertama aman.
+split_peer_ctx() { # <IFACE:PUBKEY> -> _CX_IF _CX_PUB
+    case "$1" in
+        wg[0-9]*:*)
+            _CX_IF="${1%%:*}"; _CX_PUB="${1#*:}" ;;
+        *) die "ctx peer WG harus <IFACE>:<PUBKEY>: $1" ;;
+    esac
+    [ -n "$_CX_PUB" ] || die "ctx peer WG butuh PUBKEY: $1"
+}
+cmd_peer_set_ctx() { # peer-set <CTX> <FIELD> <VALUE> (wrapper ctx)
+    split_peer_ctx "$1"
+    cmd_peer_set "$_CX_IF" "$_CX_PUB" "$2" "$3"
+}
+cmd_peer_del_field_ctx() { # peer-del-field <CTX> <FIELD> (wrapper ctx)
+    split_peer_ctx "$1"
+    cmd_peer_del_field "$_CX_IF" "$_CX_PUB" "$2"
+}
 cmd_peer_set() {
     # $1=iface $2=pubkey $3=field $4=value — simpan dulu sebelum set --
     _if="$1"; _pub="$2"; _field="$3"; _val="$4"
@@ -300,8 +320,8 @@ case "${1:-}" in
     generate-key) cmd_generate_key "${2:-}" ;;
     peer-add) cmd_peer_add "${2:-}" "${3:-}" ;;
     peer-del) cmd_peer_del "${2:-}" "${3:-}" ;;
-    peer-set) cmd_peer_set "${2:-}" "${3:-}" "${4:-}" "${5:-}" ;;
-    peer-del-field) cmd_peer_del_field "${2:-}" "${3:-}" "${4:-}" ;;
+    peer-set) cmd_peer_set_ctx "${2:-}" "${3:-}" "${4:-}" ;;
+    peer-del-field) cmd_peer_del_field_ctx "${2:-}" "${3:-}" ;;
     del-iface) cmd_del_iface "${2:-}" ;;
     apply-all) cmd_apply_all ;;
     *) echo "Usage: $0 {check|show|show-one|set-enable|set-address|del-address|set-listen-port|del-listen-port|generate-key|peer-add|peer-del|peer-set|peer-del-field|del-iface|apply-all} ..." >&2; exit 2 ;;

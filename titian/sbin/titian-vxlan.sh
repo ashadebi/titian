@@ -8,8 +8,13 @@
 #    perintah noremote/nogroup; "local none" ditolak (harus alamat valid).
 #  - FreeBSD: "-vxlanlocal" ditolak ("bad value"); vxlanport bukan
 #    parameter settable (port tetap 4789).
-# Jadi: vni/local/remote/group/dstport diubah lewat hapus + buat ulang
-# dengan parameter baru. Alamat dipulihkan dari netstate <iface>.addr
+# Jadi: vni/local/remote/group/dstport/learn diubah lewat hapus + buat ulang
+# dengan parameter baru. Parameter learn (FreeBSD vxlanlearn; Linux
+# "learning"): default OFF. Bila ON, FDB dipelajari dari paket masuk;
+# bila underlay me-NAT sumber paket (MikroTik 10.10.2.1 me-masquerade
+# VXLAN RB3011), peer salah dipetakan ke gateway -> unicast loss 95%
+# (16 Nov 2026, VXLAN). Unicast (remote) WAJIB OFF; ON hanya untuk
+# multicast multi-VTEP. Alamat dipulihkan dari netstate <iface>.addr
 # via titian-if.sh (state_add idempotent, tidak duplikat); MTU dari
 # <iface>.tuning (set langsung, tanpa menyentuh bookkeeping
 # .tuning.prev titian-tune.sh). Recreate = flap singkat. MAC interface
@@ -142,17 +147,30 @@ do_recreate() {
     # $1=iface — hapus + buat ulang dari netstate (.vxlan + .addr +
     # .tuning), pulihkan up-state live. Dipanggil setiap perubahan
     # parameter dan oleh apply-all bila interface hilang.
-    local iface=$1 vni loc remote group dev dstport up f line rest a p mtu
+    local iface=$1 vni loc remote group dev dstport learn up f line rest a p mtu brs _b
     vni=$(vx_get "$iface" vni)
     loc=$(vx_get "$iface" local)
     remote=$(vx_get "$iface" remote)
     group=$(vx_get "$iface" group)
     dev=$(vx_get "$iface" dev)
     dstport=$(vx_get "$iface" dstport)
+    learn=$(vx_get "$iface" learn)
     [ -n "$dstport" ] || dstport=4789
     up=0
     if iface_exists "$iface"; then
         if iface_up "$iface"; then up=1; fi
+    fi
+    # Tangkap keanggotaan bridge SEBELUM destroy (FreeBSD): recreate
+    # melepas interface dari bridge; tanpa ini, perubahan parameter
+    # vxlan via klish memutus bridge (16 Nov 2026: no learn -> bridge0
+    # kehilangan vxlan100 -> overlay 100% loss + BGP Idle).
+    brs=""
+    if [ "$OS" = "FreeBSD" ] && iface_exists "$iface"; then
+        for _b in $(ifconfig -l 2>/dev/null | tr ' ' '\n' | grep '^bridge[0-9]' || true); do
+            if ifconfig "$_b" 2>/dev/null | grep -q "member: $iface"; then
+                brs="$brs $_b"
+            fi
+        done
     fi
     if [ "$OS" = "FreeBSD" ]; then
         kldload if_vxlan 2>/dev/null || true
@@ -172,6 +190,13 @@ do_recreate() {
             if [ -z "$dev" ]; then err "group butuh dev (netstate rusak?)"; fi
             ifconfig "$iface" vxlangroup "$group" vxlandev "$dev" || err "gagal set group $group dev $dev"
         fi
+        # learn: default OFF (aman unicast). ON hanya untuk multicast
+        # multi-VTEP; ON + underlay NAT = peer salah ke gateway (16 Nov 2026).
+        if [ "$learn" = "on" ]; then
+            ifconfig "$iface" vxlanlearn 2>/dev/null || warn "gagal set vxlanlearn on $iface"
+        else
+            ifconfig "$iface" -vxlanlearn 2>/dev/null || warn "gagal set vxlanlearn off $iface"
+        fi
         # dstport FreeBSD tetap 4789 (bukan parameter settable) — tidak ada aksi
     else
         if iface_exists "$iface"; then
@@ -190,6 +215,8 @@ do_recreate() {
             if [ -n "$dev" ]; then set -- "$@" dev "$dev"; fi
         fi
         if [ -n "$loc" ]; then set -- "$@" local "$loc"; fi
+        # learn: default off (aman unicast; on hanya multicast multi-VTEP)
+        if [ "$learn" = "on" ]; then set -- "$@" learning on; else set -- "$@" learning off; fi
         set -- "$@" dstport "$dstport"
         "$@" || err "gagal recreate $iface"
     fi
@@ -237,6 +264,13 @@ do_recreate() {
     # segarkan cermin deklaratif sekali (bukan per alamat)
     "$SBIN/titian-persist.sh" sync-if "$iface" 2>/dev/null || true
     if [ "$up" -eq 1 ]; then iface_up_set "$iface"; fi
+    # Kembalikan keanggotaan bridge yang ditangkap sebelum destroy
+    # (anggota harus UP agar bridge meneruskan trafik).
+    if [ -n "$brs" ]; then
+        for _b in $brs; do
+            ifconfig "$_b" addm "$iface" 2>/dev/null || warn "gagal re-add $iface ke $_b"
+        done
+    fi
 }
 
 do_set() {
@@ -272,6 +306,12 @@ do_set() {
                 err "FreeBSD: vxlan port tetap 4789 (tidak bisa diubah via ifconfig)"
             fi
             ;;
+        learn)
+            case "$val" in
+                on|off) ;;
+                *) err "learn harus on|off: $val" ;;
+            esac
+            ;;
         *) err "kunci tidak dikenal: $key" ;;
     esac
     # remote <-> group saling eksklusif
@@ -291,7 +331,7 @@ do_unset() {
     # $1=iface $2=key — hapus kunci dari netstate lalu recreate tanpa kunci itu
     local iface=$1 key=$2
     case "$key" in
-        vni|local|remote|dstport) vx_unset "$iface" "$key" ;;
+        vni|local|remote|dstport|learn) vx_unset "$iface" "$key" ;;
         group) vx_unset "$iface" group; vx_unset "$iface" dev ;;
         *) err "kunci tidak dikenal: $key" ;;
     esac

@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- Device (BIRD `protocol device`) — pembaca info         -->
+    <!-- interface dari kernel. Tidak menghasilkan route, tidak -->
+    <!-- punya channel. Hampir semua protokol lain butuh Device -->
+    <!-- aktif.                                                 -->
+    <!--   - Masuk dari `router bird` -> `device` (view         -->
+    <!--     configure-bird-device-view): scan-time,            -->
+    <!--     `interface <pola>` masuk ke interface view        -->
+    <!--     (preferred <IP>), `no interface <pola>`.          -->
+    <!--   - Intent di /etc/titian/device.conf; generate via    -->
+    <!--     titian-protocol.sh (menulis section                -->
+    <!--     bird.d/protocol.conf — BERBAGI dengan kernel,      -->
+    <!--     lihat header titian-protocol.sh — lalu              -->
+    <!--     titian-bird.sh generate protocol). Section ditulis -->
+    <!--     ulang UTUH tiap apply.                             -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_protocol di titian-commit.sh).               -->
+    <!--   - Sintaks BIRD 2.16.1 (docs §6.6): protocol device { -->
+    <!--     scan time N; interface "<pat>" { preferred <ip>;   -->
+    <!--     }; }. Scan time default TIDAK dinyatakan docs —    -->
+    <!--     klish memakai 10 (nilai contoh protocol.conf yang -->
+    <!--     sudah ada) bila tidak diset eksplisit.             -->
+
+<VIEW name="configure-bird-device-view"
+    prompt="${SYSTEM_NAME}(config-bird-device)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="scan-time"
+        help="Interval scan daftar interface (detik)">
+        <PARAM name="Secs"
+            help="Detik (1..86400)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-scan-time-set "${Secs}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no scan-time"
+        help="Hapus scan-time device (kembali ke 10, nilai contoh yang sudah ada)">
+        <CONFIG operation="unset" pattern="^scan-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-scan-time-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interface"
+        help="Definisi per-interface (masuk ke interface view: preferred IP)"
+        view="configure-bird-device-interface-view"
+        viewid="dev_iface=${Pattern}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD (mis. ge0, eth*)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1558" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-interface-add "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Hapus definisi per-interface ini (semua preferred-nya)">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-interface-del "${Pattern}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-device-interface-view"
+    prompt="${SYSTEM_NAME}(config-bird-device-${dev_iface})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-device-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to device mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="preferred"
+        help="IP preferred interface ini (source address / nexthop yang diumumkan)">
+        <PARAM name="IP"
+            help="Alamat IP (v4/v6; v6 link-local boleh %iface)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-preferred-add "${dev_iface}" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no preferred"
+        help="Hapus IP preferred ini">
+        <PARAM name="IP"
+            help="Alamat IP"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^preferred ${IP}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-preferred-del "${dev_iface}" "${IP}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show device"
+        help="Status device BIRD (intent + section + protokol BIRD)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

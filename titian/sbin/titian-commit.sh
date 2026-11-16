@@ -17,6 +17,16 @@ ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
+BFD_SH="$SBIN_DIR/titian-bfd.sh"
+GLOBAL_SH="$SBIN_DIR/titian-global.sh"
+OSPF_SH="$SBIN_DIR/titian-ospf.sh"
+AGG_SH="$SBIN_DIR/titian-aggregator.sh"
+MRT_SH="$SBIN_DIR/titian-mrt.sh"
+RADV_SH="$SBIN_DIR/titian-radv.sh"
+RPKI_SH="$SBIN_DIR/titian-rpki.sh"
+BMP_SH="$SBIN_DIR/titian-bmp.sh"
+BABEL_SH="$SBIN_DIR/titian-babel.sh"
+L3VPN_SH="$SBIN_DIR/titian-l3vpn.sh"
 FRR_SH="$SBIN_DIR/titian-frr.sh"
 FW_SH="$SBIN_DIR/titian-fw.sh"
 TS_SH="$SBIN_DIR/titian-traffic-shape.sh"
@@ -112,6 +122,169 @@ apply_ipoe() {
     fi
 }
 
+apply_global() {
+    # B6: opsi global + tabel + MPLS domain + template BIRD — generate
+    # section bila bird-global.conf ada. Dijalankan PALING AWAL di
+    # antara apply BIRD — tabel/template dipakai protokol lain.
+    # Dilewati bila belum pernah ada config global.
+    _intent="${STATE_ROOT:-/etc/titian}/bird-global.conf"
+    if [ -f "$_intent" ]; then
+        sh "$GLOBAL_SH" generate || exit 33
+    fi
+}
+
+apply_protocol() {
+    # Kernel + Device (BIRD): generate section protocol bila ada intent
+    # kernel.conf dan/atau device.conf. Dilewati bila belum pernah ada
+    # config keduanya (protocol.conf contoh tetap dipakai apa adanya).
+    # Dijalankan PALING AWAL di antara apply BIRD — device/kernel adalah
+    # fondasi yang dipakai protokol lain.
+    _k="${STATE_ROOT:-/etc/titian}/kernel.conf"
+    _d="${STATE_ROOT:-/etc/titian}/device.conf"
+    if [ -f "$_k" ] || [ -f "$_d" ]; then
+        sh "$SBIN_DIR/titian-protocol.sh" generate || exit 33
+    fi
+}
+
+apply_direct() {
+    # Direct (BIRD): generate section bila direct.conf ada.
+    # Dilewati bila belum pernah ada config direct (bird.d/direct.conf
+    # lama pra-B4 — mis. dari `redistribute direct enable` sebelum
+    # intent ada — tidak ditimpa).
+    _intent="${STATE_ROOT:-/etc/titian}/direct.conf"
+    if [ -f "$_intent" ]; then
+        sh "$SBIN_DIR/titian-direct.sh" generate || exit 33
+    fi
+}
+
+apply_pipe() {
+    # Pipe (BIRD): generate section bila pipe.conf ada.
+    _intent="${STATE_ROOT:-/etc/titian}/pipe.conf"
+    if [ -f "$_intent" ]; then
+        sh "$SBIN_DIR/titian-pipe.sh" generate || exit 33
+    fi
+}
+
+apply_bfd() {
+    # BFD (BIRD): generate section bila bfd.conf ada (file dibuat saat
+    # user masuk view bfd). WAJIB sebelum apply_bgp — birdc configure
+    # gagal bila neighbor BGP pakai `bfd on;` tanpa `protocol bfd`.
+    # Dilewati bila belum pernah ada config BFD.
+    _intent="${STATE_ROOT:-/etc/titian}/bfd.conf"
+    if [ -f "$_intent" ]; then
+        sh "$BFD_SH" generate || exit 33
+    fi
+}
+
+apply_static() {
+    # Static (BIRD): generate section bila static.conf ada.
+    # Sesudah apply_bfd — route dengan BFD per-nexthop butuh section
+    # `protocol bfd` sudah ter-generate.
+    _intent="${STATE_ROOT:-/etc/titian}/static.conf"
+    if [ -f "$_intent" ]; then
+        sh "$SBIN_DIR/titian-static.sh" generate || exit 33
+    fi
+}
+
+apply_rip() {
+    # RIP/RIPng (BIRD): generate section bila rip.conf ada.
+    # Sesudah apply_static, sebelum apply_bgp — RIP tidak bergantung
+    # pada BFD maupun BGP.
+    _intent="${STATE_ROOT:-/etc/titian}/rip.conf"
+    if [ -f "$_intent" ]; then
+        sh "$SBIN_DIR/titian-rip.sh" generate || exit 33
+    fi
+}
+
+apply_ospf() {
+    # OSPF BIRD (v2/v3): generate section bila ospf.conf ada.
+    # Sesudah apply_rip, sebelum apply_bgp — OSPF interface `bfd`
+    # butuh section `protocol bfd` (apply_bfd sudah jalan lebih dulu).
+    _intent="${STATE_ROOT:-/etc/titian}/ospf.conf"
+    if [ -f "$_intent" ]; then
+        sh "$OSPF_SH" generate || exit 33
+    fi
+}
+
+apply_aggregator() {
+    # Aggregator (BIRD, Bab 6.1): generate section bila aggregator.conf ada.
+    # Sesudah apply_ospf, sebelum apply_function — aggregator membaca
+    # tabel routing (bisa berisi route OSPF/BGP) dan menulis ke tabel
+    # tujuan; generate sesudah OSPF agar section OSPF sudah terbaru.
+    _intent="${STATE_ROOT:-/etc/titian}/aggregator.conf"
+    if [ -f "$_intent" ]; then
+        sh "$AGG_SH" generate || exit 33
+    fi
+}
+
+apply_mrt() {
+    # MRT (BIRD, Bab 6.10): generate section bila mrt.conf ada.
+    # Sesudah apply_ospf, sebelum apply_function — MRT dump membaca
+    # tabel routing; tidak ada dependensi ke function/BGP.
+    _intent="${STATE_ROOT:-/etc/titian}/mrt.conf"
+    if [ -f "$_intent" ]; then
+        sh "$MRT_SH" generate || exit 33
+    fi
+}
+
+apply_radv() {
+    # RAdv (BIRD, Bab 6.14): generate section bila radv.conf ada.
+    # Sesudah apply_ospf, sebelum apply_function — RAdv mengiklankan
+    # prefix dari tabel ipv6; tidak ada dependensi ke function/BGP.
+    _intent="${STATE_ROOT:-/etc/titian}/radv.conf"
+    if [ -f "$_intent" ]; then
+        sh "$RADV_SH" generate || exit 33
+    fi
+}
+
+apply_rpki() {
+    # RPKI (BIRD, Bab 6.16): generate section bila rpki.conf ada.
+    # Sesudah apply_radv, sebelum apply_function — tabel ROA/ASPA
+    # dipakai filter BGP (roa_check/aspa_check).
+    _intent="${STATE_ROOT:-/etc/titian}/rpki.conf"
+    if [ -f "$_intent" ]; then
+        sh "$RPKI_SH" generate || exit 33
+    fi
+}
+
+apply_bmp() {
+    # BMP (BIRD, Bab 6.5): generate section bila bmp.conf ada.
+    _intent="${STATE_ROOT:-/etc/titian}/bmp.conf"
+    if [ -f "$_intent" ]; then
+        sh "$BMP_SH" generate || exit 33
+    fi
+}
+
+apply_babel() {
+    # Babel (BIRD, Bab 6.2): generate section bila babel.conf ada.
+    _intent="${STATE_ROOT:-/etc/titian}/babel.conf"
+    if [ -f "$_intent" ]; then
+        sh "$BABEL_SH" generate || exit 33
+    fi
+}
+
+apply_l3vpn() {
+    # L3VPN (BIRD, Bab 6.9): generate section bila l3vpn.conf ada.
+    # Sesudah apply_babel — L3VPN memakai tabel vpn/mpls yang
+    # didefinisikan di global (apply_global sudah jalan paling awal).
+    _intent="${STATE_ROOT:-/etc/titian}/l3vpn.conf"
+    if [ -f "$_intent" ]; then
+        sh "$L3VPN_SH" generate || exit 33
+    fi
+}
+
+apply_function() {
+    # B5: fungsi filter BIRD — generate section bila function.intent ada.
+    # Sesudah apply_ospf, sebelum apply_bgp — filter BGP yang memanggil
+    # fungsi (call:NAMA) butuh definisi fungsi sudah ter-generate saat
+    # bird -p mem-parse bird.conf. Dilewati bila belum pernah ada fungsi
+    # (function.conf contoh tetap dipakai apa adanya).
+    _intent="${STATE_ROOT:-/etc/titian}/function.intent"
+    if [ -f "$_intent" ]; then
+        sh "$SBIN_DIR/titian-function.sh" generate || exit 33
+    fi
+}
+
 apply_bgp() {
     # BGP (BIRD): generate section bila bgp.conf ada + local-as diset.
     # Bila tidak ada neighbor, generate tetap jalan (section kosong) agar
@@ -120,6 +293,15 @@ apply_bgp() {
     if [ -f "$_intent" ] && grep -q "^local-as " "$_intent" 2>/dev/null; then
         sh "$SBIN_DIR/titian-bgp.sh" generate || exit 33
     fi
+}
+
+apply_frr_config() {
+    # FRR (BGP/OSPF/route-map/prefix-list/community-list): terapkan
+    # intent frr.conf via vtysh + write memory (titian-frr.sh
+    # frr-apply-config). Dilewati bila tidak ada intent / FRR belum
+    # jalan (fungsi itu sendiri yang memutuskan); gagal keras bila
+    # vtysh menolak perintah (commit gagal, intent tetap tersimpan).
+    sh "$FRR_SH" frr-apply-config || exit 33
 }
 
 apply_wireguard() {
@@ -150,7 +332,24 @@ do_commit() {
     apply_traffic_shape || exit 33
     apply_pppoe || exit 33
     apply_ipoe || exit 33
+    apply_global || exit 33
+    apply_protocol || exit 33
+    apply_direct || exit 33
+    apply_pipe || exit 33
+    apply_bfd || exit 33
+    apply_static || exit 33
+    apply_rip || exit 33
+    apply_ospf || exit 33
+    apply_aggregator || exit 33
+    apply_mrt || exit 33
+    apply_radv || exit 33
+    apply_rpki || exit 33
+    apply_bmp || exit 33
+    apply_babel || exit 33
+    apply_l3vpn || exit 33
+    apply_function || exit 33
     apply_bgp || exit 33
+    apply_frr_config || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
     echo "commit: done"
@@ -165,7 +364,24 @@ do_apply_all() {
     apply_traffic_shape || exit 33
     apply_pppoe || exit 33
     apply_ipoe || exit 33
+    apply_global || exit 33
+    apply_protocol || exit 33
+    apply_direct || exit 33
+    apply_pipe || exit 33
+    apply_bfd || exit 33
+    apply_static || exit 33
+    apply_rip || exit 33
+    apply_ospf || exit 33
+    apply_aggregator || exit 33
+    apply_mrt || exit 33
+    apply_radv || exit 33
+    apply_rpki || exit 33
+    apply_bmp || exit 33
+    apply_babel || exit 33
+    apply_l3vpn || exit 33
+    apply_function || exit 33
     apply_bgp || exit 33
+    apply_frr_config || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
     echo "commit apply-all: done"

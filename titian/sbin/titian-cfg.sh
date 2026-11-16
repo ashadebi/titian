@@ -81,9 +81,13 @@ copy_all() {
         mkdir -p "$CFG_DIR/netstate" 2>/dev/null
         cp -f "$STATE_DIR/netstate/"* "$CFG_DIR/netstate/" 2>/dev/null || true
     fi
-    # terminal-length (pager) + ipoe.conf (IPoE server intent) + bgp.conf
-    # ikut dipersistenkan — ketiganya di /etc (tmpfs) dan hilang saat reboot.
-    for _f in terminal-length ipoe.conf bgp.conf; do
+    # Intent-intent di /etc (tmpfs) ikut dipersistenkan — semuanya hilang
+    # saat reboot bila tidak disalin. Daftar: terminal-length (pager),
+    # ipoe/bgp/frr/bfd/static/rip/ospf/direct/pipe/kernel/device +
+    # rpki/radv/babel/bird-global/aggregator/bmp/l3vpn/mrt (Batch 9 —
+    # sebelumnya rpki/radv/babel/global hilang saat reboot meski ada
+    # di /etc/titian).
+    for _f in terminal-length ipoe.conf bgp.conf frr.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf; do
         [ -f "$STATE_DIR/$_f" ] && cp -f "$STATE_DIR/$_f" "$CFG_DIR/$_f" 2>/dev/null || true
     done
     return 0
@@ -171,7 +175,7 @@ cmd_restore() {
         mkdir -p "$STATE_DIR/netstate" 2>/dev/null
         cp -f "$CFG_DIR/netstate/"* "$STATE_DIR/netstate/" 2>/dev/null || true
     fi
-    for _f in terminal-length ipoe.conf bgp.conf; do
+    for _f in terminal-length ipoe.conf bgp.conf frr.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf; do
         [ -f "$CFG_DIR/$_f" ] && cp -f "$CFG_DIR/$_f" "$STATE_DIR/$_f" 2>/dev/null || true
     done
     echo "titian config at-restore from $CFG_DIR"

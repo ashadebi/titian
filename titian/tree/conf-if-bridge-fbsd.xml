@@ -212,7 +212,7 @@
                 ptype="IP6_ADDR_MASK"/>
         <CONFIG pattern="^${__line}$"/>
         <ACTION>
-            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+            ${RT_SBIN}/titian-if.sh addr6-add "${iface}" "${ip}" "" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
         </ACTION>
     </COMMAND>
 

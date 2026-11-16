@@ -39,8 +39,23 @@
                        optional="true"
                        mode="subcommand"
                        ptype="SUBCOMMAND"/>
+		<PARAM name="direct"
+                       help="Direct protocol section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+		<PARAM name="pipe"
+                       help="Pipe protocol section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
 		<PARAM name="ospf"
                        help="OSPF section"
+                       optional="true"
+                       mode="subcommand"
+                       ptype="SUBCOMMAND"/>
+                <PARAM name="global"
+                       help="Global section"
                        optional="true"
                        mode="subcommand"
                        ptype="SUBCOMMAND"/>
@@ -57,8 +72,14 @@
                                 sed -n '/#-PROTOCOL-STATIC-#/, /#-ENDPROTOCOL-STATIC-#/p' "$BIRD_CONF"
 			elif test -n "${bgp}"; then
                                 sed -n '/#-BGP-#/, /#-ENDBGP-#/p' "$BIRD_CONF"
+			elif test -n "${direct}"; then
+                                sed -n '/#-DIRECT-#/, /#-ENDDIRECT-#/p' "$BIRD_CONF"
+			elif test -n "${pipe}"; then
+                                sed -n '/#-PIPE-#/, /#-ENDPIPE-#/p' "$BIRD_CONF"
 			elif test -n "${ospf}"; then
                                 sed -n '/#-OSPF-#/, /#-ENDOSPF-#/p' "$BIRD_CONF"
+			elif test -n "${global}"; then
+                                sed -n '/#-GLOBAL-#/, /#-ENDGLOBAL-#/p' "$BIRD_CONF"
 			else
                                 cat "$BIRD_CONF"
                         fi
@@ -69,7 +90,11 @@
 
 <!-- Show routing information -->
         <COMMAND name="show route"
-                help="Show BIRD routes"/>
+                help="Show BIRD routes"
+                lock="false"
+                interrupt="true">
+                <ACTION>birdc show route | grep -v "^BIRD"</ACTION>
+        </COMMAND>
 	
 	<COMMAND name="show route ip"
 		help="Show routes for one IP/prefix"
@@ -82,10 +107,10 @@
 	</COMMAND>
 
 	<COMMAND name="show route all"
-                help="Count Bird Route Count"
+                help="Show routes with all attributes (birdc show route all)"
                 lock="false"
                 interrupt="true">
-                <ACTION>birdc show route | grep -v "^BIRD"</ACTION>
+                <ACTION>birdc show route all | grep -v "^BIRD"</ACTION>
         </COMMAND>
 
         <COMMAND name="show route count"
@@ -214,6 +239,24 @@
 		<ACTION>${RT_SBIN}/titian-bird.sh reload-filters</ACTION>
 	</COMMAND>
 
+	<!-- B7: reload satu protokol dua arah + semua protokol -->
+	<COMMAND name="reload both"
+		help="Reload inbound + outbound satu protokol (birdc reload &lt;nama&gt;)"
+		lock="false"
+		interrupt="true">
+		<PARAM name="get_var"
+			help="Protocol name"
+			ptype="STRING"/>
+		<ACTION>${RT_SBIN}/titian-birdc.sh reload-both "${get_var}"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="reload all"
+		help="Reload semua protokol (birdc reload all)"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-birdc.sh reload-all</ACTION>
+	</COMMAND>
+
 	<!--Restart-->
 	<COMMAND name="restart"
 		help="Restart a protocol">
@@ -233,9 +276,24 @@
 		<ACTION>birdc disable "${get_var}" | grep -v "^BIRD"</ACTION>
 	</COMMAND>
 
+	<!-- B7: disable/enable semua protokol -->
+	<COMMAND name="disable all"
+		help="Disable semua protokol (birdc disable all)"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-birdc.sh proto-disable all</ACTION>
+	</COMMAND>
+
 	<COMMAND name="enable" help="Enable a protocol">
 	<PARAM name="get_var" help="Protocol name" ptype="STRING"/>
 		<ACTION>birdc enable "${get_var}" | grep -v "^BIRD"</ACTION>
+	</COMMAND>
+
+	<COMMAND name="enable all"
+		help="Enable semua protokol (birdc enable all)"
+		lock="false"
+		interrupt="true">
+		<ACTION>${RT_SBIN}/titian-birdc.sh proto-enable all</ACTION>
 	</COMMAND>
 
 	<!-- Generator BIRD: render section -> backup -> bird -p -> birdc configure -->

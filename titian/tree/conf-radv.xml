@@ -1,0 +1,1083 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- RAdv / Router Advertisement (BIRD `protocol radv`).    -->
+    <!--   - Masuk dari `router bird` -> `radv` — SATU instance -->
+    <!--     tetap (BIRD hanya mengizinkan satu protocol radv). -->
+    <!--   - Top view: propagate-routes, trigger, table,        -->
+    <!--     channel ipv6 import/export, `interface <PATTERN>`  -->
+    <!--     (masuk ke interface view), `prefix <PREFIX6>`      -->
+    <!--     (masuk ke prefix view, scope global), `rdnss` /    -->
+    <!--     `dnssl` (masuk ke view blok, scope global),        -->
+    <!--     `custom-option <TYPE> <VALUE>`.                    -->
+    <!--   - Interface view (viewid radv_iface): max/min ra     -->
+    <!--     interval, min delay, solicited ra unicast, managed, -->
+    <!--     other config, link mtu, reachable time, retrans     -->
+    <!--     timer, current hop limit, default lifetime (+       -->
+    <!--     sensitive), default preference, route lifetime (+   -->
+    <!--     sensitive), route preference, prefix/route linger   -->
+    <!--     time, rdnss/dnssl/custom-option local, plus nested  -->
+    <!--     prefix / rdnss / dnssl / custom-option (scope       -->
+    <!--     iface — view yang sama dengan scope global,        -->
+    <!--     dibedakan viewid radv_pfx_ctx (global:/iface:) /   -->
+    <!--     radv_dns_ctx (global / iface:IFACE).                      -->
+    <!--   - Prefix view: skip, onlink, autonomous, valid /     -->
+    <!--     preferred lifetime (+ sensitive).                   -->
+    <!--   - RDNSS view: ns (add/del), lifetime (detik / mult   -->
+    <!--     N). DNSSL view: domain (add/del), lifetime.         -->
+    <!--   - Intent di /etc/titian/radv.conf; generate via      -->
+    <!--     titian-radv.sh (menulis section bird.d/radv.conf   -->
+    <!--     lalu titian-bird.sh generate radv). Section ditulis -->
+    <!--     ulang UTUH tiap apply.                             -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_radv di titian-commit.sh, sesudah            -->
+    <!--     apply_ospf, sebelum apply_function).               -->
+    <!--   - Sintaks BIRD 2.16.1 (docs §6.14): protocol radv {  -->
+    <!--     propagate routes; trigger <prefix6>; ipv6 { table;  -->
+    <!--     import; export; }; interface "<pat>" { max/min ra  -->
+    <!--     interval; min delay; solicited ra unicast; managed; -->
+    <!--     other config; link mtu; reachable time; retrans     -->
+    <!--     timer; current hop limit; default lifetime          -->
+    <!--     [sensitive]; default preference; route lifetime     -->
+    <!--     [sensitive]; route preference; prefix/route linger  -->
+    <!--     time; rdnss/dnssl/custom option local; prefix {     -->
+    <!--     skip; onlink; autonomous; valid/preferred lifetime  -->
+    <!--     [sensitive]; }; rdnss { lifetime [mult]; ns; };    -->
+    <!--     dnssl { lifetime [mult]; domain; }; custom option   -->
+    <!--     type <N> value <bytestring>; }; prefix { ... };     -->
+    <!--     rdnss { ... }; dnssl { ... }; custom option ...; }. -->
+    <!--     Default BIRD: propagate routes no; max ra interval  -->
+    <!--     600 / min ~1/3 max (min maks 3/4 x max); min delay  -->
+    <!--     3; solicited ra unicast / managed / other config    -->
+    <!--     no; link mtu 0 (pakai MTU interface); reachable /   -->
+    <!--     retrans time 0; current hop limit 64; default       -->
+    <!--     lifetime 3x max, sensitive yes; default preference  -->
+    <!--     medium; route lifetime 3x max, sensitive no; route  -->
+    <!--     preference medium; prefix/route linger 3x max;     -->
+    <!--     rdnss/dnssl/custom option local no; prefix skip no, -->
+    <!--     onlink/autonomous yes, valid lifetime 86400,       -->
+    <!--     preferred lifetime 14400; rdnss/dnssl lifetime 3x   -->
+    <!--     max (atau 3x max x mult bila `mult` dipakai).       -->
+    <!--   - TIDAK diimplementasi: `check link` (tidak disebut  -->
+    <!--     Bab 6.14 — PERLU VERIFIKASI via `bird -p`); bentuk -->
+    <!--     singkat `rdnss <addr>;` / `dnssl <domain>;` sebagai -->
+    <!--     perintah terpisah (tercakup bentuk blok yang        -->
+    <!--     semantiknya identik); instance radv kedua (BIRD     -->
+    <!--     hanya mengizinkan satu protocol radv).              -->
+
+<VIEW name="configure-bird-radv-view"
+    prompt="${SYSTEM_NAME}(config-bird-radv)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="import"
+        help="Channel import (all|none|filter NAME)"/>
+
+    <COMMAND name="export"
+        help="Channel export (all|none|filter NAME)"/>
+
+    <COMMAND name="show"
+        help="Show radv state"/>
+
+    <COMMAND name="propagate-routes"
+        help="Sebarkan route dari tabel ke RA (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh propagate-routes-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no propagate-routes"
+        help="Kembali ke propagate routes default BIRD (no)">
+        <CONFIG operation="unset" pattern="^propagate-routes"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh propagate-routes-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="trigger"
+        help="Trigger RA saat prefix ini berubah (prefix IPv6)">
+        <PARAM name="Prefix"
+            help="Prefix IPv6 (mis. 2001:db8::/48)"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh trigger-set "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no trigger"
+        help="Hapus trigger">
+        <CONFIG operation="unset" pattern="^trigger"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh trigger-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table"
+        help="Tabel sumber route (default BIRD master6 bila kosong)">
+        <PARAM name="Value"
+            help="Nama tabel (master6 atau tabel ipv6 dari global -> table-add)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh table-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table"
+        help="Kembali ke tabel default BIRD (master6)">
+        <CONFIG operation="unset" pattern="^table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh table-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import all"
+        help="Import semua route dari tabel">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh chan-set import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import none"
+        help="Jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh chan-set import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import filter"
+        help="Import route lewat filter bernama">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh chan-set import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export all"
+        help="Export semua route ke tabel">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh chan-set export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export none"
+        help="Jangan export route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh chan-set export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Export route lewat filter bernama">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh chan-set export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interface"
+        help="Opsi RAdv per interface (masuk ke interface view)"
+        view="configure-bird-radv-iface-view"
+        viewid="radv_iface=${Pattern}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD (mis. ge*, bridge0)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1560" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-add "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Hapus semua opsi RAdv interface ini">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-del "${Pattern}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="prefix"
+        help="Opsi prefix global (masuk ke prefix view)"
+        view="configure-bird-radv-prefix-view"
+        viewid="radv_pfx_ctx=global:${Prefix}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Prefix"
+            help="Prefix IPv6 yang diiklankan (mis. 2001:db8:1::/48)"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG priority="0x1560" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-touch "global:${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no prefix"
+        help="Hapus semua opsi prefix global ini">
+        <PARAM name="Prefix"
+            help="Prefix IPv6"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^prefix ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-del "global:${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rdnss"
+        help="Opsi RDNSS global (masuk ke rdnss view)"
+        view="configure-bird-radv-rdnss-view"
+        viewid="radv_dns_ctx=global"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1560" pattern="^${__line}$"/>
+        <ACTION>
+            echo "RAdv rdnss (global)"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rdnss"
+        help="Hapus seluruh blok rdnss global">
+        <CONFIG operation="unset" pattern="^rdnss"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-del global ""
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dnssl"
+        help="Opsi DNSSL global (masuk ke dnssl view)"
+        view="configure-bird-radv-dnssl-view"
+        viewid="radv_dns_ctx=global"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1560" pattern="^${__line}$"/>
+        <ACTION>
+            echo "RAdv dnssl (global)"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dnssl"
+        help="Hapus seluruh blok dnssl global">
+        <CONFIG operation="unset" pattern="^dnssl"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-del global ""
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="custom-option"
+        help="Custom RA option global: type N value bytestring">
+        <PARAM name="Type"
+            help="Tipe option (0..255)"
+            ptype="UINT"/>
+        <PARAM name="Value"
+            help="Nilai bytestring (hex:0e:10:... atau string hex)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh custom-option-add global "" "${Type}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no custom-option"
+        help="Hapus custom option global tipe ini">
+        <PARAM name="Type"
+            help="Tipe option (0..255)"
+            ptype="UINT"/>
+        <CONFIG operation="unset" pattern="^custom-option ${Type}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh custom-option-del global "" "${Type}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show radv"
+        help="Tampilkan intent + section + status birdc radv">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-radv-iface-view"
+    prompt="${SYSTEM_NAME}(config-bird-radv-if-${radv_iface})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-radv-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to RAdv mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="max-ra-interval"
+        help="Interval maksimum antar RA, detik (4..1800, default BIRD 600)">
+        <PARAM name="Value"
+            help="Detik (4..1800)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" max-ra-interval "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no max-ra-interval"
+        help="Kembali ke max-ra-interval default BIRD">
+        <CONFIG operation="unset" pattern="^max-ra-interval"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" max-ra-interval
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="min-ra-interval"
+        help="Interval minimum antar RA, detik (3..1800, maks 3/4 x max)">
+        <PARAM name="Value"
+            help="Detik (3..1800)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" min-ra-interval "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no min-ra-interval"
+        help="Kembali ke min-ra-interval default BIRD">
+        <CONFIG operation="unset" pattern="^min-ra-interval"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" min-ra-interval
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="min-delay"
+        help="Delay minimum antar RA, detik (default BIRD 3)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" min-delay "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no min-delay"
+        help="Kembali ke min-delay default BIRD">
+        <CONFIG operation="unset" pattern="^min-delay"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" min-delay
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="solicited-ra-unicast"
+        help="Kirim RA unicast saat solicitation (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" solicited-ra-unicast "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no solicited-ra-unicast"
+        help="Kembali ke solicited-ra-unicast default BIRD">
+        <CONFIG operation="unset" pattern="^solicited-ra-unicast"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" solicited-ra-unicast
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="managed"
+        help="Set flag Managed (DHCPv6) di RA (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" managed "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no managed"
+        help="Kembali ke managed default BIRD">
+        <CONFIG operation="unset" pattern="^managed"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" managed
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="other-config"
+        help="Set flag OtherConfig (DHCPv6) di RA (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" other-config "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no other-config"
+        help="Kembali ke other-config default BIRD">
+        <CONFIG operation="unset" pattern="^other-config"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" other-config
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="link-mtu"
+        help="MTU yang diiklankan, 0 = pakai MTU interface (default BIRD 0)">
+        <PARAM name="Value"
+            help="Byte (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" link-mtu "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no link-mtu"
+        help="Kembali ke link-mtu default BIRD">
+        <CONFIG operation="unset" pattern="^link-mtu"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" link-mtu
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reachable-time"
+        help="Reachable time yang diiklankan, ms (default BIRD 0)">
+        <PARAM name="Value"
+            help="Milidetik (0..3600000)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" reachable-time "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no reachable-time"
+        help="Kembali ke reachable-time default BIRD">
+        <CONFIG operation="unset" pattern="^reachable-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" reachable-time
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="retrans-timer"
+        help="Retrans timer yang diiklankan, ms (default BIRD 0)">
+        <PARAM name="Value"
+            help="Milidetik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" retrans-timer "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no retrans-timer"
+        help="Kembali ke retrans-timer default BIRD">
+        <CONFIG operation="unset" pattern="^retrans-timer"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" retrans-timer
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="current-hop-limit"
+        help="Hop limit yang diiklankan (default BIRD 64)">
+        <PARAM name="Value"
+            help="Hop (0..255)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" current-hop-limit "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no current-hop-limit"
+        help="Kembali ke current-hop-limit default BIRD">
+        <CONFIG operation="unset" pattern="^current-hop-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" current-hop-limit
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="default-lifetime"
+        help="Lifetime default router, detik (default BIRD 3x max)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" default-lifetime "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no default-lifetime"
+        help="Kembali ke default-lifetime default BIRD">
+        <CONFIG operation="unset" pattern="^default-lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" default-lifetime
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="default-lifetime-sensitive"
+        help="Lifetime default router sensitif terhadap perubahan (default BIRD yes)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" default-lifetime-sensitive "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no default-lifetime-sensitive"
+        help="Kembali ke default-lifetime-sensitive default BIRD">
+        <CONFIG operation="unset" pattern="^default-lifetime-sensitive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" default-lifetime-sensitive
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="default-preference"
+        help="Preferensi default router (default BIRD medium)">
+        <PARAM name="Value"
+            help="low|medium|high"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" default-preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no default-preference"
+        help="Kembali ke default-preference default BIRD">
+        <CONFIG operation="unset" pattern="^default-preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" default-preference
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="route-lifetime"
+        help="Lifetime route yang diiklankan, detik (default BIRD 3x max)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" route-lifetime "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-lifetime"
+        help="Kembali ke route-lifetime default BIRD">
+        <CONFIG operation="unset" pattern="^route-lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-lifetime
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="route-lifetime-sensitive"
+        help="Lifetime route sensitif terhadap perubahan (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" route-lifetime-sensitive "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-lifetime-sensitive"
+        help="Kembali ke route-lifetime-sensitive default BIRD">
+        <CONFIG operation="unset" pattern="^route-lifetime-sensitive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-lifetime-sensitive
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="route-preference"
+        help="Preferensi route yang diiklankan (default BIRD medium)">
+        <PARAM name="Value"
+            help="low|medium|high"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" route-preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-preference"
+        help="Kembali ke route-preference default BIRD">
+        <CONFIG operation="unset" pattern="^route-preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-preference
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="prefix-linger-time"
+        help="Waktu prefix dipertahankan sesudah hilang, detik (default BIRD 3x max)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" prefix-linger-time "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no prefix-linger-time"
+        help="Kembali ke prefix-linger-time default BIRD">
+        <CONFIG operation="unset" pattern="^prefix-linger-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" prefix-linger-time
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="route-linger-time"
+        help="Waktu route dipertahankan sesudah hilang, detik (default BIRD 3x max)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" route-linger-time "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-linger-time"
+        help="Kembali ke route-linger-time default BIRD">
+        <CONFIG operation="unset" pattern="^route-linger-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-linger-time
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="rdnss-local"
+        help="Kirim RDNSS dari interface ini (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" rdnss-local "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rdnss-local"
+        help="Kembali ke rdnss-local default BIRD">
+        <CONFIG operation="unset" pattern="^rdnss-local"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" rdnss-local
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="dnssl-local"
+        help="Kirim DNSSL dari interface ini (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" dnssl-local "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dnssl-local"
+        help="Kembali ke dnssl-local default BIRD">
+        <CONFIG operation="unset" pattern="^dnssl-local"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" dnssl-local
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="custom-option-local"
+        help="Kirim custom option dari interface ini (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-set "${radv_iface}" custom-option-local "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no custom-option-local"
+        help="Kembali ke custom-option-local default BIRD">
+        <CONFIG operation="unset" pattern="^custom-option-local"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" custom-option-local
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="prefix"
+        help="Opsi prefix per interface (masuk ke prefix view)"
+        view="configure-bird-radv-prefix-view"
+        viewid="radv_pfx_ctx=iface:${radv_iface}:${Prefix}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Prefix"
+            help="Prefix IPv6 yang diiklankan (mis. 2001:db8:2::/48)"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG priority="0x1561" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-touch "iface:${radv_iface}:${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no prefix"
+        help="Hapus semua opsi prefix interface ini">
+        <PARAM name="Prefix"
+            help="Prefix IPv6"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^prefix ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-del "iface:${radv_iface}:${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rdnss"
+        help="Opsi RDNSS per interface (masuk ke rdnss view)"
+        view="configure-bird-radv-rdnss-view"
+        viewid="radv_dns_ctx=iface:${radv_iface}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1561" pattern="^${__line}$"/>
+        <ACTION>
+            echo "RAdv rdnss (interface ${radv_iface})"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rdnss"
+        help="Hapus seluruh blok rdnss interface ini">
+        <CONFIG operation="unset" pattern="^rdnss"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-del iface "${radv_iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dnssl"
+        help="Opsi DNSSL per interface (masuk ke dnssl view)"
+        view="configure-bird-radv-dnssl-view"
+        viewid="radv_dns_ctx=iface:${radv_iface}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1561" pattern="^${__line}$"/>
+        <ACTION>
+            echo "RAdv dnssl (interface ${radv_iface})"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dnssl"
+        help="Hapus seluruh blok dnssl interface ini">
+        <CONFIG operation="unset" pattern="^dnssl"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-del iface "${radv_iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="custom-option"
+        help="Custom RA option per interface: type N value bytestring">
+        <PARAM name="Type"
+            help="Tipe option (0..255)"
+            ptype="UINT"/>
+        <PARAM name="Value"
+            help="Nilai bytestring (hex:0e:10:... atau string hex)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh custom-option-add iface "${radv_iface}" "${Type}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no custom-option"
+        help="Hapus custom option interface ini tipe ini">
+        <PARAM name="Type"
+            help="Tipe option (0..255)"
+            ptype="UINT"/>
+        <CONFIG operation="unset" pattern="^custom-option ${Type}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh custom-option-del iface "${radv_iface}" "${Type}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+
+<VIEW name="configure-bird-radv-prefix-view"
+    prompt="${SYSTEM_NAME}(config-bird-radv-pfx-${radv_pfx_ctx})# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-radv-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to RAdv mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="skip"
+        help="Lewati prefix ini saat generate RA (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" skip "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no skip"
+        help="Kembali ke skip default BIRD">
+        <CONFIG operation="unset" pattern="^skip"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" skip
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="onlink"
+        help="Set flag on-link prefix (default BIRD yes)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" onlink "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no onlink"
+        help="Kembali ke onlink default BIRD">
+        <CONFIG operation="unset" pattern="^onlink"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" onlink
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="autonomous"
+        help="Set flag autonomous prefix (default BIRD yes)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" autonomous "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no autonomous"
+        help="Kembali ke autonomous default BIRD">
+        <CONFIG operation="unset" pattern="^autonomous"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" autonomous
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="valid-lifetime"
+        help="Valid lifetime prefix, detik (default BIRD 86400)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" valid-lifetime "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no valid-lifetime"
+        help="Kembali ke valid-lifetime default BIRD">
+        <CONFIG operation="unset" pattern="^valid-lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" valid-lifetime
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="valid-lifetime-sensitive"
+        help="Valid lifetime sensitif terhadap perubahan (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" valid-lifetime-sensitive "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no valid-lifetime-sensitive"
+        help="Kembali ke valid-lifetime-sensitive default BIRD">
+        <CONFIG operation="unset" pattern="^valid-lifetime-sensitive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" valid-lifetime-sensitive
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="preferred-lifetime"
+        help="Preferred lifetime prefix, detik (default BIRD 14400)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" preferred-lifetime "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no preferred-lifetime"
+        help="Kembali ke preferred-lifetime default BIRD">
+        <CONFIG operation="unset" pattern="^preferred-lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" preferred-lifetime
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="preferred-lifetime-sensitive"
+        help="Preferred lifetime sensitif terhadap perubahan (default BIRD no)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-set "${radv_pfx_ctx}" preferred-lifetime-sensitive "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no preferred-lifetime-sensitive"
+        help="Kembali ke preferred-lifetime-sensitive default BIRD">
+        <CONFIG operation="unset" pattern="^preferred-lifetime-sensitive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" preferred-lifetime-sensitive
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+
+<VIEW name="configure-bird-radv-rdnss-view"
+    prompt="${SYSTEM_NAME}(config-bird-radv-rdnss)# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-radv-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to RAdv mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="ns"
+        help="Tambah server DNS (alamat IPv6)">
+        <PARAM name="Address"
+            help="Alamat IPv6 server DNS"
+            ptype="IP6_ADDR"/>
+        <CONFIG pattern="^ns ${Address}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-ns-add "${radv_dns_ctx}" "${Address}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ns"
+        help="Hapus server DNS ini">
+        <PARAM name="Address"
+            help="Alamat IPv6 server DNS"
+            ptype="IP6_ADDR"/>
+        <CONFIG operation="unset" pattern="^ns ${Address}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-ns-del "${radv_dns_ctx}" "${Address}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="lifetime"
+        help="Lifetime RDNSS, detik (default BIRD 3x max ra interval)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-lifetime-set "${radv_dns_ctx}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no lifetime"
+        help="Kembali ke lifetime RDNSS default BIRD (3x max)">
+        <CONFIG operation="unset" pattern="^lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-lifetime-del "${radv_dns_ctx}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="lifetime-mult"
+        help="Lifetime RDNSS sebagai kelipatan max ra interval (default BIRD 3)">
+        <PARAM name="Value"
+            help="Kelipatan (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-lifetime-set "${radv_dns_ctx}" mult "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no lifetime-mult"
+        help="Kembali ke lifetime RDNSS default BIRD (3x max)">
+        <CONFIG operation="unset" pattern="^lifetime mult"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh rdnss-lifetime-del "${radv_dns_ctx}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-radv-dnssl-view"
+    prompt="${SYSTEM_NAME}(config-bird-radv-dnssl)# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-radv-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to RAdv mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="domain"
+        help="Tambah domain search">
+        <PARAM name="Domain"
+            help="Nama domain (mis. example.com)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-domain-add "${radv_dns_ctx}" "${Domain}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no domain"
+        help="Hapus domain search ini">
+        <PARAM name="Domain"
+            help="Nama domain"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^domain ${Domain}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-domain-del "${radv_dns_ctx}" "${Domain}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="lifetime"
+        help="Lifetime DNSSL, detik (default BIRD 3x max ra interval)">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-lifetime-set "${radv_dns_ctx}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no lifetime"
+        help="Kembali ke lifetime DNSSL default BIRD (3x max)">
+        <CONFIG operation="unset" pattern="^lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-lifetime-del "${radv_dns_ctx}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="lifetime-mult"
+        help="Lifetime DNSSL sebagai kelipatan max ra interval (default BIRD 3)">
+        <PARAM name="Value"
+            help="Kelipatan (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-lifetime-set "${radv_dns_ctx}" mult "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no lifetime-mult"
+        help="Kembali ke lifetime DNSSL default BIRD (3x max)">
+        <CONFIG operation="unset" pattern="^lifetime mult"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh dnssl-lifetime-del "${radv_dns_ctx}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

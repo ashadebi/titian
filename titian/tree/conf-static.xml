@@ -1,0 +1,1031 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- Static (BIRD `protocol static`) — route manual.        -->
+    <!--   - Masuk dari `router bird` -> `static` (view         -->
+    <!--     configure-bird-static-view): check-link, igp-table, -->
+    <!--     `route <PREFIX>` / `route6 <PREFIX>` (masuk ke     -->
+    <!--     route view), `no route <PREFIX>`.                   -->
+    <!--   - Route view: `via <IP>` (masuk ke nexthop view:     -->
+    <!--     weight / bfd / dev / onlink), `via-interface`,      -->
+    <!--     `recursive`, `blackhole` / `unreachable` /         -->
+    <!--     `prohibit`, atribut per-route (ospf-metric1/2,     -->
+    <!--     ospf-tag, bgp-community, bgp-large-community).     -->
+    <!--   - Intent di /etc/titian/static.conf; generate via    -->
+    <!--     titian-static.sh (menulis section bird.d/static.conf -->
+    <!--     lalu titian-bird.sh generate static). Section       -->
+    <!--     ditulis ulang UTUH tiap apply.                      -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_static di titian-commit.sh, sesudah          -->
+    <!--     apply_bfd — route dengan BFD per-nexthop butuh     -->
+    <!--     `protocol bfd` sudah ter-generate).                 -->
+    <!--   - Ini BIRD `protocol static` — BERBEDA dari static   -->
+    <!--     route kernel (`ip route ...`, conf-route-fbsd.xml)  -->
+    <!--     yang menulis langsung ke tabel kernel.              -->
+    <!--   - Sintaks BIRD 2.16.1 (docs §6.17): route via [weight -->
+    <!--     N] [bfd] [dev "<if>"] [onlink]; recursive; sink;   -->
+    <!--     per-route filter { ospf_metric1/2; ospf_tag;       -->
+    <!--     bgp_community.add(); bgp_large_community.add(); }. -->
+    <!--     MPLS / ROA / ASPA / Flowspec TIDAK diimplementasi  -->
+    <!--     (lihat titian-static.sh).                           -->
+
+<VIEW name="configure-bird-static-view"
+    prompt="${SYSTEM_NAME}(config-bird-static)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="check-link"
+        help="Perhatikan link state hardware (route ditarik bila link down)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh check-link-set on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no check-link"
+        help="Abaikan link state hardware (default BIRD)">
+        <CONFIG operation="unset" pattern="^check-link"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh check-link-set off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="igp-table"
+        help="Tabel untuk lookup recursive route (resolusi nexthop rekursif)">
+        <PARAM name="Name"
+            help="Nama tabel BIRD (mis. master4)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh igp-table-set "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no igp-table"
+        help="Kembali ke tabel protokol (default BIRD)">
+        <CONFIG operation="unset" pattern="^igp-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh igp-table-del
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="debug"
+        help="Debug protocol static (all|off|states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="Kelas debug (all|off|daftar koma)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh debug-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protocol static (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh debug-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump protocol static (all|off|states,messages)">
+        <PARAM name="Value"
+            help="Kelas mrtdump (all|off|states,messages)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh mrtdump-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protocol static (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh mrtdump-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="roa-route"
+        help="Route ROA statis (S8; instance static-roa4/roa6 terpisah, butuh tabel roa — param Table opsional, bila kosong pakai tabel roa PERTAMA dari global)">
+        <PARAM name="Prefix"
+            help="Prefix yang diotorisasi (CIDR v4/v6)"
+            ptype="STRING"/>
+        <PARAM name="MaxLen"
+            help="Max-length ROA (&gt;= prefix length; &lt;=32 v4 / &lt;=128 v6)"
+            ptype="UINT"/>
+        <PARAM name="AS"
+            help="AS yang diotorisasi (1..4294967295)"
+            ptype="UINT"/>
+        <PARAM name="Table"
+            help="Nama tabel roa4/roa6 (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh roa-add "${Prefix}" "${MaxLen}" "${AS}" "${Table}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no roa-route"
+        help="Hapus route ROA statis">
+        <PARAM name="Prefix"
+            help="Prefix ROA yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^roa-route ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh roa-del "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aspa-route-providers"
+        help="Route ASPA statis dengan provider (S9; instance static-aspa terpisah, butuh tabel aspa)">
+        <PARAM name="AS"
+            help="ASN client (1..4294967295)"
+            ptype="UINT"/>
+        <PARAM name="Providers"
+            help="Daftar ASN provider dipisah koma (mis. 65001,65002)"
+            ptype="STRING"/>
+        <PARAM name="Table"
+            help="Nama tabel aspa (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh aspa-providers-add "${AS}" "${Providers}" "${Table}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="aspa-route-transit"
+        help="Route ASPA statis tanpa provider / transit (S9)">
+        <PARAM name="AS"
+            help="ASN client (1..4294967295)"
+            ptype="UINT"/>
+        <PARAM name="Table"
+            help="Nama tabel aspa (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh aspa-transit-add "${AS}" "${Table}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no aspa-route-providers"
+        help="Hapus route ASPA statis (providers maupun transit)">
+        <PARAM name="AS"
+            help="ASN client yang dihapus"
+            ptype="UINT"/>
+        <CONFIG operation="unset" pattern="^aspa-route-providers ${AS}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh aspa-del "${AS}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no aspa-route-transit"
+        help="Hapus route ASPA statis (providers maupun transit)">
+        <PARAM name="AS"
+            help="ASN client yang dihapus"
+            ptype="UINT"/>
+        <CONFIG operation="unset" pattern="^aspa-route-transit ${AS}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh aspa-del "${AS}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="route"
+        help="Static route IPv4 (masuk ke route view)"
+        view="configure-bird-static-route-view"
+        viewid="static_route=${Prefix}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Prefix"
+            help="Prefix CIDR IPv4 (mis. 10.0.0.0/8)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG priority="0x1550" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-touch "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route"
+        help="Hapus static route IPv4 ini (semua nexthop + atribut)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR IPv4"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^route ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-del "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="route6"
+        help="Static route IPv6 (masuk ke route view)"
+        view="configure-bird-static-route-view"
+        viewid="static_route=${Prefix}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Prefix"
+            help="Prefix CIDR IPv6 (mis. 2001:db8:10::/48)"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG priority="0x1551" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-touch "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route6"
+        help="Hapus static route IPv6 ini (semua nexthop + atribut)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR IPv6"
+            ptype="IP6_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^route6 ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-del "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="flow-table"
+        help="Tabel tujuan channel flow (4|6 — flow4 dan flow6 wajib punya tabel)">
+        <PARAM name="Family"
+            help="Keluarga (4 atau 6)"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama tabel flow (dari global -> table-add flow4/flow6)"
+            ptype="STRING"/>
+        <CONFIG pattern="^flow-table ${Family} ${Name}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flow-table-set "${Family}" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no flow-table"
+        help="Hapus tabel tujuan channel flow">
+        <PARAM name="Family"
+            help="Keluarga (4 atau 6)"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^flow-table ${Family}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flow-table-del "${Family}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="flow-route"
+        help="Aturan Flowspec RFC 5575 (masuk ke flow view)"
+        view="configure-bird-static-flow-view"
+        viewid="static_flow_ctx=${Family}:${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Family"
+            help="Keluarga (4|6)"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="ID aturan flowspec"
+            ptype="STRING"/>
+        <CONFIG priority="0x1552" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-touch "${Family}:${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no flow-route"
+        help="Hapus aturan flowspec ini (semua komponen)">
+        <PARAM name="Family"
+            help="Keluarga (4|6)"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="ID aturan flowspec"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^flow-route ${Family} ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-del "${Family}:${Name}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-static-route-view"
+    prompt="${SYSTEM_NAME}(config-bird-static-${static_route})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-static-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to static mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="via"
+        help="Nexthop via IP (masuk ke nexthop view: weight / bfd / dev / onlink)"
+        view="configure-bird-static-nexthop-view"
+        viewid="static_nh=${IP}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="IP"
+            help="Alamat IP nexthop (keluarga sama dengan prefix; v6 boleh %iface)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1552" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-add "${static_route}" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no via"
+        help="Hapus nexthop ini dari route">
+        <PARAM name="IP"
+            help="Alamat IP nexthop"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^via ${IP}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-del "${static_route}" "${IP}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="via-interface"
+        help="Route langsung via interface (tanpa IP nexthop)">
+        <PARAM name="Name"
+            help="Nama interface (mis. arc0)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-iface-add "${static_route}" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no via-interface"
+        help="Hapus nexthop via interface ini">
+        <PARAM name="Name"
+            help="Nama interface"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^via-interface ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-iface-del "${static_route}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="recursive"
+        help="Nexthop rekursif (di-resolve di igp table)">
+        <PARAM name="IP"
+            help="Alamat IP nexthop rekursif"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-recursive-set "${static_route}" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no recursive"
+        help="Hapus nexthop rekursif">
+        <CONFIG operation="unset" pattern="^recursive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-recursive-del "${static_route}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="blackhole"
+        help="Sink route: drop diam-diam">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-sink-set "${static_route}" blackhole
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no blackhole"
+        help="Hapus sink blackhole">
+        <CONFIG operation="unset" pattern="^blackhole"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-sink-del "${static_route}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="unreachable"
+        help="Sink route: ICMP unreachable">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-sink-set "${static_route}" unreachable
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no unreachable"
+        help="Hapus sink unreachable">
+        <CONFIG operation="unset" pattern="^unreachable"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-sink-del "${static_route}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="prohibit"
+        help="Sink route: administratively prohibited">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-sink-set "${static_route}" prohibit
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no prohibit"
+        help="Hapus sink prohibit">
+        <CONFIG operation="unset" pattern="^prohibit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-sink-del "${static_route}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ospf-metric1"
+        help="Metric external type-1 OSPF untuk route ini">
+        <PARAM name="Value"
+            help="Metric (bilangan)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" ospf-metric1 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ospf-metric1"
+        help="Hapus ospf-metric1 route ini">
+        <CONFIG operation="unset" pattern="^ospf-metric1"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" ospf-metric1
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ospf-metric2"
+        help="Metric external type-2 OSPF untuk route ini">
+        <PARAM name="Value"
+            help="Metric (bilangan)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" ospf-metric2 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ospf-metric2"
+        help="Hapus ospf-metric2 route ini">
+        <CONFIG operation="unset" pattern="^ospf-metric2"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" ospf-metric2
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ospf-tag"
+        help="Tag external route OSPF untuk route ini">
+        <PARAM name="Value"
+            help="Tag (bilangan)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" ospf-tag "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ospf-tag"
+        help="Hapus ospf-tag route ini">
+        <CONFIG operation="unset" pattern="^ospf-tag"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" ospf-tag
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bgp-community"
+        help="Community BGP yang ditambahkan saat route di-originate">
+        <PARAM name="Value"
+            help="Community AS:NN (mis. 65535:65281)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" bgp-community "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bgp-community"
+        help="Hapus bgp-community route ini">
+        <CONFIG operation="unset" pattern="^bgp-community"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" bgp-community
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bgp-large-community"
+        help="Large community BGP yang ditambahkan saat route di-originate">
+        <PARAM name="Value"
+            help="Large community AA:X:NN (mis. 64512:1:1)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" bgp-large-community "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bgp-large-community"
+        help="Hapus bgp-large-community route ini">
+        <CONFIG operation="unset" pattern="^bgp-large-community"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" bgp-large-community
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ra-preference"
+        help="Preferensi router advertisement untuk route ini (dokumen contoh §6.14)">
+        <PARAM name="Value"
+            help="RA_PREF_LOW|RA_PREF_MEDIUM|RA_PREF_HIGH"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" ra-preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ra-preference"
+        help="Hapus ra-preference route ini">
+        <CONFIG operation="unset" pattern="^ra-preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" ra-preference
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ra-lifetime"
+        help="Lifetime router advertisement untuk route ini, detik">
+        <PARAM name="Value"
+            help="Detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-set "${static_route}" ra-lifetime "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ra-lifetime"
+        help="Hapus ra-lifetime route ini">
+        <CONFIG operation="unset" pattern="^ra-lifetime"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" ra-lifetime
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+
+<VIEW name="configure-bird-static-flow-view"
+    prompt="${SYSTEM_NAME}(config-bird-static-flow-${static_flow_ctx})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-static-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to static mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="dst"
+        help="Prefix tujuan (IPv4 untuk flow4, IPv6 untuk flow6; WAJIB di flow4)">
+        <PARAM name="Value"
+            help="Prefix CIDR"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" dst "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dst"
+        help="Hapus dst aturan ini">
+        <CONFIG operation="unset" pattern="^dst"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" dst
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dst-offset"
+        help="Offset dst IPv6 — abaikan N bit pertama (hanya flow6, 0..128)">
+        <PARAM name="Value"
+            help="Bit (0..128)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" dst-offset "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dst-offset"
+        help="Hapus dst-offset aturan ini">
+        <CONFIG operation="unset" pattern="^dst-offset"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" dst-offset
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="src"
+        help="Prefix sumber (IPv4 untuk flow4, IPv6 untuk flow6)">
+        <PARAM name="Value"
+            help="Prefix CIDR"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" src "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no src"
+        help="Hapus src aturan ini">
+        <CONFIG operation="unset" pattern="^src"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" src
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="src-offset"
+        help="Offset src IPv6 — abaikan N bit pertama (hanya flow6, 0..128)">
+        <PARAM name="Value"
+            help="Bit (0..128)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" src-offset "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no src-offset"
+        help="Hapus src-offset aturan ini">
+        <CONFIG operation="unset" pattern="^src-offset"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" src-offset
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="proto"
+        help="Nomor protokol IP (hanya flow4, 0..255; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator (mis. 6 atau 80..90,120..124)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" proto "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no proto"
+        help="Hapus proto aturan ini">
+        <CONFIG operation="unset" pattern="^proto"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" proto
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="port"
+        help="Port TCP/UDP sumber atau tujuan (0..65535; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" port "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no port"
+        help="Hapus port aturan ini">
+        <CONFIG operation="unset" pattern="^port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" port
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dport"
+        help="Port tujuan (0..65535; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" dport "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dport"
+        help="Hapus dport aturan ini">
+        <CONFIG operation="unset" pattern="^dport"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" dport
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="sport"
+        help="Port sumber (0..65535; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" sport "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no sport"
+        help="Hapus sport aturan ini">
+        <CONFIG operation="unset" pattern="^sport"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" sport
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="icmp-type"
+        help="Field type ICMP (0..255; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" icmp-type "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no icmp-type"
+        help="Hapus icmp-type aturan ini">
+        <CONFIG operation="unset" pattern="^icmp-type"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" icmp-type
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="icmp-code"
+        help="Field code ICMP (0..255; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" icmp-code "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no icmp-code"
+        help="Hapus icmp-code aturan ini">
+        <CONFIG operation="unset" pattern="^icmp-code"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" icmp-code
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tcp-flags"
+        help="Bitmask flag TCP (value/mask, mask maks 0xfff)">
+        <PARAM name="Value"
+            help="Bitmask (mis. 0x02/0x12)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" tcp-flags "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tcp-flags"
+        help="Hapus tcp-flags aturan ini">
+        <CONFIG operation="unset" pattern="^tcp-flags"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" tcp-flags
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="length"
+        help="Panjang paket (0..65535; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" length "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no length"
+        help="Hapus length aturan ini">
+        <CONFIG operation="unset" pattern="^length"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" length
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dscp"
+        help="DSCP (0..63; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" dscp "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dscp"
+        help="Hapus dscp aturan ini">
+        <CONFIG operation="unset" pattern="^dscp"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" dscp
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="fragment"
+        help="Jenis fragmentasi (dont_fragment|is_fragment|first_fragment|last_fragment, boleh &amp;&amp;/||/!)">
+        <PARAM name="Value"
+            help="Fragmentasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" fragment "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no fragment"
+        help="Hapus fragment aturan ini">
+        <CONFIG operation="unset" pattern="^fragment"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" fragment
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-header"
+        help="Nilai last next-header (hanya flow6, 0..255; numbers-match)">
+        <PARAM name="Value"
+            help="Angka/rentang/operator"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" next-header "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no next-header"
+        help="Hapus next-header aturan ini">
+        <CONFIG operation="unset" pattern="^next-header"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" next-header
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="label"
+        help="Bitmask 20-bit Flow Label (hanya flow6, value/mask, mask maks 0xfffff)">
+        <PARAM name="Value"
+            help="Bitmask (mis. 0x12345/0xfffff)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" label "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no label"
+        help="Hapus label aturan ini">
+        <CONFIG operation="unset" pattern="^label"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" label
+        </ACTION>
+    </COMMAND>
+
+    <!-- B.7: aksi flowspec RFC 5575 (extended community di blok filter
+         route). Satu baris per jenis; beberapa jenis boleh bersamaan. -->
+    <COMMAND name="rate-limit"
+        help="Policing: batasi trafik flow ini ke N byte/detik (traffic-rate RFC 5575; 0 = sama dengan discard)">
+        <PARAM name="Value"
+            help="Byte/detik (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" action "rate-limit ${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rate-limit"
+        help="Hapus rate-limit aturan ini">
+        <CONFIG operation="unset" pattern="^rate-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" action rate-limit
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="discard"
+        help="Buang semua trafik flow ini (traffic-rate 0, RFC 5575)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" action "discard"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no discard"
+        help="Hapus discard aturan ini">
+        <CONFIG operation="unset" pattern="^discard"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" action discard
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="redirect"
+        help="Alihkan trafik flow ini ke VRF route-target AS:NN (redirect RFC 5575; AS 2-byte)">
+        <PARAM name="Value"
+            help="Route-target AS:NN (mis. 65000:100)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" action "redirect ${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no redirect"
+        help="Hapus redirect aturan ini">
+        <CONFIG operation="unset" pattern="^redirect"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" action redirect
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mark"
+        help="Tandai trafik flow ini dengan DSCP (traffic-marking RFC 5575)">
+        <PARAM name="Value"
+            help="DSCP (0..63)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-set "${static_flow_ctx}" action "mark ${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mark"
+        help="Hapus mark aturan ini">
+        <CONFIG operation="unset" pattern="^mark"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh flowroute-unset "${static_flow_ctx}" action mark
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+
+<VIEW name="configure-bird-static-nexthop-view"
+    prompt="${SYSTEM_NAME}(config-bird-static-${static_route}-via-${static_nh})# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-static-route-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to route mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="weight"
+        help="Bobot relatif nexthop untuk route multipath (1..256, default 1)">
+        <PARAM name="Value"
+            help="Weight (1..256)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" weight "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bfd"
+        help="BFD mengontrol nexthop ini (route dihapus bila sesi BFD down; butuh protocol bfd)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" bfd on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bfd"
+        help="Matikan BFD untuk nexthop ini">
+        <CONFIG operation="unset" pattern="^bfd"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" bfd off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dev"
+        help="Interface keluar untuk nexthop ini">
+        <PARAM name="Name"
+            help="Nama interface (mis. eth0)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" dev "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dev"
+        help="Hapus interface keluar nexthop ini (resolve dari alamat nexthop)">
+        <CONFIG operation="unset" pattern="^dev"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" dev ""
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="onlink"
+        help="Nexthop dianggap reachable di interface itu (wajib pakai alamat %iface)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" onlink on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no onlink"
+        help="Matikan onlink untuk nexthop ini">
+        <CONFIG operation="unset" pattern="^onlink"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-via-set "${static_route}" "${static_nh}" onlink off
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show static"
+        help="Status static BIRD (intent + section + protokol BIRD)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

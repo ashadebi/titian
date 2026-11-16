@@ -1322,6 +1322,12 @@ ber-MD5, satu tidak).
 
 ---
 
+### 9b.8 PERINGATAN — TCP MD5 memecahkan connect() BIRD di platform ini (ditemukan 16 Nov 2026)
+
+Pada BIRD 2.20.0 + FreeBSD 16.0-CURRENT, mengaktifkan TCP MD5 pada sesi BGP memecahkan `connect()` dengan `Socket error: connect: No such file or directory` (ENOENT) — sesi mentok `Active`, tidak pernah Established, dan restart daemon TIDAK memperbaiki. Ini BUKAN password tidak cocok: `tcpdump -M` membuktikan digest cocok di kedua sisi, dan SYN ber-MD5 dari RB3011 dibuang diam-diam tanpa SYN-ACK/RST (diduga socket listen BIRD tidak menerapkan kunci MD5). Status 16 Nov 2026: MD5 **DIMATIKAN** di lab (kedua sisi), BGP jalan tanpa MD5 di link lab privat ini. Bila MD5 dibutuhkan lagi, itu keputusan desain tersendiri (hipotesis: opsi eksplisit `authentication md5;` di blok BGP, atau upgrade BIRD).
+
+---
+
 ## 9c. FRR — routing suite alternatif (bukan BIRD)
 
 FRR (`net/frr10`, versi 10.7.1 di image) adalah routing suite

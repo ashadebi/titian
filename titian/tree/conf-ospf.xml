@@ -1,0 +1,1771 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- OSPF BIRD (BIRD `protocol ospf [v2|v3]`).             -->
+    <!--   - Masuk dari `router bird` -> `ospf` (v2, IPv4)    -->
+    <!--     atau `ospfv3` (v3, IPv6) — SATU view dipakai      -->
+    <!--     berdua (viewid ospf_inst=ospf|ospf6):             -->
+    <!--     rfc1583compat, rfc5838, instance-id, stub-router, -->
+    <!--     tick, ecmp (+ limit), merge-external,             -->
+    <!--     graceful-restart (+ time), channel, import/export -->
+    <!--     (+ export-ospf-metric1/metric2/tag), `area <ID>`  -->
+    <!--     (masuk ke area view).                             -->
+    <!--   - Area view: stub / nssa (salah satu), summary,    -->
+    <!--     default-nssa, default-cost(2), translator (+      -->
+    <!--     stability), networks, external (+ hidden/tag),    -->
+    <!--     stubnet (+ hidden/summary/cost), `interface`     -->
+    <!--     (masuk ke interface view), `virtual-link` (masuk  -->
+    <!--     ke vlink view).                                   -->
+    <!--   - Interface view: instance override, cost, stub,   -->
+    <!--     hello, poll, retransmit, transmit-delay,          -->
+    <!--     priority, wait, dead-count, dead, rx-buffer,      -->
+    <!--     tx-length, type, link-lsa-suppression,            -->
+    <!--     strict-nonbroadcast, real-broadcast, ptp-netmask, -->
+    <!--     ptp-address, check-link, bfd, ecmp-weight,        -->
+    <!--     ttl-security, tx-class/tx-dscp, authentication,   -->
+    <!--     `password <TEXT>` (masuk ke password view: id +   -->
+    <!--     rotasi berjadwal + algorithm), `neighbor <IP>`    -->
+    <!--     (+ neighbor-eligible).                             -->
+    <!--   - Vlink view: instance override, hello,            -->
+    <!--     retransmit, wait, dead-count, dead,               -->
+    <!--     authentication, `password <TEXT>` (password view  -->
+    <!--     yang sama, scope=vlink).                           -->
+    <!--   - Intent di /etc/titian/ospf.conf; generate via     -->
+    <!--     titian-ospf.sh (menulis section bird.d/ospf.conf  -->
+    <!--     lalu titian-bird.sh generate ospf). Section        -->
+    <!--     ditulis ulang UTUH tiap apply.                     -->
+    <!--   - Service BIRD naik/berubah saat `commit`           -->
+    <!--     (apply_ospf di titian-commit.sh, sesudah           -->
+    <!--     apply_rip, sebelum apply_bgp).                     -->
+    <!--   - Sintaks BIRD 2.16.1 (docs §6.11): protocol ospf   -->
+    <!--     [v2|v3] { rfc1583compat; rfc5838; instance id;    -->
+    <!--     stub router; tick; ecmp [limit]; merge external;  -->
+    <!--     graceful restart [time]; ipv4|ipv6 { import;      -->
+    <!--     export; }; area <id> { stub; nssa; summary;      -->
+    <!--     default nssa; default cost[2]; translator         -->
+    <!--     [stability]; networks; external; stubnet;         -->
+    <!--     interface "<pat>" [instance <num>] { ... };       -->
+    <!--     virtual link <id> [instance <num>] { ... }; }; }. -->
+    <!--     Default BIRD (lihat titian-ospf.sh): cost 10;    -->
+    <!--     hello 10; poll 20; retransmit 5; transmit delay   -->
+    <!--     1; priority 1; wait 4x hello; check link yes;    -->
+    <!--     bfd no; ecmp weight 1; graceful restart aware;   -->
+    <!--     graceful restart time 120; default cost 1000;    -->
+    <!--     translator stability 40; ospf_metric2 10000;     -->
+    <!--     ospf_tag 0.                                        -->
+    <!--   - TIDAK diimplementasi (lihat titian-ospf.sh):      -->
+    <!--     O34 `secondary` (hanya ada di blok template docs, -->
+    <!--     tanpa deskripsi — PERLU VERIFIKASI via `bird -p`  -->
+    <!--     / source); O48 `tx priority` (Linux-specific);   -->
+    <!--     O67 `ospf_router_id` (read-only, tidak bisa       -->
+    <!--     di-set); `dead` / `dead count` / `default cost2` -->
+    <!--     / default per-stubnet / default vlink TANPA angka -->
+    <!--     default palsu (opsional, docs tidak menyebut      -->
+    <!--     angka); bila `dead` dan `dead count` dipakai      -->
+    <!--     bersama, `dead` yang menang.                      -->
+    <!--   - INI OSPF BIRD — jangan campur dengan OSPF FRR     -->
+    <!--     (tree/conf-frr.xml, `router ospf`, daemon lain).  -->
+    <!--   - `stub-router` (level protokol, RFC 6987) BEDA     -->
+    <!--     dari area `stub` dan interface `stub` — tiga       -->
+    <!--     perintah di tiga view berbeda.                     -->
+
+<VIEW name="configure-bird-ospf-view"
+    prompt="${SYSTEM_NAME}(config-bird-${ospf_inst})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="import"
+        help="Channel import (all|none|filter NAME)"/>
+
+    <COMMAND name="export"
+        help="Channel export (all|none|filter NAME)"/>
+
+    <COMMAND name="rfc1583compat"
+        help="Kompatibilitas kalkulasi routing table RFC 1583 (default BIRD no)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" rfc1583compat on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rfc1583compat"
+        help="Matikan rfc1583compat (default BIRD)">
+        <CONFIG operation="unset" pattern="^rfc1583compat"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" rfc1583compat off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rfc5838"
+        help="Ekstensi OSPFv3 address-family RFC 5838 (default BIRD yes)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" rfc5838 on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rfc5838"
+        help="Matikan rfc5838 (membatasi range instance id)">
+        <CONFIG operation="unset" pattern="^rfc5838"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" rfc5838 off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="instance-id"
+        help="ID instance untuk semua interface (default BIRD 0)">
+        <PARAM name="Value"
+            help="Instance id (0..255)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh instance-id-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no instance-id"
+        help="Kembali ke instance-id default BIRD (0)">
+        <CONFIG operation="unset" pattern="^instance-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh instance-id-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="stub-router"
+        help="Router stub RFC 6987: ikut topologi tapi tidak transit traffic (default BIRD no) — BEDA dari area stub">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" stub-router on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stub-router"
+        help="Router normal, bisa transit traffic (default BIRD)">
+        <CONFIG operation="unset" pattern="^stub-router"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" stub-router off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tick"
+        help="Interval kalkulasi routing table &amp; cleanup database (default BIRD 1 detik)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 1)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh tick-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tick"
+        help="Kembali ke tick default BIRD (1)">
+        <CONFIG operation="unset" pattern="^tick"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh tick-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ecmp"
+        help="Izinkan route ECMP (default BIRD: enabled bila Kernel mendukung)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh ecmp-set "${ospf_inst}" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ecmp"
+        help="Matikan ECMP">
+        <CONFIG operation="unset" pattern="^ecmp"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh ecmp-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ecmp-limit"
+        help="Batas maks nexthop ECMP (butuh ecmp on)">
+        <PARAM name="Value"
+            help="Limit (1..256, default BIRD 16)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh ecmp-limit-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ecmp-limit"
+        help="Kembali ke ecmp-limit default BIRD (16)">
+        <CONFIG operation="unset" pattern="^ecmp-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh ecmp-limit-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="merge-external"
+        help="Gabung external route dari router/LSA berbeda untuk destinasi sama (default BIRD no)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" merge-external on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no merge-external"
+        help="Matikan merge-external (default BIRD)">
+        <CONFIG operation="unset" pattern="^merge-external"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" merge-external off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="graceful-restart"
+        help="Graceful restart RFC 3623 (default BIRD aware = helper-only)">
+        <PARAM name="Value"
+            help="off|aware|on (on = restarting+helper, pakai Grace-LSA)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh gr-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no graceful-restart"
+        help="Kembali ke graceful-restart default BIRD (aware)">
+        <CONFIG operation="unset" pattern="^graceful-restart"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh gr-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="graceful-restart-time"
+        help="Waktu restart yang diumumkan di Grace-LSA (default BIRD 120 detik)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 120)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh gr-time-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no graceful-restart-time"
+        help="Kembali ke graceful-restart-time default BIRD (120)">
+        <CONFIG operation="unset" pattern="^graceful-restart-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh gr-time-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel"
+        help="Channel: ipv4 (v2; v3 via RFC 5838) atau ipv6 (v3 saja)">
+        <PARAM name="Value"
+            help="ipv4|ipv6 (default: ospf=ipv4, ospf6=ipv6)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh channel-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel"
+        help="Kembali ke channel default instance ini">
+        <CONFIG operation="unset" pattern="^channel"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh channel-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="preference"
+        help="Preference route channel (best-route selection antar-protokol)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh preference-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no preference"
+        help="Kembali ke preference default BIRD (tergantung protokol)">
+        <CONFIG operation="unset" pattern="^preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh preference-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-keep-filtered"
+        help="Simpan juga route yang ditolak import filter (hidden, bisa dilihat show route filtered)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh import-keep-filtered-set "${ospf_inst}" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-keep-filtered"
+        help="">
+        <CONFIG operation="unset" pattern="^import-keep-filtered"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh import-keep-filtered-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import-limit"
+        help="Batas jumlah route import channel (Bab 3.5-8; default BIRD tanpa limit)">
+        <PARAM name="Value"
+            help="Jumlah route maks (0..4294967295) atau off"
+            ptype="STRING"/>
+        <PARAM name="Action"
+            help="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh limit-set "${ospf_inst}" import "${Value}" "${Action}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-limit"
+        help="Hapus import-limit (dan action-nya)">
+        <CONFIG operation="unset" pattern="^import-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh limit-del "${ospf_inst}" import
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="receive-limit"
+        help="Batas jumlah route receive channel (Bab 3.5-9; default BIRD tanpa limit)">
+        <PARAM name="Value"
+            help="Jumlah route maks (0..4294967295) atau off"
+            ptype="STRING"/>
+        <PARAM name="Action"
+            help="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh limit-set "${ospf_inst}" receive "${Value}" "${Action}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no receive-limit"
+        help="Hapus receive-limit (dan action-nya)">
+        <CONFIG operation="unset" pattern="^receive-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh limit-del "${ospf_inst}" receive
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-limit"
+        help="Batas jumlah route export channel (Bab 3.5-10; default BIRD tanpa limit)">
+        <PARAM name="Value"
+            help="Jumlah route maks (0..4294967295) atau off"
+            ptype="STRING"/>
+        <PARAM name="Action"
+            help="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh limit-set "${ospf_inst}" export "${Value}" "${Action}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-limit"
+        help="Hapus export-limit (dan action-nya)">
+        <CONFIG operation="unset" pattern="^export-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh limit-del "${ospf_inst}" export
+        </ACTION>
+    </COMMAND>
+
+
+    <COMMAND name="debug"
+        help="Debug protokol (all|off|states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="Kelas debug (all|off|daftar koma)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh debug-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protokol (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh debug-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="Dump MRT protokol (all|off|states|messages)">
+        <PARAM name="Value"
+            help="Kelas mrtdump (all|off|states|messages)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh mrtdump-set "${ospf_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protokol (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh mrtdump-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import all"
+        help="Channel: import semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import none"
+        help="Channel: jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import filter"
+        help="Channel: import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export all"
+        help="Channel: export semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export none"
+        help="Channel: jangan export route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Channel: export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-ospf-metric1"
+        help="ospf_metric1 route yang diekspor ke OSPF (hanya bila export all)">
+        <PARAM name="Value"
+            help="Metric type-1 (1..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh export-attr-set "${ospf_inst}" metric1 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-ospf-metric1"
+        help="Hapus export-ospf-metric1">
+        <CONFIG operation="unset" pattern="^export-ospf-metric1"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh export-attr-del "${ospf_inst}" metric1
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-ospf-metric2"
+        help="ospf_metric2 route yang diekspor ke OSPF (hanya bila export all; default BIRD 10000)">
+        <PARAM name="Value"
+            help="Metric type-2 (1..65535, default 10000)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh export-attr-set "${ospf_inst}" metric2 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-ospf-metric2"
+        help="Kembali ke ospf_metric2 default BIRD (10000)">
+        <CONFIG operation="unset" pattern="^export-ospf-metric2"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh export-attr-del "${ospf_inst}" metric2
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-ospf-tag"
+        help="ospf_tag route yang diekspor ke OSPF (hanya bila export all; default BIRD 0)">
+        <PARAM name="Value"
+            help="Tag (0..4294967295, default 0)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh export-attr-set "${ospf_inst}" tag "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-ospf-tag"
+        help="Kembali ke ospf_tag default BIRD (0)">
+        <CONFIG operation="unset" pattern="^export-ospf-tag"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh export-attr-del "${ospf_inst}" tag
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="area"
+        help="Opsi OSPF per area (masuk ke area view; backbone = 0)"
+        view="configure-bird-ospf-area-view"
+        viewid="ospf_area_ctx=${ospf_inst}:${ID}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="ID"
+            help="ID area: integer atau alamat IPv4 (mis. 0, 1, 0.0.0.0)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1562" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-add "${ospf_inst}" "${ID}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no area"
+        help="Hapus semua opsi OSPF area ini">
+        <PARAM name="ID"
+            help="ID area yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^area ${ID}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-del "${ospf_inst}" "${ID}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-ospf-area-view"
+    prompt="${SYSTEM_NAME}(config-bird-ospf-area-${ospf_area_ctx})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-ospf-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to OSPF mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="stub"
+        help="Stub area: external route tidak di-flood ke area ini (tidak boleh bersama nssa)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-flag-set "${ospf_area_ctx}" stub
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stub"
+        help="Area normal (bukan stub)">
+        <CONFIG operation="unset" pattern="^stub"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-flag-del "${ospf_area_ctx}" stub
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="nssa"
+        help="NSSA: seperti stub tapi boleh import external route terbatas sebagai NSSA-LSA (tidak boleh bersama stub)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-flag-set "${ospf_area_ctx}" nssa
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no nssa"
+        help="Area bukan NSSA">
+        <CONFIG operation="unset" pattern="^nssa"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-flag-del "${ospf_area_ctx}" nssa
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="summary"
+        help="Di stub/NSSA: yes = summary LSA diteruskan normal; no = hanya default summary route (totally stubby; default BIRD no)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" summary on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no summary"
+        help="Hanya default summary route (totally stubby; default BIRD)">
+        <CONFIG operation="unset" pattern="^summary"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" summary off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="default-nssa"
+        help="Di NSSA (bila summary yes): originate default route sebagai NSSA-LSA (default BIRD no)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" default-nssa on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no default-nssa"
+        help="Matikan default-nssa (default BIRD)">
+        <CONFIG operation="unset" pattern="^default-nssa"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" default-nssa off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="default-cost"
+        help="Cost default route yang diteruskan ke stub/NSSA (default BIRD 1000)">
+        <PARAM name="Value"
+            help="Cost (1..65535, default 1000)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" default-cost "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no default-cost"
+        help="Kembali ke default-cost default BIRD (1000)">
+        <CONFIG operation="unset" pattern="^default-cost"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-unset "${ospf_area_ctx}" default-cost
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="default-cost2"
+        help="Cost default route saat di-originate sebagai NSSA-LSA dalam metric type 2 (tanpa ini, pakai metric type 1 / default-cost — TIDAK ADA default angka)">
+        <PARAM name="Value"
+            help="Cost type-2 (1..65535; tidak di-set = pakai default-cost)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" default-cost2 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no default-cost2"
+        help="Hapus default-cost2 (kembali pakai metric type 1)">
+        <CONFIG operation="unset" pattern="^default-cost2"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-unset "${ospf_area_ctx}" default-cost2
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="translator"
+        help="NSSA translator: yes = ABR ini mentranslasi SEMUA NSSA-LSA tanpa syarat (default BIRD no = election otomatis)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" translator on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no translator"
+        help="Translator dipilih otomatis via election (default BIRD)">
+        <CONFIG operation="unset" pattern="^translator"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" translator off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="translator-stability"
+        help="Interval translator lama tetap mentranslasi setelah translator baru terpilih (default BIRD 40 detik)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 40)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-set "${ospf_area_ctx}" translator-stability "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no translator-stability"
+        help="Kembali ke translator-stability default BIRD (40)">
+        <CONFIG operation="unset" pattern="^translator-stability"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh area-unset "${ospf_area_ctx}" translator-stability
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="network"
+        help="Range IP area untuk origination summary LSA (inter-area)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 172.16.1.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh network-add "${ospf_area_ctx}" "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="network-hidden"
+        help="Range IP area yang TIDAK dipropagasikan ke area lain (ulangi `network &lt;prefix&gt;` untuk menampilkan lagi)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh network-add "${ospf_area_ctx}" "${Prefix}" hidden
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no network"
+        help="Hapus range IP area ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR yang dihapus"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^network ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh network-del "${ospf_area_ctx}" "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="external"
+        help="Range IP external area untuk NSSA (dipakai translasi NSSA-LSA)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 203.0.113.0/24)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh external-add "${ospf_area_ctx}" "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="external-hidden"
+        help="Range IP external NSSA yang TIDAK ditranslasi jadi external LSA">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh external-add "${ospf_area_ctx}" "${Prefix}" hidden
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="external-tag"
+        help="Beri route tag pada range IP external NSSA (tag lama dipertahankan bila tidak disebut)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="Tag"
+            help="Route tag (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh external-add "${ospf_area_ctx}" "${Prefix}" "" tag "${Tag}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no external"
+        help="Hapus range IP external NSSA ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR yang dihapus"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^external ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh external-del "${ospf_area_ctx}" "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="stubnet"
+        help="Stub network: prefix yang diiklankan sebagai stub link (tanpa adjacency)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-add "${ospf_area_ctx}" "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stubnet"
+        help="Hapus stub network ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR yang dihapus"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^stubnet ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-del "${ospf_area_ctx}" "${Prefix}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="stubnet-hidden"
+        help="Stub network tersembunyi: tidak dipropagasikan (default per stubnet TIDAK dinyatakan docs)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR stubnet"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-set "${ospf_area_ctx}" "${Prefix}" hidden on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stubnet-hidden"
+        help="Stub network dipropagasikan lagi">
+        <PARAM name="Prefix"
+            help="Prefix CIDR stubnet"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^stubnet-hidden ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-set "${ospf_area_ctx}" "${Prefix}" hidden off
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="stubnet-summary"
+        help="Stub network summary: suppress juga stub network default yang merupakan subnet dari stubnet ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR stubnet"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-set "${ospf_area_ctx}" "${Prefix}" summary on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stubnet-summary"
+        help="Matikan stubnet summary">
+        <PARAM name="Prefix"
+            help="Prefix CIDR stubnet"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^stubnet-summary ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-set "${ospf_area_ctx}" "${Prefix}" summary off
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="stubnet-cost"
+        help="Cost stub network ini (default per stubnet TIDAK dinyatakan docs)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR stubnet"
+            ptype="IP_ADDR_MASK"/>
+        <PARAM name="Value"
+            help="Cost (1..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-set "${ospf_area_ctx}" "${Prefix}" cost "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stubnet-cost"
+        help="Hapus cost stub network ini">
+        <PARAM name="Prefix"
+            help="Prefix CIDR stubnet"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^stubnet-cost ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh stubnet-unset "${ospf_area_ctx}" "${Prefix}" cost
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interface"
+        help="Opsi OSPF per interface (masuk ke interface view)"
+        view="configure-bird-ospf-interface-view"
+        viewid="ospf_if_ctx=${ospf_area_ctx}:${Pattern}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD (mis. ge*, bridge0)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1563" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-add "${ospf_area_ctx}" "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Hapus semua opsi OSPF interface ini">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-del "${ospf_area_ctx}" "${Pattern}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="virtual-link"
+        help="Virtual link ke ABR ujung jauh lewat area transit ini (masuk ke vlink view)"
+        view="configure-bird-ospf-vlink-view"
+        viewid="ospf_vl_ctx=${ospf_area_ctx}:${RouterID}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="RouterID"
+            help="Router-id ABR ujung jauh (IPv4)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1564" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-add "${ospf_area_ctx}" "${RouterID}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no virtual-link"
+        help="Hapus virtual link ini">
+        <PARAM name="RouterID"
+            help="Router-id ABR ujung jauh"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^virtual-link ${RouterID}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-del "${ospf_area_ctx}" "${RouterID}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-ospf-interface-view"
+    prompt="${SYSTEM_NAME}(config-bird-ospf-if-${ospf_if_ctx})# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-ospf-area-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to area mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="instance"
+        help="Override instance-id protokol untuk interface ini">
+        <PARAM name="Value"
+            help="Instance id (0..255)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" instance "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no instance"
+        help="Hapus instance override (pakai instance-id protokol)">
+        <CONFIG operation="unset" pattern="^instance"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" instance
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="cost"
+        help="Cost interface (metric OSPF untuk link ini; default BIRD 10)">
+        <PARAM name="Value"
+            help="Cost (1..65535, default 10)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" cost "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no cost"
+        help="Kembali ke cost default BIRD (10)">
+        <CONFIG operation="unset" pattern="^cost"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" cost
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="stub"
+        help="Interface stub: tidak membentuk adjacency, tidak listen paket, tidak kirim Hello (default BIRD no) — BEDA dari area stub">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" stub on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no stub"
+        help="Interface normal (default BIRD)">
+        <CONFIG operation="unset" pattern="^stub"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" stub off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="hello"
+        help="Interval Hello (default BIRD 10 detik; semua router di network yang sama wajib sama)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 10)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" hello "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no hello"
+        help="Kembali ke hello default BIRD (10)">
+        <CONFIG operation="unset" pattern="^hello"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" hello
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="poll"
+        help="Interval poll Hello di NBMA sebelum adjacency (default BIRD 20 detik)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 20)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" poll "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no poll"
+        help="Kembali ke poll default BIRD (20)">
+        <CONFIG operation="unset" pattern="^poll"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" poll
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="retransmit"
+        help="Interval retransmit LSA yang belum di-acknowledge (default BIRD 5 detik)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 5)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" retransmit "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no retransmit"
+        help="Kembali ke retransmit default BIRD (5)">
+        <CONFIG operation="unset" pattern="^retransmit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" retransmit
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="transmit-delay"
+        help="Estimasi transmission delay update link-state, ditambahkan ke LSA age (default BIRD 1 detik)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 1)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" transmit-delay "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no transmit-delay"
+        help="Kembali ke transmit-delay default BIRD (1)">
+        <CONFIG operation="unset" pattern="^transmit-delay"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" transmit-delay
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="priority"
+        help="Prioritas DR/BDR election (default BIRD 1; 0 = tidak eligible jadi DR)">
+        <PARAM name="Value"
+            help="Prioritas (0..255, default 1)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" priority "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no priority"
+        help="Kembali ke priority default BIRD (1)">
+        <CONFIG operation="unset" pattern="^priority"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" priority
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="wait"
+        help="Waktu tunggu sebelum DR election (default BIRD 4x hello)">
+        <PARAM name="Value"
+            help="Detik (1..86400, default 4x hello)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" wait "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no wait"
+        help="Kembali ke wait default BIRD (4x hello)">
+        <CONFIG operation="unset" pattern="^wait"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" wait
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dead-count"
+        help="Dead interval sebagai kelipatan hello (tetangga down bila tidak ada pesan selama dead-count x hello; TIDAK ADA angka default di docs — jangan anggap 4)">
+        <PARAM name="Value"
+            help="Kelipatan hello (1..65535; tanpa default)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" dead-count "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dead-count"
+        help="Hapus dead-count (pakai dead bila di-set, bila tidak default BIRD)">
+        <CONFIG operation="unset" pattern="^dead-count"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" dead-count
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dead"
+        help="Dead interval absolut (tetangga mati bila tidak ada Hello selama ini; bila dipakai bersama dead-count, dead yang menang; TIDAK ADA angka default di docs)">
+        <PARAM name="Value"
+            help="Detik (1..65535; tanpa default)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" dead "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dead"
+        help="Hapus dead (pakai dead-count bila di-set)">
+        <CONFIG operation="unset" pattern="^dead"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" dead
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rx-buffer"
+        help="Ukuran buffer terima paket OSPF (default BIRD resize dinamis; large = 65535)">
+        <PARAM name="Value"
+            help="normal|large|byte (1..65535)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" rx-buffer "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rx-buffer"
+        help="Kembali ke rx-buffer default BIRD (resize dinamis)">
+        <CONFIG operation="unset" pattern="^rx-buffer"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" rx-buffer
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tx-length"
+        help="Panjang maksimum paket OSPF yang dibuat (default BIRD MTU interface)">
+        <PARAM name="Value"
+            help="Byte (1..65535, default MTU)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" tx-length "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tx-length"
+        help="Kembali ke tx-length default BIRD (MTU)">
+        <CONFIG operation="unset" pattern="^tx-length"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" tx-length
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="type"
+        help="Tipe jaringan OSPF (default BIRD auto-detect)">
+        <PARAM name="Value"
+            help="broadcast|bcast|pointopoint|ptp|nonbroadcast|nbma|pointomultipoint|ptmp"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" type "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no type"
+        help="Kembali ke type auto-detect BIRD">
+        <CONFIG operation="unset" pattern="^type"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" type
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="link-lsa-suppression"
+        help="Suppress Link-LSA OSPFv3 (PtP/unnumbered hemat flooding; default BIRD no; diabaikan di interface selain PtP/PtMP)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" link-lsa-suppression on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no link-lsa-suppression"
+        help="Matikan link-lsa-suppression (default BIRD)">
+        <CONFIG operation="unset" pattern="^link-lsa-suppression"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" link-lsa-suppression off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="strict-nonbroadcast"
+        help="Mode NBMA ketat: jangan kirim Hello ke neighbor yang tidak didefinisikan (default BIRD no)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" strict-nonbroadcast on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no strict-nonbroadcast"
+        help="Matikan strict-nonbroadcast (default BIRD)">
+        <CONFIG operation="unset" pattern="^strict-nonbroadcast"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" strict-nonbroadcast off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="real-broadcast"
+        help="Pakai broadcast IP kuno bukan multicast (default BIRD no; non-standar, kemungkinan tidak interoperable)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" real-broadcast on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no real-broadcast"
+        help="Matikan real-broadcast (default BIRD)">
+        <CONFIG operation="unset" pattern="^real-broadcast"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" real-broadcast off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ptp-netmask"
+        help="Di link PtP, iklankan netmask asli di paket Hello (default BIRD no unnumbered / yes beralamat)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" ptp-netmask on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ptp-netmask"
+        help="Matikan ptp-netmask">
+        <CONFIG operation="unset" pattern="^ptp-netmask"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" ptp-netmask off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ptp-address"
+        help="Di link PtP, pakai alamat IP di field data link description record router-LSA (default BIRD no unnumbered+GR / yes lainnya)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" ptp-address on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ptp-address"
+        help="Matikan ptp-address">
+        <CONFIG operation="unset" pattern="^ptp-address"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" ptp-address off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="check-link"
+        help="Perhatikan hardware link state OS (default BIRD yes)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" check-link on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no check-link"
+        help="Abaikan hardware link state">
+        <CONFIG operation="unset" pattern="^check-link"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" check-link off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bfd"
+        help="Minta sesi BFD ke tetangga OSPF (default BIRD no; perlu protocol bfd; adjacency putus bila sesi BFD down)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" bfd on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bfd"
+        help="Matikan BFD interface ini (default BIRD)">
+        <CONFIG operation="unset" pattern="^bfd"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" bfd off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ecmp-weight"
+        help="Bobot relatif nexthop via interface ini untuk route ECMP (default BIRD 1, range 1..256)">
+        <PARAM name="Value"
+            help="Weight (1..256, default 1)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" ecmp-weight "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ecmp-weight"
+        help="Kembali ke ecmp-weight default BIRD (1)">
+        <CONFIG operation="unset" pattern="^ecmp-weight"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" ecmp-weight
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ttl-security"
+        help="GTSM: kirim TTL 255 &amp; drop paket TTL &lt;255 (default BIRD no; mengganggu virtual link)">
+        <PARAM name="Value"
+            help="on|off|tx-only"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" ttl-security "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ttl-security"
+        help="Kembali ke ttl-security default BIRD (no)">
+        <CONFIG operation="unset" pattern="^ttl-security"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" ttl-security
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tx-class"
+        help="Type-of-Service paket OSPF keluar">
+        <PARAM name="Value"
+            help="ToS (0..255)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" tx-class "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tx-class"
+        help="Hapus tx-class interface ini">
+        <CONFIG operation="unset" pattern="^tx-class"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" tx-class
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tx-dscp"
+        help="DSCP paket OSPF keluar">
+        <PARAM name="Value"
+            help="DSCP (0..63)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" tx-dscp "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tx-dscp"
+        help="Hapus tx-dscp interface ini">
+        <CONFIG operation="unset" pattern="^tx-dscp"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" tx-dscp
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="authentication"
+        help="Metode autentikasi paket OSPF (default none; simple TIDAK tersedia di OSPFv3)">
+        <PARAM name="Value"
+            help="none|simple|cryptographic"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-set "${ospf_if_ctx}" authentication "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no authentication"
+        help="Kembali ke authentication none (default BIRD)">
+        <CONFIG operation="unset" pattern="^authentication"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh interface-unset "${ospf_if_ctx}" authentication
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="password"
+        help="Kunci autentikasi OSPF (masuk ke password view: id + rotasi + algorithm)"
+        view="configure-bird-ospf-password-view"
+        viewid="ospf_pw_ctx=${ospf_if_ctx}:interface:${Text}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Text"
+            help="Password (tanpa spasi, tanpa &quot; dan tanpa backslash)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1565" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-add "${ospf_if_ctx}:interface:${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no password"
+        help="Hapus kunci ini (+ semua sub-opsinya)">
+        <PARAM name="Text"
+            help="Password yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^password ${Text}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-del "${ospf_if_ctx}:interface:${Text}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="neighbor"
+        help="Tetangga manual NBMA: Hello dikirim ke neighbor ini (OSPFv3 pakai alamat link-local)">
+        <PARAM name="IP"
+            help="Alamat IP tetangga"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh neighbor-add "${ospf_if_ctx}" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="neighbor-eligible"
+        help="Tetangga manual NBMA yang boleh jadi DR/BDR">
+        <PARAM name="IP"
+            help="Alamat IP tetangga"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh neighbor-add "${ospf_if_ctx}" "${IP}" eligible
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no neighbor"
+        help="Hapus tetangga manual ini">
+        <PARAM name="IP"
+            help="Alamat IP tetangga yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^neighbor ${IP}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh neighbor-del "${ospf_if_ctx}" "${IP}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-ospf-vlink-view"
+    prompt="${SYSTEM_NAME}(config-bird-ospf-vl-${ospf_vl_ctx})# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-ospf-area-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to area mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="instance"
+        help="Override instance-id protokol untuk virtual link ini">
+        <PARAM name="Value"
+            help="Instance id (0..255)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" instance "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no instance"
+        help="Hapus instance override (pakai instance-id protokol)">
+        <CONFIG operation="unset" pattern="^instance"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" instance
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="hello"
+        help="Interval Hello virtual link (vlink berperilaku sebagai interface PtP — default interface hello 10; default vlink tidak dinyatakan terpisah di docs)">
+        <PARAM name="Value"
+            help="Detik (1..86400)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" hello "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no hello"
+        help="Hapus hello virtual link ini">
+        <CONFIG operation="unset" pattern="^hello"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" hello
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="retransmit"
+        help="Interval retransmit LSA virtual link (default interface retransmit 5; default vlink tidak dinyatakan terpisah di docs)">
+        <PARAM name="Value"
+            help="Detik (1..86400)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" retransmit "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no retransmit"
+        help="Hapus retransmit virtual link ini">
+        <CONFIG operation="unset" pattern="^retransmit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" retransmit
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="wait"
+        help="Wait timer virtual link (default interface wait 4x hello; default vlink tidak dinyatakan terpisah di docs)">
+        <PARAM name="Value"
+            help="Detik (1..86400)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" wait "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no wait"
+        help="Hapus wait virtual link ini">
+        <CONFIG operation="unset" pattern="^wait"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" wait
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dead-count"
+        help="Dead interval virtual link sebagai kelipatan hello (TIDAK ADA angka default di docs)">
+        <PARAM name="Value"
+            help="Kelipatan hello (1..65535; tanpa default)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" dead-count "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dead-count"
+        help="Hapus dead-count virtual link ini">
+        <CONFIG operation="unset" pattern="^dead-count"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" dead-count
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dead"
+        help="Dead interval absolut virtual link (bila dipakai bersama dead-count, dead yang menang; TIDAK ADA angka default di docs)">
+        <PARAM name="Value"
+            help="Detik (1..65535; tanpa default)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" dead "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no dead"
+        help="Hapus dead virtual link ini">
+        <CONFIG operation="unset" pattern="^dead"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" dead
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="authentication"
+        help="Metode autentikasi virtual link (default none; simple TIDAK tersedia di OSPFv3)">
+        <PARAM name="Value"
+            help="none|simple|cryptographic"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-set "${ospf_vl_ctx}" authentication "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no authentication"
+        help="Kembali ke authentication none (default BIRD)">
+        <CONFIG operation="unset" pattern="^authentication"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh vlink-unset "${ospf_vl_ctx}" authentication
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="password"
+        help="Kunci autentikasi virtual link (masuk ke password view: id + rotasi + algorithm)"
+        view="configure-bird-ospf-password-view"
+        viewid="ospf_pw_ctx=${ospf_vl_ctx}:vlink:${Text}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Text"
+            help="Password (tanpa spasi, tanpa &quot; dan tanpa backslash)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1566" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-add "${ospf_vl_ctx}:vlink:${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no password"
+        help="Hapus kunci ini (+ semua sub-opsinya)">
+        <PARAM name="Text"
+            help="Password yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^password ${Text}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-del "${ospf_vl_ctx}:vlink:${Text}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-ospf-password-view"
+    prompt="${SYSTEM_NAME}(config-bird-ospf-pw)# "
+    depth="5">
+    <NAMESPACE ref="configure-bird-ospf-interface-view"
+        help="false"
+        completion="true"/>
+    <NAMESPACE ref="configure-bird-ospf-vlink-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to interface/vlink mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="id"
+        help="ID kunci (untuk rotasi)">
+        <PARAM name="Value"
+            help="ID (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" id "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no id"
+        help="Hapus id kunci ini">
+        <CONFIG operation="unset" pattern="^id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="generate-from"
+        help="Kunci mulai di-generate pada tanggal ini">
+        <PARAM name="Value"
+            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" generate-from "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no generate-from"
+        help="Hapus generate-from kunci ini">
+        <CONFIG operation="unset" pattern="^generate-from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" generate-from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="generate-to"
+        help="Kunci berhenti di-generate pada tanggal ini">
+        <PARAM name="Value"
+            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" generate-to "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no generate-to"
+        help="Hapus generate-to kunci ini">
+        <CONFIG operation="unset" pattern="^generate-to"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" generate-to
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept-from"
+        help="Kunci mulai diterima pada tanggal ini">
+        <PARAM name="Value"
+            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" accept-from "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no accept-from"
+        help="Hapus accept-from kunci ini">
+        <CONFIG operation="unset" pattern="^accept-from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" accept-from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept-to"
+        help="Kunci berhenti diterima pada tanggal ini">
+        <PARAM name="Value"
+            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" accept-to "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no accept-to"
+        help="Hapus accept-to kunci ini">
+        <CONFIG operation="unset" pattern="^accept-to"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" accept-to
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Kunci berlaku mulai tanggal ini">
+        <PARAM name="Value"
+            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" from "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Hapus from kunci ini">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="to"
+        help="Kunci berlaku sampai tanggal ini">
+        <PARAM name="Value"
+            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" to "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no to"
+        help="Hapus to kunci ini">
+        <CONFIG operation="unset" pattern="^to"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" to
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="algorithm"
+        help="Algoritma kunci ini (default OSPFv2 keyed-MD5, OSPFv3 HMAC-SHA-256)">
+        <PARAM name="Value"
+            help="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-set "${ospf_pw_ctx}" algorithm "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no algorithm"
+        help="Kembali ke algorithm default (v2 keyed-MD5, v3 HMAC-SHA-256)">
+        <CONFIG operation="unset" pattern="^algorithm"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh password-unset "${ospf_pw_ctx}" algorithm
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show ospf"
+        help="Status OSPF BIRD (intent + section + protokol BIRD + neighbors)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh show
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show ospf neighbor"
+        help="Tetangga OSPF BIRD (birdc show ospf neighbors)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh show-neighbors
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- Direct (BIRD `protocol direct`) — device route untuk  -->
+    <!-- jaringan directly-connected.                           -->
+    <!--   - Masuk dari `router bird` -> `direct` (view         -->
+    <!--     configure-bird-direct-view): interface <pola>,     -->
+    <!--     check-link, channel ipv4|ipv6|ipv6-sadr.           -->
+    <!--   - Intent di /etc/titian/direct.conf; generate via    -->
+    <!--     titian-direct.sh (menulis section bird.d/direct.conf -->
+    <!--     lalu titian-bird.sh generate direct). Section      -->
+    <!--     ditulis ulang UTUH tiap apply.                      -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_direct di titian-commit.sh).                 -->
+    <!--   - `redistribute direct enable [iface]` (titian-      -->
+    <!--     redist.sh) mendaftarkan interface-nya ke intent    -->
+    <!--     ini; `redistribute direct disable` mengosongkan    -->
+    <!--     intent (clear).                                    -->
+    <!--   - Sintaks BIRD 2.16.1 (docs §6.7): protocol direct { -->
+    <!--     ipv4; ipv6; [ipv6 sadr;] interface "p1", "p2";     -->
+    <!--     check link; }. Default BIRD: check link no; tanpa -->
+    <!--     `interface` = semua interface. Default klish bila -->
+    <!--     belum ada channel: `ipv4;` saja (perilaku lama     -->
+    <!--     redist direct enable).                             -->
+
+<VIEW name="configure-bird-direct-view"
+    prompt="${SYSTEM_NAME}(config-bird-direct)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="interface"
+        help="Batasi subset interface/alamat yang dibuatkan device route (pola, boleh -pengecualian)">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD (mis. ge*, *, -arc*)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh interface-add "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Hapus pola interface ini dari direct">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh interface-del "${Pattern}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="check-link"
+        help="Route connected hanya dibuat saat link up">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh check-link-set on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no check-link"
+        help="Abaikan link state (default BIRD)">
+        <CONFIG operation="unset" pattern="^check-link"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh check-link-set off
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="debug"
+        help="Debug protocol direct (all|off|states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="Kelas debug (all|off|daftar koma)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh debug-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protocol direct (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh debug-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump protocol direct (all|off|states,messages)">
+        <PARAM name="Value"
+            help="Kelas mrtdump (all|off|states,messages)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh mrtdump-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protocol direct (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh mrtdump-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel"
+        help="Channel direct (ipv4 / ipv6 / ipv6-sadr)"/>
+
+    <COMMAND name="channel ipv4"
+        help="Buatkan device route IPv4">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-add ipv4
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel"
+        help="Negate a channel command"/>
+    <COMMAND name="no channel ipv4"
+        help="Jangan buatkan device route IPv4">
+        <CONFIG operation="unset" pattern="^channel ipv4"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-del ipv4
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6"
+        help="Buatkan device route IPv6">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-add ipv6
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6"
+        help="Jangan buatkan device route IPv6">
+        <CONFIG operation="unset" pattern="^channel ipv6"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-del ipv6
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6-sadr"
+        help="Buatkan device route IPv6 SADR (pengganti IPv6 reguler, untuk Babel)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-add ipv6-sadr
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6-sadr"
+        help="Jangan buatkan device route IPv6 SADR">
+        <CONFIG operation="unset" pattern="^channel ipv6-sadr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-del ipv6-sadr
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show direct"
+        help="Status direct BIRD (intent + section + protokol BIRD)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

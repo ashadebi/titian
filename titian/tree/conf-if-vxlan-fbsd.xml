@@ -289,6 +289,20 @@
             ${RT_SBIN}/titian-vxlan.sh unset "${iface}" dstport
         </ACTION>
     </COMMAND>
+    <COMMAND name="learn"
+        help="Aktifkan VXLAN learning (FDB dipelajari dari paket masuk). Hanya untuk multicast multi-VTEP; unicast WAJIB off — learn + underlay NAT memetakan peer ke gateway (loss 95%, 16 Nov 2026)">
+        <CONFIG pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh set "${iface}" learn on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no learn"
+        help="Matikan VXLAN learning (default; unicast aman)">
+        <CONFIG operation="unset" pattern="^learn"/>
+        <ACTION>
+            ${RT_SBIN}/titian-vxlan.sh unset "${iface}" learn
+        </ACTION>
+    </COMMAND>
 </VIEW>
 
 </CLISH_MODULE>

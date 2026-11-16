@@ -1,0 +1,492 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- RPKI BIRD (`protocol rpki`, Bab 6.16 docs, batch B9). -->
+    <!--   - Masuk dari `router bird` -> `rpki <NAME>` — SATU   -->
+    <!--     view dipakai semua instance (viewid rpki_inst).    -->
+    <!--   - Channel roa4/roa6/aspa: hanya `table` (tabel ROA/   -->
+    <!--     ASPA didefinisikan di bgp -> roa-table-add /        -->
+    <!--     aspa-table-add (B5) atau global -> table-add        -->
+    <!--     roa4/roa6).                                         -->
+    <!--   - remote MANDATORY (IP atau FQDN, satu cache per      -->
+    <!--     instance); port di remote (remote-port) atau        -->
+    <!--     terpisah (port, default 323 TCP / 22 SSH).          -->
+    <!--   - refresh &lt; 86400 (default 3600); retry maks 7200    -->
+    <!--     (default 600); expire 600..172800 (default 7200);   -->
+    <!--     `keep` = jangan biarkan cache meng-update nilai.    -->
+    <!--   - transport tcp (default, auth none|md5 + password)   -->
+    <!--     ATAU ssh (user REQUIRED; bird/remote key path).     -->
+    <!--     Opsi TCP dan SSH tidak boleh dicampur.              -->
+    <!--   - roa_check()/aspa_check() di filter SUDAH ada (B5).  -->
+    <!--   - TIDAK ADA birdc `show rpki` (Bab 4.3) — status      -->
+    <!--     lewat `show protocols [all]`.                       -->
+    <!--   - Intent di /etc/titian/rpki.conf; generate via      -->
+    <!--     titian-rpki.sh (section bird.d/rpki.conf lalu       -->
+    <!--     titian-bird.sh generate rpki). Section ditulis      -->
+    <!--     ulang UTUH tiap apply.                              -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_rpki di titian-commit.sh).                   -->
+
+<VIEW name="configure-bird-rpki-view"
+    prompt="${SYSTEM_NAME}(config-bird-rpki-${rpki_inst})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="show"
+        help="Show RPKI state"/>
+
+    <COMMAND name="roa4-table"
+        help="Tabel ROA IPv4 (channel roa4; wajib bila mau import prefix IPv4)">
+        <PARAM name="Value"
+            help="Nama tabel roa4 (global -> table-add roa4, atau bgp -> roa-table-add v4)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh chan-table-set "${rpki_inst}" roa4 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no roa4-table"
+        help="Hapus roa4 table">
+        <CONFIG operation="unset" pattern="^roa4-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh chan-table-del "${rpki_inst}" roa4
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="roa6-table"
+        help="Tabel ROA IPv6 (channel roa6; wajib bila mau import prefix IPv6)">
+        <PARAM name="Value"
+            help="Nama tabel roa6 (global -> table-add roa6, atau bgp -> roa-table-add v6)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh chan-table-set "${rpki_inst}" roa6 "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no roa6-table"
+        help="Hapus roa6 table">
+        <CONFIG operation="unset" pattern="^roa6-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh chan-table-del "${rpki_inst}" roa6
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aspa-table"
+        help="Tabel ASPA (channel aspa; untuk aspa_check())">
+        <PARAM name="Value"
+            help="Nama tabel ASPA (bgp -> aspa-table-add)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh chan-table-set "${rpki_inst}" aspa "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no aspa-table"
+        help="Hapus aspa table">
+        <CONFIG operation="unset" pattern="^aspa-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh chan-table-del "${rpki_inst}" aspa
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="remote"
+        help="Alamat cache server RTR (MANDATORY; IP atau FQDN, satu cache per instance)">
+        <PARAM name="Value"
+            help="IP atau domain cache server (mis. 10.1.1.62 atau rpki-validator.example.id)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh remote-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no remote"
+        help="Hapus remote (remote MANDATORY — generate akan menolak)">
+        <CONFIG operation="unset" pattern="^remote"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh remote-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="remote-port"
+        help="Port cache server di remote (bila tidak di-set, pakai port / default 323 TCP / 22 SSH)">
+        <PARAM name="Value"
+            help="Port 1..65535"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh port-set "${rpki_inst}" remote-port "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no remote-port"
+        help="Hapus remote-port">
+        <CONFIG operation="unset" pattern="^remote-port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh port-del "${rpki_inst}" remote-port
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="port"
+        help="Port cache server (default BIRD 323 TCP / 22 SSH)">
+        <PARAM name="Value"
+            help="Port 1..65535"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh port-set "${rpki_inst}" port "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no port"
+        help="Hapus port (default BIRD 323 TCP / 22 SSH)">
+        <CONFIG operation="unset" pattern="^port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh port-del "${rpki_inst}" port
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local-address"
+        help="Alamat lokal source address sesi RTR (default TIDAK dinyatakan docs)">
+        <PARAM name="Value"
+            help="Alamat IP lokal"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh local-address-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no local-address"
+        help="Hapus local-address">
+        <CONFIG operation="unset" pattern="^local-address"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh local-address-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="refresh"
+        help="Periode poll cache berikutnya, detik (default 3600; harus &lt; 86400)">
+        <PARAM name="Value"
+            help="Detik 1..86399"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-set "${rpki_inst}" refresh "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no refresh"
+        help="Hapus refresh (default BIRD 3600)">
+        <CONFIG operation="unset" pattern="^refresh"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-del "${rpki_inst}" refresh
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="refresh-keep"
+        help="Jangan biarkan cache server meng-update nilai refresh (keep)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-keep-set "${rpki_inst}" refresh "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no refresh-keep"
+        help="Hapus refresh-keep">
+        <CONFIG operation="unset" pattern="^refresh-keep"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-keep-del "${rpki_inst}" refresh
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="retry"
+        help="Periode antar percobaan query gagal, detik (default 600; maks 7200)">
+        <PARAM name="Value"
+            help="Detik 1..7200"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-set "${rpki_inst}" retry "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no retry"
+        help="Hapus retry (default BIRD 600)">
+        <CONFIG operation="unset" pattern="^retry"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-del "${rpki_inst}" retry
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="retry-keep"
+        help="Jangan biarkan cache server meng-update nilai retry (keep)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-keep-set "${rpki_inst}" retry "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no retry-keep"
+        help="Hapus retry-keep">
+        <CONFIG operation="unset" pattern="^retry-keep"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-keep-del "${rpki_inst}" retry
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="expire"
+        help="Record dihapus bila gagal refresh selama periode ini, detik (default 7200; 600..172800)">
+        <PARAM name="Value"
+            help="Detik 600..172800"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-set "${rpki_inst}" expire "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no expire"
+        help="Hapus expire (default BIRD 7200)">
+        <CONFIG operation="unset" pattern="^expire"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-del "${rpki_inst}" expire
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="expire-keep"
+        help="Jangan biarkan cache server meng-update nilai expire (keep)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-keep-set "${rpki_inst}" expire "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no expire-keep"
+        help="Hapus expire-keep">
+        <CONFIG operation="unset" pattern="^expire-keep"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh timer-keep-del "${rpki_inst}" expire
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ignore-max-length"
+        help="Abaikan max length record ROA, pakai nilai maks (32 atau 128; default BIRD disabled)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh switch-set "${rpki_inst}" ignore-max-length "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ignore-max-length"
+        help="Hapus ignore-max-length (default BIRD disabled)">
+        <CONFIG operation="unset" pattern="^ignore-max-length"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh switch-del "${rpki_inst}" ignore-max-length
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-version"
+        help="Versi minimum protokol RTR yang diizinkan (default 0; 0..2)">
+        <PARAM name="Value"
+            help="0..2"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh version-set "${rpki_inst}" min-version "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no min-version"
+        help="Hapus min-version (default BIRD 0)">
+        <CONFIG operation="unset" pattern="^min-version"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh version-del "${rpki_inst}" min-version
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="max-version"
+        help="Versi maksimum protokol RTR (default 2; 0..2)">
+        <PARAM name="Value"
+            help="0..2"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh version-set "${rpki_inst}" max-version "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no max-version"
+        help="Hapus max-version (default BIRD 2)">
+        <CONFIG operation="unset" pattern="^max-version"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh version-del "${rpki_inst}" max-version
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="transport"
+        help="Transport sesi RTR: tcp (default, tanpa autentikasi) atau ssh (terenkripsi; tidak bisa digabung)">
+        <PARAM name="Value"
+            help="tcp|ssh"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh transport-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no transport"
+        help="Hapus transport (default BIRD tcp tanpa autentikasi)">
+        <CONFIG operation="unset" pattern="^transport"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh transport-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tcp-auth"
+        help="Autentikasi transport TCP (hanya bila transport tcp; default none)">
+        <PARAM name="Value"
+            help="none|md5 (TCP-MD5 RFC 2385)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh tcp-auth-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tcp-auth"
+        help="Hapus tcp-auth (default BIRD none)">
+        <CONFIG operation="unset" pattern="^tcp-auth"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh tcp-auth-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="tcp-password"
+        help="Password autentikasi TCP-MD5 sesi RPKI-to-Router (tanpa spasi)">
+        <PARAM name="Value"
+            help="Teks password (tanpa spasi)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh tcp-password-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no tcp-password"
+        help="Hapus tcp-password">
+        <CONFIG operation="unset" pattern="^tcp-password"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh tcp-password-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ssh-bird-key"
+        help="Path private key SSH BIRD (transport ssh)">
+        <PARAM name="Value"
+            help="Path absolut (mis. /root/.ssh/id_rsa)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh ssh-set "${rpki_inst}" bird-key "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ssh-bird-key"
+        help="Hapus ssh-bird-key">
+        <CONFIG operation="unset" pattern="^ssh-bird-key"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh ssh-del "${rpki_inst}" bird-key
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ssh-remote-key"
+        help="Path public key SSH cache server (transport ssh)">
+        <PARAM name="Value"
+            help="Path absolut (mis. /root/.ssh/known_hosts)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh ssh-set "${rpki_inst}" remote-key "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ssh-remote-key"
+        help="Hapus ssh-remote-key">
+        <CONFIG operation="unset" pattern="^ssh-remote-key"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh ssh-del "${rpki_inst}" remote-key
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ssh-user"
+        help="Username SSH (REQUIRED bila transport ssh)">
+        <PARAM name="Value"
+            help="Nama user SSH"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh ssh-set "${rpki_inst}" user "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ssh-user"
+        help="Hapus ssh-user (user REQUIRED bila transport ssh)">
+        <CONFIG operation="unset" pattern="^ssh-user"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh ssh-del "${rpki_inst}" user
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug"
+        help="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="all|off|kelas,kelas,..."
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh debug-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh debug-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump protokol ini (all, off, atau states,messages)">
+        <PARAM name="Value"
+            help="all|off|states,messages"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh mrtdump-set "${rpki_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh mrtdump-del "${rpki_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show rpki"
+        help="Tampilkan intent + section + status birdc instance ini (via show protocols)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

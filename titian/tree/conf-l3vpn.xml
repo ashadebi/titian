@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- L3VPN BIRD (`protocol l3vpn`, Bab 6.9 docs, batch B9).-->
+    <!--   - Masuk dari `router bird` -> `l3vpn <NAME>` — SATU -->
+    <!--     view dipakai semua instance (viewid l3vpn_inst).   -->
+    <!--   - rd MANDATORY; import-target + export-target        -->
+    <!--     MANDATORY (atau route-target shorthand — TIDAK      -->
+    <!--     boleh dicampur keduanya); mpls label-policy        -->
+    <!--     MANDATORY (vrf|aggregate). Channel ipv4/ipv6/      -->
+    <!--     vpn4/vpn6 berisi table (+ import/export, default    -->
+    <!--     export all).                                        -->
+    <!--   - Prasyarat: mpls domain + mpls table di global      -->
+    <!--     view; peer BGP vpn4/vpn6; VRF kernel. `vrf`        -->
+    <!--     (Bab 3.4-6) N/A Linux-only — TIDAK diekspos.       -->
+    <!--   - TIDAK ADA birdc `show l3vpn` (Bab 4.3) — status    -->
+    <!--     lewat `show protocols [all]`.                       -->
+    <!--   - Intent di /etc/titian/l3vpn.conf; generate via    -->
+    <!--     titian-l3vpn.sh (section bird.d/l3vpn.conf lalu    -->
+    <!--     titian-bird.sh generate l3vpn). Section ditulis    -->
+    <!--     ulang UTUH tiap apply.                              -->
+
+<VIEW name="configure-bird-l3vpn-view"
+    prompt="${SYSTEM_NAME}(config-bird-l3vpn-${l3vpn_inst})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="show"
+        help="Show L3VPN state"/>
+
+    <COMMAND name="rd"
+        help="Route distinguisher (MANDATORY; ASN:u32 | ASN4:u16 | IP:u32, mis. 10:12)">
+        <PARAM name="Value"
+            help="RD (mis. 10:12 atau 192.0.2.1:100)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh rd-set "${l3vpn_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rd"
+        help="Hapus rd (rd MANDATORY — generate akan menolak)">
+        <CONFIG operation="unset" pattern="^rd"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh rd-del "${l3vpn_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-target"
+        help="Route target import (MANDATORY; EC atau EC-set, mis. [(rt,10,32..40)])">
+        <PARAM name="Value"
+            help="EC (rt|ro, A, B) atau EC-set satu token tanpa spasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh target-set "${l3vpn_inst}" import-target "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-target"
+        help="Hapus import-target (MANDATORY bila tanpa route-target)">
+        <CONFIG operation="unset" pattern="^import-target"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh target-del "${l3vpn_inst}" import-target
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-target"
+        help="Route target export (MANDATORY; EC lain pada route DIHAPUS)">
+        <PARAM name="Value"
+            help="EC (rt|ro, A, B) atau EC-set satu token tanpa spasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh target-set "${l3vpn_inst}" export-target "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-target"
+        help="Hapus export-target (MANDATORY bila tanpa route-target)">
+        <CONFIG operation="unset" pattern="^export-target"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh target-del "${l3vpn_inst}" export-target
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="route-target"
+        help="Shorthand import-target + export-target sekaligus (TIDAK boleh dicampur keduanya)">
+        <PARAM name="Value"
+            help="EC (rt|ro, A, B) atau EC-set satu token tanpa spasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh target-set "${l3vpn_inst}" route-target "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no route-target"
+        help="Hapus route-target">
+        <CONFIG operation="unset" pattern="^route-target"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh target-del "${l3vpn_inst}" route-target
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ipv4-table"
+        help="Tabel VRF IPv4 (channel ipv4)">
+        <PARAM name="Value"
+            help="Nama tabel ipv4 (global -> table-add ipv4)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" ipv4 table "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv4-table"
+        help="Hapus ipv4-table">
+        <CONFIG operation="unset" pattern="^ipv4-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" ipv4 table
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ipv4-import"
+        help="Import filter channel ipv4 (all|none|filter NAMA)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" ipv4 import "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv4-import"
+        help="Hapus ipv4-import">
+        <CONFIG operation="unset" pattern="^ipv4-import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" ipv4 import
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ipv4-export"
+        help="Export filter channel ipv4 (default all)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" ipv4 export "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv4-export"
+        help="Hapus ipv4-export (default all)">
+        <CONFIG operation="unset" pattern="^ipv4-export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" ipv4 export
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ipv6-table"
+        help="Tabel VRF IPv6 (channel ipv6)">
+        <PARAM name="Value"
+            help="Nama tabel ipv6 (global -> table-add ipv6)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" ipv6 table "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv6-table"
+        help="Hapus ipv6-table">
+        <CONFIG operation="unset" pattern="^ipv6-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" ipv6 table
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ipv6-import"
+        help="Import filter channel ipv6 (all|none|filter NAMA)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" ipv6 import "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv6-import"
+        help="Hapus ipv6-import">
+        <CONFIG operation="unset" pattern="^ipv6-import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" ipv6 import
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="ipv6-export"
+        help="Export filter channel ipv6 (default all)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" ipv6 export "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no ipv6-export"
+        help="Hapus ipv6-export (default all)">
+        <CONFIG operation="unset" pattern="^ipv6-export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" ipv6 export
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="vpn4-table"
+        help="Tabel VPN IPv4 (channel vpn4)">
+        <PARAM name="Value"
+            help="Nama tabel vpn4 (global -> table-add vpn4)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" vpn4 table "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vpn4-table"
+        help="Hapus vpn4-table">
+        <CONFIG operation="unset" pattern="^vpn4-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" vpn4 table
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="vpn4-import"
+        help="Import filter channel vpn4 (all|none|filter NAMA)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" vpn4 import "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vpn4-import"
+        help="Hapus vpn4-import">
+        <CONFIG operation="unset" pattern="^vpn4-import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" vpn4 import
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="vpn4-export"
+        help="Export filter channel vpn4 (default all)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" vpn4 export "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vpn4-export"
+        help="Hapus vpn4-export (default all)">
+        <CONFIG operation="unset" pattern="^vpn4-export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" vpn4 export
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="vpn6-table"
+        help="Tabel VPN IPv6 (channel vpn6)">
+        <PARAM name="Value"
+            help="Nama tabel vpn6 (global -> table-add vpn6)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" vpn6 table "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vpn6-table"
+        help="Hapus vpn6-table">
+        <CONFIG operation="unset" pattern="^vpn6-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" vpn6 table
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="vpn6-import"
+        help="Import filter channel vpn6 (all|none|filter NAMA)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" vpn6 import "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vpn6-import"
+        help="Hapus vpn6-import">
+        <CONFIG operation="unset" pattern="^vpn6-import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" vpn6 import
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="vpn6-export"
+        help="Export filter channel vpn6 (default all)">
+        <PARAM name="Value"
+            help="all|none|filter"
+            ptype="STRING"/>
+        <PARAM name="FilterName"
+            help="Nama filter (bila Value=filter)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-set "${l3vpn_inst}" vpn6 export "${Value}" "${FilterName}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no vpn6-export"
+        help="Hapus vpn6-export (default all)">
+        <CONFIG operation="unset" pattern="^vpn6-export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh chan-del "${l3vpn_inst}" vpn6 export
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mpls-label-policy"
+        help="Kebijakan label channel MPLS (MANDATORY; vrf|aggregate)">
+        <PARAM name="Value"
+            help="vrf|aggregate"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh mpls-label-policy-set "${l3vpn_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-label-policy"
+        help="Hapus mpls-label-policy (channel mpls MANDATORY — generate akan menolak)">
+        <CONFIG operation="unset" pattern="^mpls-label-policy"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh mpls-label-policy-del "${l3vpn_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug"
+        help="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="all|off|kelas,kelas,..."
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh debug-set "${l3vpn_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh debug-del "${l3vpn_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump protokol ini (all, off, atau states,messages)">
+        <PARAM name="Value"
+            help="all|off|states,messages"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh mrtdump-set "${l3vpn_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh mrtdump-del "${l3vpn_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show l3vpn"
+        help="Tampilkan intent + section + status birdc instance ini (via show protocols)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

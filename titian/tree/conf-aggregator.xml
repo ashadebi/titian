@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- Aggregator BIRD (`protocol aggregator`, Bab 6.1 docs,  -->
+    <!-- batch B8 program BIRD).                               -->
+    <!--   - Masuk dari `router bird` -> `aggregator <NAME>` —  -->
+    <!--     SATU view dipakai semua instance (viewid           -->
+    <!--     aggregator_inst).                                 -->
+    <!--   - table (sumber), export (filter pra-agregasi),      -->
+    <!--     aggregate-on (WAJIB, elemen pertama `net`),        -->
+    <!--     merge-line (blok `merge by`, baris kode BIRD       -->
+    <!--     mentah, maks 8 kata/baris), import (filter pasca-  -->
+    <!--     merge), peer-table (tujuan, boleh = table).        -->
+    <!--   - Intent di /etc/titian/aggregator.conf; generate    -->
+    <!--     via titian-aggregator.sh (menulis section           -->
+    <!--     bird.d/aggregator.conf lalu titian-bird.sh generate -->
+    <!--     aggregator). Section ditulis ulang UTUH tiap apply.-->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_aggregator di titian-commit.sh, sesudah      -->
+    <!--     apply_ospf, sebelum apply_function).               -->
+    <!--   - Protokol EKSPERIMENTAL (docs: "use with caution"). -->
+    <!--     Sintaks BIRD 2.16.1 (§6.1): protocol aggregator    -->
+    <!--     <name> { table; export; aggregate on net, ...;    -->
+    <!--     merge by { ... }; import; peer table; }.           -->
+    <!--     `merge by` TIDAK bisa pakai named filter (docs);   -->
+    <!--     simbol khusus `routes`; route hasil merge WAJIB    -->
+    <!--     difinalisasi `accept`.                             -->
+    <!--   - merge-line: baris kode BIRD mentah (maks 8 kata;   -->
+    <!--     baris panjang dipecah — BIRD tidak peduli baris    -->
+    <!--     baru). DITOLAK: komentar /* */, string "...",      -->
+    <!--     backslash, backtick, $. Kurawal harus seimbang +   -->
+    <!--     wajib ada `accept` (dicek saat generate).          -->
+    <!--     Validasi sintaks penuh oleh `bird -p`.             -->
+    <!--   - Default yang TIDAK dinyatakan docs tidak ditebak:  -->
+    <!--     table/peer-table kosong = BIRD default; export/    -->
+    <!--     import kosong = all (default klish, mengikuti      -->
+    <!--     pola RIP/OSPF).                                    -->
+
+<VIEW name="configure-bird-aggregator-view"
+    prompt="${SYSTEM_NAME}(config-bird-aggregator-${aggregator_inst})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="import"
+        help="Channel import (all|none|filter NAME)"/>
+
+    <COMMAND name="export"
+        help="Channel export (all|none|filter NAME)"/>
+
+    <COMMAND name="show"
+        help="Show aggregator state"/>
+
+    <COMMAND name="table"
+        help="Tabel sumber route yang diagregasi (default BIRD bila kosong)">
+        <PARAM name="Value"
+            help="Nama tabel (master4|master6 atau tabel dari global -> table-add)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh table-set "${aggregator_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table"
+        help="Hapus table (default BIRD)">
+        <CONFIG operation="unset" pattern="^table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh table-del "${aggregator_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import all"
+        help="Import semua route hasil merge">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import none"
+        help="Import tidak ada route hasil merge">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import filter"
+        help="Import route hasil merge lewat filter bernama">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export all"
+        help="Export semua route ke agregasi">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export none"
+        help="Export tidak ada route ke agregasi">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Export route ke agregasi lewat filter bernama">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aggregate-on"
+        help="Atribut sortir bucket (WAJIB; elemen pertama net, dipisah koma tanpa spasi)">
+        <PARAM name="Value"
+            help="Daftar mis. net,bgp_path.len (net wajib pertama)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh aggregate-on-set "${aggregator_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no aggregate-on"
+        help="Hapus aggregate-on">
+        <CONFIG operation="unset" pattern="^aggregate-on"/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh aggregate-on-del "${aggregator_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="merge-line"
+        help="Tambah satu baris kode BIRD mentah ke blok merge by (maks 8 kata/baris)">
+        <PARAM name="W1"
+            help="Kata pertama baris (mis. for, if, accept;)"
+            ptype="STRING"/>
+        <PARAM name="W2"
+            help="Kata kedua (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W3"
+            help="Kata ketiga (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W4"
+            help="Kata keempat (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W5"
+            help="Kata kelima (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W6"
+            help="Kata keenam (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W7"
+            help="Kata ketujuh (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <PARAM name="W8"
+            help="Kata kedelapan (opsional)"
+            ptype="STRING"
+            optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh merge-line-add "${aggregator_inst}" "${W1}" "${W2}" "${W3}" "${W4}" "${W5}" "${W6}" "${W7}" "${W8}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="merge-line-del"
+        help="Hapus baris merge-by ke-N (1-based, lihat urutan di show aggregator)">
+        <PARAM name="N"
+            help="Nomor baris (1..)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh merge-line-del "${aggregator_inst}" "${N}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no merge-line"
+        help="Hapus SEMUA baris merge-by (merge by kosong — set ulang sebelum generate)">
+        <CONFIG operation="unset" pattern="^merge-line"/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh merge-line-clear "${aggregator_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="peer-table"
+        help="Tabel tujuan route hasil agregasi (boleh sama dengan table)">
+        <PARAM name="Value"
+            help="Nama tabel (master4|master6 atau tabel dari global -> table-add)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh peer-table-set "${aggregator_inst}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no peer-table"
+        help="Hapus peer-table (default BIRD)">
+        <CONFIG operation="unset" pattern="^peer-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh peer-table-del "${aggregator_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show aggregator"
+        help="Tampilkan intent + section + status birdc instance ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh show
+        </ACTION>
+    </COMMAND>
+</VIEW>
+</CLISH_MODULE>

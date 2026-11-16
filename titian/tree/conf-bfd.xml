@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+    <!--=======================================================-->
+    <!-- BFD (BIRD) — Bidirectional Forwarding Detection.       -->
+    <!--   - Masuk dari `router bird` -> `bfd` (view            -->
+    <!--     configure-bird-bfd-view): interface (interval /    -->
+    <!--     min-rx / min-tx / idle-tx / multiplier / passive), -->
+    <!--     multihop (opsi yang sama), neighbor eksplisit      -->
+    <!--     (dev / local / multihop).                          -->
+    <!--   - Di view BGP neighbor (conf-bgp.xml): `bfd` (= on)  -->
+    <!--     / `bfd graceful` / `no bfd` mengikat sesi BGP ke   -->
+    <!--     BFD (BIRD restart sesi BGP saat BFD down).          -->
+    <!--   - Intent di /etc/titian/bfd.conf; generate via       -->
+    <!--     titian-bfd.sh (menulis section bird.d/bfd.conf     -->
+    <!--     lalu titian-bird.sh generate bfd). Section ditulis -->
+    <!--     ulang UTUH tiap apply.                             -->
+    <!--   - Service BIRD naik/berubah saat `commit`            -->
+    <!--     (apply_bfd di titian-commit.sh, WAJIB sebelum      -->
+    <!--     apply_bgp — birdc configure gagal bila neighbor    -->
+    <!--     BGP pakai `bfd on;` tanpa `protocol bfd`).          -->
+    <!--   - Sintaks BIRD 2.20 (docs resmi bird.network §6.3):  -->
+    <!--     protocol bfd { interface "<pat>" { interval N ms;  -->
+    <!--     min rx interval N ms; min tx interval N ms;       -->
+    <!--     idle tx interval N ms; multiplier N; passive; };  -->
+    <!--     multihop { ... }; neighbor <ip> [dev "<if>"]      -->
+    <!--     [local <ip>] [multihop]; }. Satu instance tanpa    -->
+    <!--     nama. Default BIRD: min rx 10 ms, min tx 100 ms,   -->
+    <!--     idle tx 1 s, multiplier 5, passive off.            -->
+
+<VIEW name="configure-bird-bfd-view"
+    prompt="${SYSTEM_NAME}(config-bird-bfd)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <COMMAND name="end"
+        help="Back to enable-view"
+        view="enable-view"/>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="interface"
+        help="Opsi BFD per interface (masuk ke interface view)"
+        view="configure-bird-bfd-interface-view"
+        viewid="bfd_iface=${Pattern}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD (mis. bridge0, ge*, *)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1540" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-add "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no interface"
+        help="Hapus semua opsi BFD interface ini">
+        <PARAM name="Pattern"
+            help="Pola interface BIRD"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-del "${Pattern}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="neighbor"
+        help="Sesi BFD eksplisit ke neighbor ini (masuk ke neighbor view)"
+        view="configure-bird-bfd-neighbor-view"
+        viewid="bfd_neighbor=${IP}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="IP"
+            help="Alamat IP neighbor"
+            ptype="IP_ADDR"/>
+        <CONFIG priority="0x1541" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh neighbor-add "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no neighbor"
+        help="Hapus sesi BFD eksplisit ke neighbor ini">
+        <PARAM name="IP"
+            help="Alamat IP neighbor"
+            ptype="IP_ADDR"/>
+        <CONFIG operation="unset" pattern="^neighbor ${IP}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh neighbor-del "${IP}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="multihop"
+        help="Opsi BFD untuk sesi multihop (masuk ke multihop view)"
+        view="configure-bird-bfd-multihop-view"
+        viewid="bfd_mh=multihop"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1542" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-touch
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-bfd-interface-view"
+    prompt="${SYSTEM_NAME}(config-bird-bfd-if-${bfd_iface})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-bfd-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to BFD mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="interval"
+        help="Interval kirim/terima BFD (shorthand min rx + min tx)">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, mis. 300)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" interval "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-rx"
+        help="Minimum RX interval yang diumumkan ke peer">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, default BIRD 10)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" min-rx "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-tx"
+        help="Desired TX interval saat sesi up">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, default BIRD 100)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" min-tx "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="idle-tx"
+        help="TX interval saat sesi belum up">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, default BIRD 1000)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" idle-tx "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="multiplier"
+        help="Jumlah paket hilang sebelum sesi dinyatakan down">
+        <PARAM name="Value"
+            help="Multiplier (1..255, default BIRD 5)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" multiplier "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="passive"
+        help="Mode pasif: jangan kirim BFD sampai menerima dari peer">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" passive on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no passive"
+        help="Matikan mode pasif">
+        <CONFIG operation="unset" pattern="^passive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" passive off
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-bfd-neighbor-view"
+    prompt="${SYSTEM_NAME}(config-bird-bfd-nbr-${bfd_neighbor})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-bfd-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to BFD mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="interface"
+        help="Interface yang dipakai sesi ini (dev)">
+        <PARAM name="Name"
+            help="Nama interface (mis. bridge0)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh neighbor-set "${bfd_neighbor}" dev "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local"
+        help="Alamat IP lokal sesi ini">
+        <PARAM name="IP"
+            help="Alamat IP lokal"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh neighbor-set "${bfd_neighbor}" local "${IP}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="multihop"
+        help="Sesi ini multihop (wajib local bila multihop)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh neighbor-set "${bfd_neighbor}" multihop on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no multihop"
+        help="Sesi ini bukan multihop (direct)">
+        <CONFIG operation="unset" pattern="^multihop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh neighbor-set "${bfd_neighbor}" multihop off
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-bfd-multihop-view"
+    prompt="${SYSTEM_NAME}(config-bird-bfd-multihop)# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-bfd-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to BFD mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="interval"
+        help="Interval kirim/terima BFD multihop (shorthand min rx + min tx)">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, mis. 300)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set interval "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-rx"
+        help="Minimum RX interval multihop">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, default BIRD 10)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set min-rx "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-tx"
+        help="Desired TX interval multihop saat sesi up">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, default BIRD 100)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set min-tx "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="idle-tx"
+        help="TX interval multihop saat sesi belum up">
+        <PARAM name="Value"
+            help="Interval dalam ms (1..60000, default BIRD 1000)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set idle-tx "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="multiplier"
+        help="Jumlah paket hilang sebelum sesi multihop dinyatakan down">
+        <PARAM name="Value"
+            help="Multiplier (1..255, default BIRD 5)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set multiplier "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="passive"
+        help="Mode pasif multihop: jangan kirim BFD sampai menerima dari peer">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set passive on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no passive"
+        help="Matikan mode pasif multihop">
+        <CONFIG operation="unset" pattern="^passive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-set passive off
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="enable-view">
+    <COMMAND name="show bfd"
+        help="Status BFD (intent + section + sesi BFD BIRD)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh show
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show bfd sessions"
+        help="Sesi BFD yang jalan (birdc show bfd sessions)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh show-sessions
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+</CLISH_MODULE>

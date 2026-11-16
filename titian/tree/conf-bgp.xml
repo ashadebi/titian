@@ -122,6 +122,91 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="neighbor-range"
+        help="Dynamic BGP: dengarkan koneksi masuk dari prefix ini (template bgp_dyn)">
+        <PARAM name="Prefix"
+            help="Prefix CIDR (mis. 10.99.0.0/16)"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-range-add "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no neighbor-range"
+        help="Hapus dynamic neighbor-range">
+        <PARAM name="Prefix"
+            help="Prefix CIDR"
+            ptype="IP_ADDR_MASK"/>
+        <CONFIG operation="unset" pattern="^neighbor-range ${Prefix}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-range-del "${Prefix}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dynamic-name"
+        help="Prefix nama instance BGP dynamic (default BIRD dynbgp)">
+        <PARAM name="Text"
+            help="Teks tanpa spasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh dynamic-name-set "${Text}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no dynamic-name"
+        help="Kembali ke dynamic-name default BIRD (dynbgp)">
+        <CONFIG operation="unset" pattern="^dynamic-name"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh dynamic-name-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="dynamic-name-digits"
+        help="Jumlah digit minimum indeks nama instance dynamic (default BIRD 0)">
+        <PARAM name="Value"
+            help="Jumlah digit"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh dynamic-name-digits-set "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no dynamic-name-digits"
+        help="Kembali ke dynamic-name-digits default BIRD (0)">
+        <CONFIG operation="unset" pattern="^dynamic-name-digits"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh dynamic-name-digits-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="attribute-bgp"
+        help="Beri nama ke atribut BGP tak dikenal (attribute bgp NUM bytestring NAME)">
+        <PARAM name="Num"
+            help="Nomor atribut 1..255 (nomor yang dikenal BIRD ditolak)"
+            ptype="UINT"/>
+        <PARAM name="Name"
+            help="Nama atribut [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh attribute-bgp-add "${Num}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no attribute-bgp"
+        help="Hapus definisi attribute-bgp">
+        <PARAM name="Num"
+            help="Nomor atribut"
+            ptype="UINT"/>
+        <CONFIG operation="unset" pattern="^attribute-bgp ${Num}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh attribute-bgp-del "${Num}"
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="filter"
         help="BGP filter (masuk ke filter view)"
         view="configure-bird-filter-view"
@@ -144,6 +229,346 @@
         <CONFIG operation="unset" pattern="^filter ${Name}"/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh filter-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="define-int"
+        help="Definisi konstanta integer top-level (define NAME = N)">
+        <PARAM name="Name"
+            help="Nama konstanta [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai integer"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh define-int-add "${Name}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no define-int"
+        help="Hapus definisi konstanta integer">
+        <PARAM name="Name"
+            help="Nama konstanta"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^define-int ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh define-int-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="attribute-int"
+        help="Deklarasi atribut route kustom integer (attribute int NAME)">
+        <PARAM name="Name"
+            help="Nama atribut [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh attribute-int-add "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no attribute-int"
+        help="Hapus deklarasi atribut kustom integer">
+        <PARAM name="Name"
+            help="Nama atribut"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^attribute-int ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh attribute-int-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="roa-table"
+        help="Definisi tabel ROA kosong (roa4 table NAME; terisi saat protokol RPKI jalan — B9)">
+        <PARAM name="Name"
+            help="Nama tabel [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh roa-table-add "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no roa-table"
+        help="Hapus definisi tabel ROA">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^roa-table ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh roa-table-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aspa-table"
+        help="Definisi tabel ASPA kosong (aspa table NAME; terisi saat protokol RPKI jalan — B9)">
+        <PARAM name="Name"
+            help="Nama tabel [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh aspa-table-add "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no aspa-table"
+        help="Hapus definisi tabel ASPA">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^aspa-table ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh aspa-table-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="function"
+        help="Fungsi filter BIRD (masuk ke function view)"
+        view="configure-bird-function-view"
+        viewid="bird_function=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama fungsi"
+            ptype="STRING"/>
+        <CONFIG priority="0x1530" pattern="^${__line}$"/>
+        <ACTION>
+            echo "BIRD function ${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no function"
+        help="Delete fungsi filter BIRD">
+        <PARAM name="Name"
+            help="Nama fungsi"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^function ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="global"
+        help="Opsi global + tabel + MPLS domain BIRD (masuk ke global view)"
+        view="configure-bird-global-view"
+        viewid="bird_global=global"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1540" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bfd"
+        help="BFD — Bidirectional Forwarding Detection (masuk ke BFD view)"
+        view="configure-bird-bfd-view"
+        viewid="bfd_view=bfd"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1540" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh bfd-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="static"
+        help="Static routes BIRD (masuk ke static view)"
+        view="configure-bird-static-view"
+        viewid="static_view=static"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1550" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh static-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="direct"
+        help="Direct routes BIRD (masuk ke direct view)"
+        view="configure-bird-direct-view"
+        viewid="direct_view=direct"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1551" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh direct-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="pipe"
+        help="Pipe antar routing table BIRD (masuk ke pipe view)"
+        view="configure-bird-pipe-view"
+        viewid="pipe_view=pipe"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1552" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="kernel"
+        help="Kernel sync BIRD (masuk ke kernel view)"
+        view="configure-bird-kernel-view"
+        viewid="kernel_view=kernel"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1553" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rip"
+        help="RIP IPv4 BIRD (masuk ke RIP view)"
+        view="configure-bird-rip-view"
+        viewid="rip_inst=rip"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1555" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh rip-touch rip
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ripng"
+        help="RIPng IPv6 BIRD (masuk ke RIP view)"
+        view="configure-bird-rip-view"
+        viewid="rip_inst=ripng"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1556" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh rip-touch ripng
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ospf"
+        help="OSPFv2 IPv4 BIRD (masuk ke OSPF view)"
+        view="configure-bird-ospf-view"
+        viewid="ospf_inst=ospf"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1559" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh ospf-touch ospf
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ospfv3"
+        help="OSPFv3 IPv6 BIRD (masuk ke OSPF view; channel ipv4 = RFC 5838)"
+        view="configure-bird-ospf-view"
+        viewid="ospf_inst=ospf6"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x155A" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh ospf-touch ospf6
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="device"
+        help="Device info BIRD (masuk ke device view)"
+        view="configure-bird-device-view"
+        viewid="device_view=device"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1554" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aggregator"
+        help="Aggregator BIRD — agregasi prefix (masuk ke aggregator view; EKSPERIMENTAL)"
+        view="configure-bird-aggregator-view"
+        viewid="aggregator_inst=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama instance aggregator"
+            ptype="STRING"/>
+        <CONFIG priority="0x155B" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-aggregator.sh aggregator-touch "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrt"
+        help="MRT dump BIRD — dump tabel routing ke file (masuk ke mrt view)"
+        view="configure-bird-mrt-view"
+        viewid="mrt_inst=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama instance mrt"
+            ptype="STRING"/>
+        <CONFIG priority="0x155C" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-mrt.sh mrt-touch "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="radv"
+        help="Router Advertisement BIRD (masuk ke RAdv view; satu instance)"
+        view="configure-bird-radv-view"
+        viewid="radv_view=radv"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x155D" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-radv.sh radv-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rpki"
+        help="RPKI origin validation BIRD — cache server RTR (masuk ke rpki view; P3, butuh cache eksternal)"
+        view="configure-bird-rpki-view"
+        viewid="rpki_inst=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama instance rpki (satu cache server per instance)"
+            ptype="STRING"/>
+        <CONFIG priority="0x155E" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rpki.sh rpki-touch "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bmp"
+        help="BMP monitoring BIRD (masuk ke bmp view; PRELIMINARY, butuh build --with-protocols= + station eksternal)"
+        view="configure-bird-bmp-view"
+        viewid="bmp_view=bmp"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x155F" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bmp.sh bmp-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="babel"
+        help="Babel routing BIRD (masuk ke babel view; P3, butuh peer Babel)"
+        view="configure-bird-babel-view"
+        viewid="babel_view=babel"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <CONFIG priority="0x1560" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-babel.sh babel-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="l3vpn"
+        help="L3VPN BGP/MPLS BIRD (masuk ke l3vpn view; P3, butuh peer VPN + MPLS + VRF)"
+        view="configure-bird-l3vpn-view"
+        viewid="l3vpn_inst=${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Nama instance l3vpn (satu VRF per instance)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1561" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-l3vpn.sh l3vpn-touch "${Name}"
         </ACTION>
     </COMMAND>
 </VIEW>
@@ -261,6 +686,194 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="import-keep-filtered"
+        help="Simpan route yang ter-filter import di Adj-RIB-In (import keep filtered on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import-keep-filtered on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-keep-filtered"
+        help="Matikan import keep filtered (default BIRD off)">
+        <CONFIG operation="unset" pattern="^import-keep-filtered"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import-keep-filtered off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel-preference"
+        help="Preference channel ipv4 neighbor ini (Bab 3.5-3; beda dari bgp_local_pref)">
+        <PARAM name="Value"
+            help="Nilai preference 0..65535"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel-preference"
+        help="Hapus channel-preference (default BIRD)">
+        <CONFIG operation="unset" pattern="^channel-preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" channel-preference
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: channel BGP non-ipv4 + opsi protocol-level Bab 3.4 -->
+    <COMMAND name="channel"
+        help="Channel BGP non-ipv4 (masuk ke channel view)"
+        view="configure-bird-channel-view"
+        viewid="bgp_ch_ctx=${bgp_neighbor}:${Name}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Name"
+            help="Channel: ipv6, mc4, mc6, mpls4, mpls6, vpn4, vpn6, vpn4mc, vpn6mc, flow4, flow6"
+            ptype="STRING"/>
+        <CONFIG priority="0x1530" pattern="^${__line}$"/>
+        <ACTION>
+            echo "BGP channel ${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel"
+        help="Hapus channel BGP non-ipv4 (semua field-nya)">
+        <PARAM name="Name"
+            help="Channel: ipv6, mc4, mc6, mpls4, mpls6, vpn4, vpn6, vpn4mc, vpn6mc, flow4, flow6"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^channel ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh channel-del "${bgp_neighbor}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Warisi opsi dari template BGP (template-add di global view)">
+        <PARAM name="Name"
+            help="Nama template BGP"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" from "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Hapus pewarisan template (default BIRD: tanpa template)">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="protocol-router-id"
+        help="Router-id khusus protokol ini (override router-id global)">
+        <PARAM name="IP"
+            help="Alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" protocol-router-id "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no protocol-router-id"
+        help="Kembali ke router-id global BIRD">
+        <CONFIG operation="unset" pattern="^protocol-router-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" protocol-router-id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug"
+        help="Debug protocol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" debug "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" debug
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="MRTdump protokol ini (all, off, atau states,messages)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mrtdump "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump protokol ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" mrtdump
+        </ACTION>
+    </COMMAND>
+
+    <!-- tx-class/tx-dscp DIHAPUS (F3.2): BIRD 2.20 hanya menerima tx class/dscp
+         di blok interface OSPF/RIP/Babel, bukan opsi protokol BGP
+         (bird -p: "unexpected TX"). Setter titian-bgp.sh menolak keduanya. -->
+    <COMMAND name="mpls-domain"
+        help="MPLS domain untuk blok mpls neighbor ini (EKSPERIMENTAL)">
+        <PARAM name="Name"
+            help="Nama domain MPLS"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mpls-domain "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-domain"
+        help="Hapus mpls-domain neighbor ini">
+        <CONFIG operation="unset" pattern="^mpls-domain"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" mpls-domain
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mpls-label-range"
+        help="Label range untuk blok mpls neighbor ini (harus ada di global view)">
+        <PARAM name="Name"
+            help="Nama label range"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mpls-label-range "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-label-range"
+        help="Hapus mpls-label-range neighbor ini">
+        <CONFIG operation="unset" pattern="^mpls-label-range"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" mpls-label-range
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mpls-label-policy"
+        help="Kebijakan label blok mpls neighbor ini (static, prefix, aggregate, vrf)">
+        <PARAM name="Policy"
+            help="static, prefix, aggregate, atau vrf (vrf hanya L3VPN)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mpls-label-policy "${Policy}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-label-policy"
+        help="Kembali ke label-policy default BIRD (prefix)">
+        <CONFIG operation="unset" pattern="^mpls-label-policy"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" mpls-label-policy
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="prepend"
         help="Jumlah AS-path prepend saat export ke neighbor ini">
         <PARAM name="Count"
@@ -280,6 +893,1744 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" community "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="bfd"
+        help="Aktifkan BFD untuk neighbor ini (BGP restart saat BFD down; butuh protocol bfd)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" bfd on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="bfd graceful"
+        help="Aktifkan BFD + graceful restart untuk neighbor ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" bfd graceful
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no bfd"
+        help="Matikan BFD untuk neighbor ini">
+        <CONFIG operation="unset" pattern="^bfd"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" bfd off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="check-link"
+        help="BIRD check link (default BIRD on untuk direct; tidak bisa dengan multihop)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" check-link on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no check-link"
+        help="Matikan check link (set check link off)">
+        <CONFIG operation="unset" pattern="^check-link"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" check-link off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="passive"
+        help="BIRD passive (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" passive on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no passive"
+        help="Matikan passive (set passive off)">
+        <CONFIG operation="unset" pattern="^passive"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" passive off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="strict-bind"
+        help="BIRD strict bind (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" strict-bind on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no strict-bind"
+        help="Matikan strict bind (set strict bind off)">
+        <CONFIG operation="unset" pattern="^strict-bind"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" strict-bind off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="free-bind"
+        help="BIRD free bind (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" free-bind on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no free-bind"
+        help="Matikan free bind (set free bind off)">
+        <CONFIG operation="unset" pattern="^free-bind"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" free-bind off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ttl-security"
+        help="BIRD ttl security (GTSM, RFC 5082) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" ttl-security on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ttl-security"
+        help="Matikan ttl security (GTSM, RFC 5082) (set ttl security (GTSM, RFC 5082) off)">
+        <CONFIG operation="unset" pattern="^ttl-security"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" ttl-security off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="setkey"
+        help="BIRD setkey (FreeBSD; update SA/SP otomatis) (default BIRD on di FreeBSD)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" setkey on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no setkey"
+        help="Matikan setkey (FreeBSD; update SA/SP otomatis) (set setkey (FreeBSD; update SA/SP otomatis) off)">
+        <CONFIG operation="unset" pattern="^setkey"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" setkey off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="confederation-member"
+        help="BIRD confederation member (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" confederation-member on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no confederation-member"
+        help="Matikan confederation member (set confederation member off)">
+        <CONFIG operation="unset" pattern="^confederation-member"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" confederation-member off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="allow-local-pref"
+        help="BIRD allow bgp_local_pref (EBGP) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-local-pref on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no allow-local-pref"
+        help="Matikan allow bgp_local_pref (EBGP) (set allow bgp_local_pref (EBGP) off)">
+        <CONFIG operation="unset" pattern="^allow-local-pref"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-local-pref off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="allow-med"
+        help="BIRD allow bgp_med (EBGP) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-med on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no allow-med"
+        help="Matikan allow bgp_med (EBGP) (set allow bgp_med (EBGP) off)">
+        <CONFIG operation="unset" pattern="^allow-med"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-med off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="allow-as-sets"
+        help="BIRD allow as sets (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-as-sets on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no allow-as-sets"
+        help="Matikan allow as sets (set allow as sets off)">
+        <CONFIG operation="unset" pattern="^allow-as-sets"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-as-sets off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enforce-first-as"
+        help="BIRD enforce first as (EBGP) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enforce-first-as on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no enforce-first-as"
+        help="Matikan enforce first as (EBGP) (set enforce first as (EBGP) off)">
+        <CONFIG operation="unset" pattern="^enforce-first-as"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enforce-first-as off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable-route-refresh"
+        help="BIRD enable route refresh (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-route-refresh on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no enable-route-refresh"
+        help="Matikan enable route refresh (set enable route refresh off)">
+        <CONFIG operation="unset" pattern="^enable-route-refresh"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-route-refresh off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-route-refresh"
+        help="BIRD require route refresh (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-route-refresh on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-route-refresh"
+        help="Matikan require route refresh (set require route refresh off)">
+        <CONFIG operation="unset" pattern="^require-route-refresh"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-route-refresh off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable-enhanced-rr"
+        help="BIRD enable enhanced route refresh (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-enhanced-rr on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no enable-enhanced-rr"
+        help="Matikan enable enhanced route refresh (set enable enhanced route refresh off)">
+        <CONFIG operation="unset" pattern="^enable-enhanced-rr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-enhanced-rr off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-enhanced-rr"
+        help="BIRD require enhanced route refresh (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-enhanced-rr on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-enhanced-rr"
+        help="Matikan require enhanced route refresh (set require enhanced route refresh off)">
+        <CONFIG operation="unset" pattern="^require-enhanced-rr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-enhanced-rr off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-graceful-restart"
+        help="BIRD require graceful restart (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-graceful-restart on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-graceful-restart"
+        help="Matikan require graceful restart (set require graceful restart off)">
+        <CONFIG operation="unset" pattern="^require-graceful-restart"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-graceful-restart off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-llgr"
+        help="BIRD require long lived graceful restart (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-llgr on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-llgr"
+        help="Matikan require long lived graceful restart (set require long lived graceful restart off)">
+        <CONFIG operation="unset" pattern="^require-llgr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-llgr off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interpret-communities"
+        help="BIRD interpret communities (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" interpret-communities on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no interpret-communities"
+        help="Matikan interpret communities (set interpret communities off)">
+        <CONFIG operation="unset" pattern="^interpret-communities"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" interpret-communities off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable-as4"
+        help="BIRD enable as4 (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-as4 on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no enable-as4"
+        help="Matikan enable as4 (set enable as4 off)">
+        <CONFIG operation="unset" pattern="^enable-as4"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-as4 off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-as4"
+        help="BIRD require as4 (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-as4 on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-as4"
+        help="Matikan require as4 (set require as4 off)">
+        <CONFIG operation="unset" pattern="^require-as4"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-as4 off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="enable-extended-messages"
+        help="BIRD enable extended messages (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-extended-messages on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no enable-extended-messages"
+        help="Matikan enable extended messages (set enable extended messages off)">
+        <CONFIG operation="unset" pattern="^enable-extended-messages"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" enable-extended-messages off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-extended-messages"
+        help="BIRD require extended messages (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-extended-messages on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-extended-messages"
+        help="Matikan require extended messages (set require extended messages off)">
+        <CONFIG operation="unset" pattern="^require-extended-messages"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-extended-messages off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="capabilities"
+        help="BIRD capabilities (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" capabilities on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no capabilities"
+        help="Matikan capabilities (set capabilities off)">
+        <CONFIG operation="unset" pattern="^capabilities"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" capabilities off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="advertise-hostname"
+        help="BIRD advertise hostname (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" advertise-hostname on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no advertise-hostname"
+        help="Matikan advertise hostname (set advertise hostname off)">
+        <CONFIG operation="unset" pattern="^advertise-hostname"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" advertise-hostname off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-hostname"
+        help="BIRD require hostname (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-hostname on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-hostname"
+        help="Matikan require hostname (set require hostname off)">
+        <CONFIG operation="unset" pattern="^require-hostname"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-hostname off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disable-after-error"
+        help="BIRD disable after error (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" disable-after-error on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no disable-after-error"
+        help="Matikan disable after error (set disable after error off)">
+        <CONFIG operation="unset" pattern="^disable-after-error"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" disable-after-error off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="path-metric"
+        help="BIRD path metric (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" path-metric on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no path-metric"
+        help="Matikan path metric (set path metric off)">
+        <CONFIG operation="unset" pattern="^path-metric"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" path-metric off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="med-metric"
+        help="BIRD med metric (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" med-metric on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no med-metric"
+        help="Matikan med metric (set med metric off)">
+        <CONFIG operation="unset" pattern="^med-metric"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" med-metric off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="deterministic-med"
+        help="BIRD deterministic med (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" deterministic-med on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no deterministic-med"
+        help="Matikan deterministic med (set deterministic med off)">
+        <CONFIG operation="unset" pattern="^deterministic-med"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" deterministic-med off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="igp-metric"
+        help="BIRD igp metric (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" igp-metric on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no igp-metric"
+        help="Matikan igp metric (set igp metric off)">
+        <CONFIG operation="unset" pattern="^igp-metric"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" igp-metric off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="prefer-older"
+        help="BIRD prefer older (RFC 5004) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" prefer-older on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no prefer-older"
+        help="Matikan prefer older (RFC 5004) (set prefer older (RFC 5004) off)">
+        <CONFIG operation="unset" pattern="^prefer-older"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" prefer-older off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-roles"
+        help="BIRD require roles (RFC 9234) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-roles on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-roles"
+        help="Matikan require roles (RFC 9234) (set require roles (RFC 9234) off)">
+        <CONFIG operation="unset" pattern="^require-roles"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-roles off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-table"
+        help="BIRD import table (Adj-RIB-In) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import-table on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no import-table"
+        help="Matikan import table (Adj-RIB-In) (set import table (Adj-RIB-In) off)">
+        <CONFIG operation="unset" pattern="^import-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import-table off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-table"
+        help="BIRD export table (Adj-RIB-Out) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export-table on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no export-table"
+        help="Matikan export table (Adj-RIB-Out) (set export table (Adj-RIB-Out) off)">
+        <CONFIG operation="unset" pattern="^export-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export-table off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="secondary"
+        help="BIRD secondary (butuh tabel sorted) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" secondary on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no secondary"
+        help="Matikan secondary (butuh tabel sorted) (set secondary (butuh tabel sorted) off)">
+        <CONFIG operation="unset" pattern="^secondary"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" secondary off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="validate"
+        help="BIRD validate (FlowSpec) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" validate on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no validate"
+        help="Matikan validate (FlowSpec) (set validate (FlowSpec) off)">
+        <CONFIG operation="unset" pattern="^validate"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" validate off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="extended-next-hop"
+        help="BIRD extended next hop (RFC 8950) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" extended-next-hop on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no extended-next-hop"
+        help="Matikan extended next hop (RFC 8950) (set extended next hop (RFC 8950) off)">
+        <CONFIG operation="unset" pattern="^extended-next-hop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" extended-next-hop off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-extended-next-hop"
+        help="BIRD require extended next hop (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-extended-next-hop on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-extended-next-hop"
+        help="Matikan require extended next hop (set require extended next hop off)">
+        <CONFIG operation="unset" pattern="^require-extended-next-hop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-extended-next-hop off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-add-paths"
+        help="BIRD require add paths (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-add-paths on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no require-add-paths"
+        help="Matikan require add paths (set require add paths off)">
+        <CONFIG operation="unset" pattern="^require-add-paths"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" require-add-paths off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel-graceful-restart"
+        help="BIRD graceful restart (channel ipv4) (default BIRD off di mode aware; on di mode penuh)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-graceful-restart on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no channel-graceful-restart"
+        help="Matikan graceful restart (channel ipv4) (set graceful restart (channel ipv4) off)">
+        <CONFIG operation="unset" pattern="^channel-graceful-restart"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-graceful-restart off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel-llgr"
+        help="BIRD long lived graceful restart (channel ipv4) (default BIRD off di mode aware; on di mode penuh)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-llgr on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no channel-llgr"
+        help="Matikan long lived graceful restart (channel ipv4) (set long lived graceful restart (channel ipv4) off)">
+        <CONFIG operation="unset" pattern="^channel-llgr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-llgr off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mandatory"
+        help="BIRD mandatory (channel ipv4) (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mandatory on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no mandatory"
+        help="Matikan mandatory (channel ipv4) (set mandatory (channel ipv4) off)">
+        <CONFIG operation="unset" pattern="^mandatory"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mandatory off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="interface"
+        help="Interface sesi BGP (direct, IPv6 link-local)">
+        <PARAM name="Value"
+            help="Nama interface"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" interface "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no interface"
+        help="Kembali ke interface default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^interface"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" interface
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="port"
+        help="Port BGP remote (default 179)">
+        <PARAM name="Value"
+            help="Port 1..65535"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" port "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no port"
+        help="Kembali ke port default BIRD (179)">
+        <CONFIG operation="unset" pattern="^port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" port
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local-ip"
+        help="Alamat lokal sesi BGP (local ip)">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" local-ip "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no local-ip"
+        help="Kembali ke local-ip default BIRD (otomatis dari routing)">
+        <CONFIG operation="unset" pattern="^local-ip"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" local-ip
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local-port"
+        help="Port BGP lokal (default 179)">
+        <PARAM name="Value"
+            help="Port 1..65535"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" local-port "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no local-port"
+        help="Kembali ke local-port default BIRD (179)">
+        <CONFIG operation="unset" pattern="^local-port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" local-port
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="source-address"
+        help="Source address sesi BGP">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" source-address "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no source-address"
+        help="Kembali ke source-address default BIRD (alamat interface ke neighbor)">
+        <CONFIG operation="unset" pattern="^source-address"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" source-address
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="password"
+        help="Password MD5 sesi BGP (RFC 2385; tanpa spasi)">
+        <PARAM name="Value"
+            help="Password tanpa spasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" password "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no password"
+        help="Kembali ke password default BIRD (tanpa auth)">
+        <CONFIG operation="unset" pattern="^password"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" password
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="confederation"
+        help="Nomor confederation (RFC 5065)">
+        <PARAM name="Value"
+            help="Nomor confederation"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" confederation "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no confederation"
+        help="Kembali ke confederation default BIRD (0 (tanpa confederation))">
+        <CONFIG operation="unset" pattern="^confederation"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" confederation
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rr-cluster-id"
+        help="Cluster ID route reflector">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" rr-cluster-id "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no rr-cluster-id"
+        help="Kembali ke rr-cluster-id default BIRD (router-id)">
+        <CONFIG operation="unset" pattern="^rr-cluster-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" rr-cluster-id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="hold-time"
+        help="Hold time detik (0 = tanpa keepalive; default 240)">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" hold-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no hold-time"
+        help="Kembali ke hold-time default BIRD (240)">
+        <CONFIG operation="unset" pattern="^hold-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" hold-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-hold-time"
+        help="Hold time minimum yang diterima saat negosiasi">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" min-hold-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no min-hold-time"
+        help="Kembali ke min-hold-time default BIRD (tidak ada)">
+        <CONFIG operation="unset" pattern="^min-hold-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" min-hold-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="startup-hold-time"
+        help="Hold time sebelum OPEN dinegosiasikan">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" startup-hold-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no startup-hold-time"
+        help="Kembali ke startup-hold-time default BIRD (240)">
+        <CONFIG operation="unset" pattern="^startup-hold-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" startup-hold-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="keepalive-time"
+        help="Jeda antar Keepalive (default 1/3 hold time)">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" keepalive-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no keepalive-time"
+        help="Kembali ke keepalive-time default BIRD (1/3 hold time)">
+        <CONFIG operation="unset" pattern="^keepalive-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" keepalive-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="min-keepalive-time"
+        help="Keepalive time minimum yang diterima">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" min-keepalive-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no min-keepalive-time"
+        help="Kembali ke min-keepalive-time default BIRD (tidak ada)">
+        <CONFIG operation="unset" pattern="^min-keepalive-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" min-keepalive-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="send-hold-time"
+        help="Send hold time detik, RFC 9687 (0 = mati)">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" send-hold-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no send-hold-time"
+        help="Kembali ke send-hold-time default BIRD (2x hold timer limit)">
+        <CONFIG operation="unset" pattern="^send-hold-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" send-hold-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="connect-delay-time"
+        help="Jeda sebelum percobaan connect pertama">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" connect-delay-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no connect-delay-time"
+        help="Kembali ke connect-delay-time default BIRD (5)">
+        <CONFIG operation="unset" pattern="^connect-delay-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" connect-delay-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="connect-retry-time"
+        help="Jeda retry connect yang gagal">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" connect-retry-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no connect-retry-time"
+        help="Kembali ke connect-retry-time default BIRD (120)">
+        <CONFIG operation="unset" pattern="^connect-retry-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" connect-retry-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="error-wait-time"
+        help="Error wait time min,max detik (mis. 60,300)">
+        <PARAM name="Value"
+            help="N,M (mis. 60,300)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" error-wait-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no error-wait-time"
+        help="Kembali ke error-wait-time default BIRD (60,300)">
+        <CONFIG operation="unset" pattern="^error-wait-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" error-wait-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="error-forget-time"
+        help="Error forget time detik">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" error-forget-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no error-forget-time"
+        help="Kembali ke error-forget-time default BIRD (300)">
+        <CONFIG operation="unset" pattern="^error-forget-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" error-forget-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="default-med"
+        help="Default MED bila atribut MED hilang (beda dari med export)">
+        <PARAM name="Value"
+            help="Nilai MED"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" default-med "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no default-med"
+        help="Kembali ke default-med default BIRD (0)">
+        <CONFIG operation="unset" pattern="^default-med"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" default-med
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="default-local-pref"
+        help="Default local-pref bila atribut hilang (beda dari local-pref export)">
+        <PARAM name="Value"
+            help="Nilai local-pref"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" default-local-pref "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no default-local-pref"
+        help="Kembali ke default-local-pref default BIRD (100)">
+        <CONFIG operation="unset" pattern="^default-local-pref"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" default-local-pref
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="graceful-restart-time"
+        help="Graceful restart time detik">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" graceful-restart-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no graceful-restart-time"
+        help="Kembali ke graceful-restart-time default BIRD (120)">
+        <CONFIG operation="unset" pattern="^graceful-restart-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" graceful-restart-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="llgr-stale-time"
+        help="Long lived stale time detik">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" llgr-stale-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no llgr-stale-time"
+        help="Kembali ke llgr-stale-time default BIRD (3600)">
+        <CONFIG operation="unset" pattern="^llgr-stale-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" llgr-stale-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel-llgr-stale-time"
+        help="Long lived stale time channel ipv4 (detik)">
+        <PARAM name="Value"
+            help="Detik >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-llgr-stale-time "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no channel-llgr-stale-time"
+        help="Kembali ke channel-llgr-stale-time default BIRD (ikut protocol-level)">
+        <CONFIG operation="unset" pattern="^channel-llgr-stale-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" channel-llgr-stale-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="cost"
+        help="Cost jarak ke BGP next hop (gateway direct)">
+        <PARAM name="Value"
+            help="Angka >= 0"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" cost "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no cost"
+        help="Kembali ke cost default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^cost"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" cost
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-address"
+        help="Alamat next hop yang diiklankan">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" next-hop-address "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no next-hop-address"
+        help="Kembali ke next-hop-address default BIRD (source address sesi)">
+        <CONFIG operation="unset" pattern="^next-hop-address"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" next-hop-address
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="igp-table"
+        help="Tabel IGP untuk resolve next hop (v4)">
+        <PARAM name="Value"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" igp-table "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no igp-table"
+        help="Kembali ke igp-table default BIRD (tabel utama channel)">
+        <CONFIG operation="unset" pattern="^igp-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" igp-table
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="igp-table6"
+        help="Tabel IGP untuk resolve next hop (v6; kedua di contoh resmi)">
+        <PARAM name="Value"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" igp-table6 "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no igp-table6"
+        help="Kembali ke igp-table6 default BIRD (tabel utama channel)">
+        <CONFIG operation="unset" pattern="^igp-table6"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" igp-table6
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="base-table"
+        help="Tabel IP untuk validasi FlowSpec">
+        <PARAM name="Value"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" base-table "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no base-table"
+        help="Kembali ke base-table default BIRD (tabel utama channel)">
+        <CONFIG operation="unset" pattern="^base-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" base-table
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel-table"
+        help="Tabel routing channel ipv4">
+        <PARAM name="Value"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" channel-table "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no channel-table"
+        help="Kembali ke channel-table default BIRD (master)">
+        <CONFIG operation="unset" pattern="^channel-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" channel-table
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="origin"
+        help="Origin yang diset saat export (igp|egp|incomplete)">
+        <PARAM name="Value"
+            help="igp | egp | incomplete"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" origin "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no origin"
+        help="Kembali ke origin default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^origin"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" origin
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-next-hop"
+        help="bgp_next_hop yang diset saat export">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export-next-hop "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no export-next-hop"
+        help="Kembali ke export-next-hop default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^export-next-hop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" export-next-hop
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="community-del"
+        help="Community yang dihapus saat export">
+        <PARAM name="Value"
+            help="Community AS:NN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" community-del "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no community-del"
+        help="Kembali ke community-del default BIRD (tidak ada)">
+        <CONFIG operation="unset" pattern="^community-del"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" community-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ext-community-del"
+        help="Extended community yang dihapus saat export">
+        <PARAM name="Value"
+            help="rt:AA:NN atau ro:AA:NN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" ext-community-del "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no ext-community-del"
+        help="Kembali ke ext-community-del default BIRD (tidak ada)">
+        <CONFIG operation="unset" pattern="^ext-community-del"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" ext-community-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="large-community-del"
+        help="Large community yang dihapus saat export">
+        <PARAM name="Value"
+            help="large:AA:X:NN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" large-community-del "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no large-community-del"
+        help="Kembali ke large-community-del default BIRD (tidak ada)">
+        <CONFIG operation="unset" pattern="^large-community-del"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" large-community-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disable-after-cease-flags"
+        help="Flag disable-after-cease dipisah koma">
+        <PARAM name="Value"
+            help="mis. administrative-shutdown,peer-deconfigured"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" disable-after-cease-flags "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no disable-after-cease-flags"
+        help="Kembali ke disable-after-cease-flags default BIRD (semua kecuali connection-collision)">
+        <CONFIG operation="unset" pattern="^disable-after-cease-flags"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" disable-after-cease-flags
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-self"
+        help="Next hop self: iklankan alamat lokal sebagai next hop">
+        <PARAM name="Value"
+            help="on | off | ibgp | ebgp"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" next-hop-self "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no next-hop-self"
+        help="Kembali ke next-hop-self default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^next-hop-self"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" next-hop-self
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-keep"
+        help="Next hop keep: jangan ubah next hop yang diterima">
+        <PARAM name="Value"
+            help="on | off | ibgp | ebgp"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" next-hop-keep "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no next-hop-keep"
+        help="Kembali ke next-hop-keep default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^next-hop-keep"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" next-hop-keep
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="gateway"
+        help="Gateway: direct atau recursive">
+        <PARAM name="Value"
+            help="direct | recursive"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" gateway "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no gateway"
+        help="Kembali ke gateway default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^gateway"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" gateway
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="add-paths"
+        help="ADD-PATH RFC 7911 (rx/tx terpisah)">
+        <PARAM name="Value"
+            help="on | off | rx | tx"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" add-paths "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no add-paths"
+        help="Kembali ke add-paths default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^add-paths"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" add-paths
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aigp"
+        help="AIGP RFC 7311 (originate = pasang atribut baru)">
+        <PARAM name="Value"
+            help="on | off | originate"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" aigp "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no aigp"
+        help="Kembali ke aigp default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^aigp"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" aigp
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="graceful-restart"
+        help="Graceful restart RFC 4724 (aware = bantu neighbor saja)">
+        <PARAM name="Value"
+            help="off | aware | on"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" graceful-restart "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no graceful-restart"
+        help="Kembali ke graceful-restart default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^graceful-restart"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" graceful-restart
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="llgr"
+        help="Long lived graceful restart (butuh minimal aware di GR)">
+        <PARAM name="Value"
+            help="off | aware | on"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" llgr "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no llgr"
+        help="Kembali ke llgr default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^llgr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" llgr
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="local-role"
+        help="BGP role RFC 9234 (filtering otomatis via OTC)">
+        <PARAM name="Value"
+            help="provider | customer | peer | rs-server | rs-client"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" local-role "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no local-role"
+        help="Kembali ke local-role default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^local-role"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" local-role
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mode"
+        help="Paksa IBGP/EBGP tanpa nomor AS (ganti neighbor X as N)">
+        <PARAM name="Value"
+            help="internal | external"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" mode "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no mode"
+        help="Kembali ke mode default BIRD (tidak diset)">
+        <CONFIG operation="unset" pattern="^mode"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" mode
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="direct"
+        help="Neighbor terhubung langsung (lawan multihop; default on untuk eBGP)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" direct
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no direct"
+        help="Hapus direct (kembali ke default BIRD)">
+        <CONFIG operation="unset" pattern="^direct"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" direct
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rr-client"
+        help="Route reflector: neighbor ini route-reflection client (RFC 4456)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" rr-client
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no rr-client"
+        help="Hapus rr-client (kembali ke default BIRD)">
+        <CONFIG operation="unset" pattern="^rr-client"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" rr-client
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rs-client"
+        help="Route server: neighbor ini route-server client (RFC 7947)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" rs-client
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no rs-client"
+        help="Hapus rs-client (kembali ke default BIRD)">
+        <CONFIG operation="unset" pattern="^rs-client"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" rs-client
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disabled"
+        help="Nonaktifkan instance neighbor ini tanpa hapus konfigurasi">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" disabled
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no disabled"
+        help="Hapus disabled (kembali ke default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" disabled
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="multihop"
+        help="Multihop: neighbor tidak langsung (tanpa angka = tanpa batas hop; dianjurkan set source address)">
+        <PARAM name="Hops"
+            help="Jumlah hop 1..255 (opsional)"
+            ptype="UINT" optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" multihop "${Hops}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no multihop"
+        help="Hapus multihop (kembali ke default BIRD)">
+        <CONFIG operation="unset" pattern="^multihop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" multihop
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="allow-local-as"
+        help="Terima route yang AS-path-nya mengandung AS lokal (tanpa angka = cek dimatikan total)">
+        <PARAM name="Count"
+            help="Jumlah maksimum ASN lokal (opsional)"
+            ptype="UINT" optional="true"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" allow-local-as "${Count}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no allow-local-as"
+        help="Hapus allow-local-as (kembali ke default BIRD)">
+        <CONFIG operation="unset" pattern="^allow-local-as"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" allow-local-as
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-limit"
+        help="Batas route import channel ipv4 (angka atau off; aksi default disable)">
+        <PARAM name="Value"
+            help="Jumlah route atau off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import-limit "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-limit action"
+        help="Aksi saat import-limit tercapai">
+        <PARAM name="Action"
+            help="warn | block | restart | disable"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import-limit-action "${Action}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no import-limit"
+        help="Hapus import-limit (default BIRD off)">
+        <CONFIG operation="unset" pattern="^import-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" import-limit
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="receive-limit"
+        help="Batas route receive channel ipv4 (angka atau off; aksi default disable)">
+        <PARAM name="Value"
+            help="Jumlah route atau off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" receive-limit "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="receive-limit action"
+        help="Aksi saat receive-limit tercapai">
+        <PARAM name="Action"
+            help="warn | block | restart | disable"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" receive-limit-action "${Action}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no receive-limit"
+        help="Hapus receive-limit (default BIRD off)">
+        <CONFIG operation="unset" pattern="^receive-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" receive-limit
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-limit"
+        help="Batas route export channel ipv4 (angka atau off; aksi default disable)">
+        <PARAM name="Value"
+            help="Jumlah route atau off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export-limit "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-limit action"
+        help="Aksi saat export-limit tercapai">
+        <PARAM name="Action"
+            help="warn | block | restart | disable"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export-limit-action "${Action}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no export-limit"
+        help="Hapus export-limit (default BIRD off)">
+        <CONFIG operation="unset" pattern="^export-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" export-limit
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disable-after-cease"
+        help="BIRD disable after cease (default BIRD off)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" disable-after-cease on
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="no disable-after-cease"
+        help="Matikan disable after cease (set disable after cease off)">
+        <CONFIG operation="unset" pattern="^disable-after-cease"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" disable-after-cease off
         </ACTION>
     </COMMAND>
 </VIEW>
@@ -337,6 +2688,2310 @@
             ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject community "${Value}"
         </ACTION>
     </COMMAND>
+
+    <COMMAND name="accept as-path"
+        help="Terima route dengan AS-path mengandung AS ini">
+        <PARAM name="Value"
+            help="AS atau daftar AS dipisah koma (mis. 65000,65001)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept as-path "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="reject as-path"
+        help="Tolak route dengan AS-path mengandung AS ini">
+        <PARAM name="Value"
+            help="AS atau daftar AS dipisah koma (mis. 65000,65001)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject as-path "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept origin"
+        help="Terima route dengan Origin route ini">
+        <PARAM name="Value"
+            help="igp | egp | incomplete"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept origin "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="reject origin"
+        help="Tolak route dengan Origin route ini">
+        <PARAM name="Value"
+            help="igp | egp | incomplete"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject origin "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept next-hop"
+        help="Terima route dengan Next hop route ini">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept next-hop "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="reject next-hop"
+        help="Tolak route dengan Next hop route ini">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject next-hop "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept originator-id"
+        help="Terima route dengan Originator ID route ini (route reflector)">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept originator-id "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="reject originator-id"
+        help="Tolak route dengan Originator ID route ini (route reflector)">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject originator-id "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept cluster-list"
+        help="Terima route dengan Cluster list mengandung cluster ini">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept cluster-list "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="reject cluster-list"
+        help="Tolak route dengan Cluster list mengandung cluster ini">
+        <PARAM name="Value"
+            help="Alamat IPv4"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject cluster-list "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept otc"
+        help="Terima route dengan OTC route ini">
+        <PARAM name="Value"
+            help="Angka OTC (RFC 9234)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept otc "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="reject otc"
+        help="Tolak route dengan OTC route ini">
+        <PARAM name="Value"
+            help="Angka OTC (RFC 9234)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject otc "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept prefix-pattern"
+        help="Terima prefix dengan pola {low,high} / - / + (mis. 10.0.0.0/8{16,24})">
+
+        <PARAM name="Pattern"
+            help="Pola prefix (mis. 10.0.0.0/8{16,24} atau 10.0.0.0/8-)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject prefix-pattern"
+        help="Tolak prefix dengan pola {low,high} / - / + (mis. 10.0.0.0/8{16,24})">
+
+        <PARAM name="Pattern"
+            help="Pola prefix (mis. 10.0.0.0/8{16,24} atau 10.0.0.0/8-)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept path-mask"
+        help="Terima route dengan AS-path cocok mask (mis. *,65001,*)">
+
+        <PARAM name="Mask"
+            help="Mask koma (elemen * ? AS AS+ A..B)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept path-mask "${Mask}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject path-mask"
+        help="Tolak route dengan AS-path cocok mask (mis. *,65001,*)">
+
+        <PARAM name="Mask"
+            help="Mask koma (elemen * ? AS AS+ A..B)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject path-mask "${Mask}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept path-first"
+        help="Terima route dengan ASN pertama path ini">
+
+        <PARAM name="AS"
+            help="Nomor AS pertama"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept path-first "${AS}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject path-first"
+        help="Tolak route dengan ASN pertama path ini">
+
+        <PARAM name="AS"
+            help="Nomor AS pertama"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject path-first "${AS}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept path-last"
+        help="Terima route dengan ASN terakhir path ini">
+
+        <PARAM name="AS"
+            help="Nomor AS terakhir"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept path-last "${AS}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject path-last"
+        help="Tolak route dengan ASN terakhir path ini">
+
+        <PARAM name="AS"
+            help="Nomor AS terakhir"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject path-last "${AS}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept path-len"
+        help="Terima route dengan panjang AS-path sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Panjang path"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept path-len "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject path-len"
+        help="Tolak route dengan panjang AS-path sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Panjang path"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject path-len "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept prefix-len"
+        help="Terima route dengan panjang prefix sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Panjang prefix 0..128"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept prefix-len "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject prefix-len"
+        help="Tolak route dengan panjang prefix sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Panjang prefix 0..128"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject prefix-len "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept defined"
+        help="Terima route dengan atribut ini terdefinisi">
+
+        <PARAM name="Attr"
+            help="Nama atribut (mis. bgp_med)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept defined "${Attr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject defined"
+        help="Tolak route dengan atribut ini terdefinisi">
+
+        <PARAM name="Attr"
+            help="Nama atribut (mis. bgp_med)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject defined "${Attr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept local-pref"
+        help="Terima route dengan bgp_local_pref sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai local-pref"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept local-pref "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject local-pref"
+        help="Tolak route dengan bgp_local_pref sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai local-pref"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject local-pref "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept med"
+        help="Terima route dengan bgp_med sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai MED"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept med "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject med"
+        help="Tolak route dengan bgp_med sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai MED"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject med "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept roa"
+        help="Terima route dengan hasil roa_check di tabel ini">
+
+        <PARAM name="Table"
+            help="Nama tabel roa"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ROA_VALID | ROA_INVALID | ROA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept roa "${Table}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject roa"
+        help="Tolak route dengan hasil roa_check di tabel ini">
+
+        <PARAM name="Table"
+            help="Nama tabel roa"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ROA_VALID | ROA_INVALID | ROA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject roa "${Table}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept aspa-down"
+        help="Terima route dengan hasil aspa_check_downstream di tabel ini">
+
+        <PARAM name="Table"
+            help="Nama tabel aspa"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ASPA_VALID | ASPA_INVALID | ASPA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept aspa-down "${Table}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject aspa-down"
+        help="Tolak route dengan hasil aspa_check_downstream di tabel ini">
+
+        <PARAM name="Table"
+            help="Nama tabel aspa"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ASPA_VALID | ASPA_INVALID | ASPA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject aspa-down "${Table}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept aspa-up"
+        help="Terima route dengan hasil aspa_check_upstream di tabel ini">
+
+        <PARAM name="Table"
+            help="Nama tabel aspa"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ASPA_VALID | ASPA_INVALID | ASPA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept aspa-up "${Table}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject aspa-up"
+        help="Tolak route dengan hasil aspa_check_upstream di tabel ini">
+
+        <PARAM name="Table"
+            help="Nama tabel aspa"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ASPA_VALID | ASPA_INVALID | ASPA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject aspa-up "${Table}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept community-len"
+        help="Terima route dengan jumlah community sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Jumlah community"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept community-len "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject community-len"
+        help="Tolak route dengan jumlah community sesuai operator">
+
+        <PARAM name="Op"
+            help="Operator = != &lt; &gt; &lt;= &gt;="
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Jumlah community"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject community-len "${Op}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept match"
+        help="Terima route dengan kondisi COND (satu token; lihat BIRD-B5-REPORT.md)">
+
+        <PARAM name="Cond"
+            help="Kondisi mis. defined:bgp_med&amp;&amp;bgp_local_pref=100"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept match "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject match"
+        help="Tolak route dengan kondisi COND (satu token; lihat BIRD-B5-REPORT.md)">
+
+        <PARAM name="Cond"
+            help="Kondisi mis. defined:bgp_med&amp;&amp;bgp_local_pref=100"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject match "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="set"
+        help="Set atribut/variabel di filter (mis. set preference 100)">
+        <PARAM name="Attr"
+            help="Atribut (preference|gw|bgp_local_pref|bgp_med|bgp_origin|bgp_next_hop|igp_metric|weight|dest|onlink|rip_metric|atribut-int|variabel lokal)"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-set "${bgp_filter}" "${Attr}" "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="unset"
+        help="Unset atribut opsional di filter">
+        <PARAM name="Attr"
+            help="Nama atribut (mis. bgp_community)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-unset "${bgp_filter}" "${Attr}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="var"
+        help="Deklarasi variabel lokal filter">
+        <PARAM name="Type"
+            help="Tipe int|bool|pair|ip|prefix|string"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama variabel [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-var "${bgp_filter}" "${Type}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="var-set"
+        help="Deklarasi variabel SET filter (mis. var-set int-set odds [1,2,3])">
+        <PARAM name="Type"
+            help="Tipe set: int-set|pair-set|quad-set|ip-set|prefix-set|ec-set|lc-set|rd-set (enum-set TIDAK ada di BIRD 2.20)"
+            ptype="STRING"/>
+        <PARAM name="Var"
+            help="Nama variabel [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <PARAM name="Literal"
+            help="Literal set satu token tanpa spasi (mis. [1,2,3] atau [(65000,100),(65001,200)])"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-var-set "${bgp_filter}" "${Type}" "${Var}" "${Literal}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="method"
+        help="Panggil method list/atribut (mis. method bgp_community.delete(65000:100))">
+        <PARAM name="Call"
+            help="Pemanggilan method satu token: OBJ.METHOD(args) — OBJ bgp_community|bgp_ext_community|bgp_large_community|bgp_cluster_list|bgp_path; METHOD add|delete|filter|prepend|empty"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-method "${bgp_filter}" "${Call}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="if"
+        help="Buka blok if (tutup dengan close; else dengan else)">
+        <PARAM name="Cond"
+            help="Kondisi COND satu token"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" if "${Cond}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="else"
+        help="Cabang else dari blok if yang terbuka">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" else
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="for"
+        help="Buka blok for atas bgp_path / community list (tutup dengan close)">
+        <PARAM name="Type"
+            help="Tipe elemen int|pair|ec|lc|quad"
+            ptype="STRING"/>
+        <PARAM name="Var"
+            help="Nama variabel loop"
+            ptype="STRING"/>
+        <PARAM name="Source"
+            help="Sumber bgp_path|bgp_community|bgp_ext_community|bgp_large_community|bgp_cluster_list"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" for "${Type}" "${Var}" "${Source}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="case"
+        help="Buka blok case (cabang dengan when, tutup dengan close; tidak bisa untuk prefix)">
+        <PARAM name="Expr"
+            help="Ekspresi net.len|bgp_path.len|bgp_community.len|bgp_local_pref|bgp_med|bgp_origin|roa-check:TABEL|aspa-up:TABEL|aspa-down:TABEL|variabel-int"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" case "${Expr}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="when"
+        help="Cabang case dengan label">
+        <PARAM name="Label"
+            help="Label (angka, range A..B, atau nilai enum ORIGIN_* / ROA_* / ASPA_*)"
+            ptype="STRING"/>
+        <PARAM name="Stmt"
+            help="Statement accept|reject|set:ATTR=NILAI|unset:ATTR"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" when "${Label}" "${Stmt}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="otherwise"
+        help="Cabang else dari blok case yang terbuka">
+        <PARAM name="Stmt"
+            help="Statement accept|reject|set:ATTR=NILAI|unset:ATTR"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" otherwise "${Stmt}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="close"
+        help="Tutup blok if/for/case yang paling dalam">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" close
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+
+<VIEW name="configure-bird-function-view"
+    prompt="${SYSTEM_NAME}(config-bird-function-${bird_function})# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="returns"
+        help="Tipe return fungsi (-> TIPE; '-' hapus)">
+        <PARAM name="Type"
+            help="Tipe int|bool|pair|ip|prefix|string|bgppath|clist|eclist|lclist atau -"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-returns "${bird_function}" "${Type}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="param"
+        help="Tambah parameter fungsi">
+        <PARAM name="Type"
+            help="Tipe int|bool|pair|ip|prefix|string|bgppath|clist|eclist|lclist"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama parameter [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-param "${bird_function}" "${Type}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="var"
+        help="Deklarasi variabel lokal fungsi">
+        <PARAM name="Type"
+            help="Tipe int|bool|pair|ip|prefix|string"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama variabel [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-var "${bird_function}" "${Type}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="return"
+        help="Statement return (literal, nama var/param, atau kondisi COND)">
+        <PARAM name="Expr"
+            help="Ekspresi return"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-return "${bird_function}" "${Expr}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="set"
+        help="Set atribut/variabel di fungsi (mis. set preference 100)">
+        <PARAM name="Attr"
+            help="Atribut atau variabel lokal"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Nilai"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-set "${bird_function}" "${Attr}" "${Value}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="unset"
+        help="Unset atribut opsional di fungsi">
+        <PARAM name="Attr"
+            help="Nama atribut (mis. bgp_community)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-unset "${bird_function}" "${Attr}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="if"
+        help="Buka blok if (tutup dengan close; else dengan else)">
+        <PARAM name="Cond"
+            help="Kondisi COND satu token"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" if "${Cond}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="else"
+        help="Cabang else dari blok if yang terbuka">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" else
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="for"
+        help="Buka blok for atas bgp_path / community list (tutup dengan close)">
+        <PARAM name="Type"
+            help="Tipe elemen int|pair|ec|lc|quad"
+            ptype="STRING"/>
+        <PARAM name="Var"
+            help="Nama variabel loop"
+            ptype="STRING"/>
+        <PARAM name="Source"
+            help="Sumber bgp_path|bgp_community|bgp_ext_community|bgp_large_community|bgp_cluster_list"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" for "${Type}" "${Var}" "${Source}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="case"
+        help="Buka blok case (cabang dengan when, tutup dengan close; tidak bisa untuk prefix)">
+        <PARAM name="Expr"
+            help="Ekspresi net.len|bgp_path.len|bgp_community.len|bgp_local_pref|bgp_med|bgp_origin|roa-check:TABEL|aspa-up:TABEL|aspa-down:TABEL|variabel-int"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" case "${Expr}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="when"
+        help="Cabang case dengan label">
+        <PARAM name="Label"
+            help="Label (angka, range A..B, atau nilai enum ORIGIN_* / ROA_* / ASPA_*)"
+            ptype="STRING"/>
+        <PARAM name="Stmt"
+            help="Statement accept|reject|set:ATTR=NILAI|unset:ATTR"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" when "${Label}" "${Stmt}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="otherwise"
+        help="Cabang else dari blok case yang terbuka">
+        <PARAM name="Stmt"
+            help="Statement accept|reject|set:ATTR=NILAI|unset:ATTR"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" otherwise "${Stmt}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="close"
+        help="Tutup blok if/for/case yang paling dalam">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-block "${bird_function}" close
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-channel-view"
+    prompt="${SYSTEM_NAME}(config-bird-channel-${bgp_ch_ctx})# "
+    depth="3">
+    <NAMESPACE ref="configure-bird-neighbor-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to neighbor mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <!-- B6: channel BGP non-ipv4. KEY klish (bgp_channel): ipv6, mc4
+         (ipv4 multicast), mc6 (ipv6 multicast), mpls4 (ipv4 mpls),
+         mpls6 (ipv6 mpls), vpn4 (vpn4 mpls), vpn6 (vpn6 mpls),
+         vpn4mc (vpn4 multicast), vpn6mc (vpn6 multicast), flow4, flow6.
+         Default BIRD Bab 3.5 bila tak diset: import all, export none. -->
+    <COMMAND name="import"
+        help="Import policy channel ini (all, none, filter NAME)"/>
+
+    <COMMAND name="import all"
+        help="Import semua route lewat channel ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import" all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import none"
+        help="Import tidak ada route lewat channel ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import" none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import filter"
+        help="Import hanya route yang lolos filter">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import" filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export"
+        help="Export policy channel ini (all, none, filter NAME)"/>
+
+    <COMMAND name="export all"
+        help="Export semua route lewat channel ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export" all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export none"
+        help="Export tidak ada route lewat channel ini">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export" none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Export hanya route yang lolos filter">
+        <PARAM name="Name"
+            help="Nama filter"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export" filter "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table"
+        help="Tabel routing yang dihubungkan ke channel ini">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "table" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table"
+        help="Kembali ke tabel default BIRD (master table)">
+        <CONFIG operation="unset" pattern="^table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "table"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="preference"
+        help="Preference route lewat channel ini (0-65535)">
+        <PARAM name="Value"
+            help="Nilai preference"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "preference" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no preference"
+        help="Hapus preference channel ini (default BIRD)">
+        <CONFIG operation="unset" pattern="^preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "preference"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-keep-filtered"
+        help="Simpan route yang ter-filter import di Adj-RIB-In (import keep filtered on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import-keep-filtered" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-keep-filtered"
+        help="Matikan import keep filtered (default BIRD off)">
+        <CONFIG operation="unset" pattern="^import-keep-filtered"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import-keep-filtered" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="rpki-reload"
+        help="Reload otomatis channel ini saat tabel ROA/ASPA berubah (default BIRD on)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "rpki-reload" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no rpki-reload"
+        help="Matikan rpki reload channel ini">
+        <CONFIG operation="unset" pattern="^rpki-reload"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "rpki-reload" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-limit"
+        help="Batas route yang di-import lewat channel ini (angka atau off)">
+        <PARAM name="Value"
+            help="Angka atau off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import-limit" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-limit"
+        help="Hapus import-limit channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^import-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "import-limit"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import-limit-action"
+        help="Aksi saat import-limit tercapai (warn, block, restart, disable)">
+        <PARAM name="Action"
+            help="warn, block, restart, atau disable"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import-limit-action" "${Action}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-limit-action"
+        help="Hapus import-limit-action channel ini (default BIRD disable)">
+        <CONFIG operation="unset" pattern="^import-limit-action"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "import-limit-action"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="receive-limit"
+        help="Batas route yang diterima dan diingat lewat channel ini (angka atau off)">
+        <PARAM name="Value"
+            help="Angka atau off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "receive-limit" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no receive-limit"
+        help="Hapus receive-limit channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^receive-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "receive-limit"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="receive-limit-action"
+        help="Aksi saat receive-limit tercapai (warn, block, restart, disable)">
+        <PARAM name="Action"
+            help="warn, block, restart, atau disable"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "receive-limit-action" "${Action}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no receive-limit-action"
+        help="Hapus receive-limit-action channel ini (default BIRD disable)">
+        <CONFIG operation="unset" pattern="^receive-limit-action"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "receive-limit-action"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-limit"
+        help="Batas route yang di-export lewat channel ini (angka atau off, EKSPERIMENTAL)">
+        <PARAM name="Value"
+            help="Angka atau off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export-limit" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-limit"
+        help="Hapus export-limit channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^export-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "export-limit"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export-limit-action"
+        help="Aksi saat export-limit tercapai (warn, block, restart, disable)">
+        <PARAM name="Action"
+            help="warn, block, restart, atau disable"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export-limit-action" "${Action}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-limit-action"
+        help="Hapus export-limit-action channel ini (default BIRD disable)">
+        <CONFIG operation="unset" pattern="^export-limit-action"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "export-limit-action"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mandatory"
+        help="AFI/SAFI channel ini wajib dinegosiasikan (sesi gagal bila tidak)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "mandatory" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mandatory"
+        help="Matikan mandatory channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mandatory"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "mandatory" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-self"
+        help="Iklankan alamat lokal sendiri sebagai next hop (on, off, ibgp, ebgp)">
+        <PARAM name="Value"
+            help="on, off, ibgp, atau ebgp"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "next-hop-self" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no next-hop-self"
+        help="Hapus next-hop-self channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^next-hop-self"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "next-hop-self"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-keep"
+        help="Jangan ubah atribut Next Hop (on, off, ibgp, ebgp)">
+        <PARAM name="Value"
+            help="on, off, ibgp, atau ebgp"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "next-hop-keep" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no next-hop-keep"
+        help="Hapus next-hop-keep channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^next-hop-keep"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "next-hop-keep"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-address"
+        help="Alamat yang dipakai saat next hop lokal harus diumumkan">
+        <PARAM name="IP"
+            help="Alamat IP (IPv4 untuk channel v4, IPv6 untuk channel v6)"
+            ptype="IP_ADDR_ANY"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "next-hop-address" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no next-hop-address"
+        help="Kembali ke next-hop-address default BIRD (source address sesi)">
+        <CONFIG operation="unset" pattern="^next-hop-address"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "next-hop-address"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="next-hop-prefer-global"
+        help="IPv6: utamakan alamat global dibanding link-local sebagai next hop">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "next-hop-prefer-global" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no next-hop-prefer-global"
+        help="Matikan next-hop-prefer-global (default BIRD off)">
+        <CONFIG operation="unset" pattern="^next-hop-prefer-global"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "next-hop-prefer-global" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="gateway"
+        help="Cara menghitung gateway dari bgp_next_hop (direct atau recursive)">
+        <PARAM name="Mode"
+            help="direct atau recursive"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "gateway" "${Mode}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no gateway"
+        help="Hapus gateway channel ini (default BIRD: direct untuk sesi direct)">
+        <CONFIG operation="unset" pattern="^gateway"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "gateway"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="igp-table"
+        help="Tabel IGP untuk resolve next hop channel ini">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "igp-table" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no igp-table"
+        help="Kembali ke igp-table default BIRD (tabel utama channel)">
+        <CONFIG operation="unset" pattern="^igp-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "igp-table"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="igp-table6"
+        help="Tabel IGP IPv6 untuk resolve next hop channel ini">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "igp-table6" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no igp-table6"
+        help="Kembali ke igp-table6 default BIRD (tabel utama channel)">
+        <CONFIG operation="unset" pattern="^igp-table6"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "igp-table6"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="import-table"
+        help="Simpan semua route diterima SEBELUM import filter (Adj-RIB-In)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import-table" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import-table"
+        help="Matikan import-table channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^import-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import-table" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="export-table"
+        help="Simpan semua route dikirim SETELAH export filter (Adj-RIB-Out)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export-table" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export-table"
+        help="Matikan export-table channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^export-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export-table" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="secondary"
+        help="Coba route berikutnya bila route terpilih ditolak export filter (butuh tabel sorted)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "secondary" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no secondary"
+        help="Matikan secondary channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^secondary"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "secondary" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="validate"
+        help="Validasi FlowSpec channel ini (khusus flow4/flow6)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "validate" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no validate"
+        help="Matikan validate channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^validate"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "validate" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="base-table"
+        help="Tabel IP untuk validasi FlowSpec (khusus flow4/flow6, wajib trie on)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "base-table" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no base-table"
+        help="Kembali ke base-table default BIRD (tabel utama channel)">
+        <CONFIG operation="unset" pattern="^base-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "base-table"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="extended-next-hop"
+        help="Izinkan next hop beda address family dari prefix">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "extended-next-hop" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no extended-next-hop"
+        help="Matikan extended-next-hop channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^extended-next-hop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "extended-next-hop" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-extended-next-hop"
+        help="Capability Extended Next Hop wajib diumumkan neighbor">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "require-extended-next-hop" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no require-extended-next-hop"
+        help="Matikan require-extended-next-hop channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^require-extended-next-hop"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "require-extended-next-hop" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="add-paths"
+        help="ADD-PATH: iklankan lebih dari satu path per destination (on, off, rx, tx)">
+        <PARAM name="Value"
+            help="on, off, rx, atau tx"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "add-paths" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no add-paths"
+        help="Hapus add-paths channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^add-paths"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "add-paths"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="require-add-paths"
+        help="Capability ADD-PATH wajib diumumkan neighbor">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "require-add-paths" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no require-add-paths"
+        help="Matikan require-add-paths channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^require-add-paths"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "require-add-paths" off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="aigp"
+        help="AIGP: propagasi accumulated IGP metric (on, off, originate)">
+        <PARAM name="Value"
+            help="on, off, atau originate"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "aigp" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no aigp"
+        help="Hapus aigp channel ini (default BIRD: on untuk IBGP, off untuk EBGP)">
+        <CONFIG operation="unset" pattern="^aigp"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "aigp"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="cost"
+        help="Jarak ke BGP next hop (mode gateway direct)">
+        <PARAM name="Value"
+            help="Nilai cost"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "cost" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no cost"
+        help="Hapus cost channel ini">
+        <CONFIG operation="unset" pattern="^cost"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "cost"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="graceful-restart"
+        help="Peran restarting graceful restart per AFI/SAFI (off, aware, on)">
+        <PARAM name="Value"
+            help="off, aware, atau on"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "graceful-restart" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no graceful-restart"
+        help="Hapus graceful-restart channel ini">
+        <CONFIG operation="unset" pattern="^graceful-restart"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "graceful-restart"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="llgr"
+        help="Peran restarting long lived graceful restart per AFI/SAFI (off, aware, on)">
+        <PARAM name="Value"
+            help="off, aware, atau on"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "llgr" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no llgr"
+        help="Hapus llgr channel ini">
+        <CONFIG operation="unset" pattern="^llgr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "llgr"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="llgr-stale-time"
+        help="Long lived stale time per AFI/SAFI (detik)">
+        <PARAM name="Value"
+            help="Nilai detik"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "llgr-stale-time" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no llgr-stale-time"
+        help="Hapus llgr-stale-time channel ini">
+        <CONFIG operation="unset" pattern="^llgr-stale-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "llgr-stale-time"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug"
+        help="Debug channel ini (all, off, atau states,routes,filters)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "debug" "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug channel ini (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-unset "${bgp_ch_ctx}" "debug"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-global-view"
+    prompt="${SYSTEM_NAME}(config-bird-global)# "
+    depth="2">
+    <NAMESPACE ref="configure-bird-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to bird mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="show"
+        help="Show BIRD global information"/>
+
+    <!-- B6: definisi tabel -->
+    <COMMAND name="table"
+        help="Definisi routing table baru (nettype + nama)">
+        <PARAM name="Nettype"
+            help="ipv4, ipv6, ipv6-sadr, vpn4, vpn6, roa4, roa6, flow4, flow6, mpls"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG pattern="^table ${Nettype} ${Name}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-add "${Nettype}" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table"
+        help="Hapus definisi tabel (opsinya ikut dihapus)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^table .* ${Name}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-sorted"
+        help="Aktifkan sorted pada tabel (daftar route terurut penuh)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" sorted on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-sorted"
+        help="Matikan sorted pada tabel (default BIRD off)">
+        <CONFIG operation="unset" pattern="^table-sorted"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" sorted off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-trie"
+        help="Aktifkan trie pada tabel (wajib untuk validasi flowspec dan RPKI)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" trie on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-trie"
+        help="Matikan trie pada tabel (default BIRD off)">
+        <CONFIG operation="unset" pattern="^table-trie"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" trie off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-debug"
+        help="Debug tabel (all, off, atau states,routes,filters)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" debug "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-debug"
+        help="Hapus debug tabel (default BIRD off)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^table-debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-unset "${Name}" debug
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-min-settle-time"
+        help="Min settle time tabel (waktu BIRD, mis. 1s)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Waktu (mis. 1s, 500ms)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" min-settle-time "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-min-settle-time"
+        help="Hapus min-settle-time tabel (default BIRD 1 s)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^table-min-settle-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-unset "${Name}" min-settle-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-max-settle-time"
+        help="Max settle time tabel (waktu BIRD, mis. 20s)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Waktu (mis. 20s)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" max-settle-time "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-max-settle-time"
+        help="Hapus max-settle-time tabel (default BIRD 20 s)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^table-max-settle-time"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-unset "${Name}" max-settle-time
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-gc-threshold"
+        help="GC threshold tabel (jumlah network terhapus pemicu GC, default BIRD 1000)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Jumlah network"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" gc-threshold "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-gc-threshold"
+        help="Hapus gc-threshold tabel (default BIRD 1000)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^table-gc-threshold"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-unset "${Name}" gc-threshold
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="table-gc-period"
+        help="GC period tabel (waktu BIRD antar siklus GC)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <PARAM name="Value"
+            help="Waktu (mis. 10s)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-set "${Name}" gc-period "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table-gc-period"
+        help="Hapus gc-period tabel (default BIRD adaptif)">
+        <PARAM name="Name"
+            help="Nama tabel"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^table-gc-period"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh table-unset "${Name}" gc-period
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show tables"
+        help="Daftar tabel BIRD yang didefinisikan (nettype + nama + opsi)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh show-tables
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: log -->
+    <COMMAND name="log-file"
+        help="Log BIRD ke file (semua kelas)">
+        <PARAM name="Path"
+            help="Path file log"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add file "${Path}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-file-limit"
+        help="Log BIRD ke file dengan rotasi (limit + backup)">
+        <PARAM name="Path"
+            help="Path file log"
+            ptype="STRING"/>
+        <PARAM name="Limit"
+            help="Batas ukuran byte sebelum rotasi"
+            ptype="UINT"/>
+        <PARAM name="Backup"
+            help="Path file backup rotasi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add file "${Path}" limit "${Limit}" backup "${Backup}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-file-classes"
+        help="Log BIRD ke file hanya untuk kelas tertentu">
+        <PARAM name="Path"
+            help="Path file log"
+            ptype="STRING"/>
+        <PARAM name="Classes"
+            help="Daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add file "${Path}" classes "${Classes}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-file-limit-classes"
+        help="Log BIRD ke file dengan rotasi dan kelas tertentu">
+        <PARAM name="Path"
+            help="Path file log"
+            ptype="STRING"/>
+        <PARAM name="Limit"
+            help="Batas ukuran byte sebelum rotasi"
+            ptype="UINT"/>
+        <PARAM name="Backup"
+            help="Path file backup rotasi"
+            ptype="STRING"/>
+        <PARAM name="Classes"
+            help="Daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add file "${Path}" limit "${Limit}" backup "${Backup}" classes "${Classes}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no log-file"
+        help="Hapus log file ini">
+        <PARAM name="Path"
+            help="Path file log"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^log-file ${Path}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-del file "${Path}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="log-syslog"
+        help="Log BIRD ke syslog (semua kelas)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add syslog all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-syslog-name"
+        help="Log BIRD ke syslog dengan nama program">
+        <PARAM name="Name"
+            help="Nama syslog"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add syslog name "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-syslog-classes"
+        help="Log BIRD ke syslog hanya untuk kelas tertentu">
+        <PARAM name="Classes"
+            help="Daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add syslog classes "${Classes}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no log-syslog"
+        help="Hapus log syslog">
+        <CONFIG operation="unset" pattern="^log-syslog"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-del syslog
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="log-stderr"
+        help="Log BIRD ke stderr (semua kelas)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add stderr all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-stderr-classes"
+        help="Log BIRD ke stderr hanya untuk kelas tertentu">
+        <PARAM name="Classes"
+            help="Daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add stderr classes "${Classes}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no log-stderr"
+        help="Hapus log stderr">
+        <CONFIG operation="unset" pattern="^log-stderr"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-del stderr
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="log-udp"
+        help="Log BIRD via UDP (format syslog RFC 3164, semua kelas)">
+        <PARAM name="Addr"
+            help="Alamat IP tujuan"
+            ptype="IP_ADDR_ANY"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add udp "${Addr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-udp-port"
+        help="Log BIRD via UDP ke port tertentu">
+        <PARAM name="Addr"
+            help="Alamat IP tujuan"
+            ptype="IP_ADDR_ANY"/>
+        <PARAM name="Port"
+            help="Port UDP"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add udp "${Addr}" port "${Port}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="log-udp-classes"
+        help="Log BIRD via UDP hanya untuk kelas tertentu">
+        <PARAM name="Addr"
+            help="Alamat IP tujuan"
+            ptype="IP_ADDR_ANY"/>
+        <PARAM name="Classes"
+            help="Daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-add udp "${Addr}" classes "${Classes}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no log-udp"
+        help="Hapus log UDP ini">
+        <PARAM name="Addr"
+            help="Alamat IP tujuan"
+            ptype="IP_ADDR_ANY"/>
+        <CONFIG operation="unset" pattern="^log-udp ${Addr}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh log-del udp "${Addr}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: debug global -->
+    <COMMAND name="debug-protocols"
+        help="Debug global protokol (all, off, atau states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-set protocols "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug-protocols"
+        help="Hapus debug protocols (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug-protocols"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-del protocols
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug-channels"
+        help="Debug global channel (all, off, atau states,routes,filters,events)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-set channels "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug-channels"
+        help="Hapus debug channels (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug-channels"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-del channels
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug-tables"
+        help="Debug global tabel (all, off, atau states,routes,filters)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-set tables "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug-tables"
+        help="Hapus debug tables (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug-tables"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-del tables
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug-commands"
+        help="Logging koneksi client birdc (0 tanpa logging, 1 connect-disconnect, 2 semua perintah)">
+        <PARAM name="Value"
+            help="Angka 0 atau lebih"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-commands-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug-commands"
+        help="Hapus debug commands (default BIRD 0)">
+        <CONFIG operation="unset" pattern="^debug-commands"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-commands-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug-latency"
+        help="Aktifkan pelacakan waktu eksekusi event internal">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-latency-set on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug-latency"
+        help="Matikan debug latency (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug-latency"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-latency-set off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="debug-latency-limit"
+        help="Batas waktu event yang di-log bila debug latency aktif (default BIRD 1 s)">
+        <PARAM name="Value"
+            help="Waktu (mis. 1s, 500ms)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-latency-limit-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug-latency-limit"
+        help="Hapus debug latency limit (default BIRD 1 s)">
+        <CONFIG operation="unset" pattern="^debug-latency-limit"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh debug-latency-limit-del
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: watchdog -->
+    <COMMAND name="watchdog-warning"
+        help="Batas waktu satu iterasi I/O loop sebelum warning (default BIRD 5 s)">
+        <PARAM name="Value"
+            help="Waktu (mis. 5s)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh watchdog-warning-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no watchdog-warning"
+        help="Hapus watchdog warning (default BIRD 5 s)">
+        <CONFIG operation="unset" pattern="^watchdog-warning"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh watchdog-warning-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="watchdog-timeout"
+        help="Batas waktu I/O loop sebelum BIRD di-kill (0 sama dengan disabled)">
+        <PARAM name="Value"
+            help="Waktu (mis. 0, 10s)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh watchdog-timeout-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no watchdog-timeout"
+        help="Hapus watchdog timeout (default BIRD disabled)">
+        <CONFIG operation="unset" pattern="^watchdog-timeout"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh watchdog-timeout-del
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: mrtdump -->
+    <COMMAND name="mrtdump-file"
+        help="File MRTdump (wajib di-set agar MRTdump bisa dipakai)">
+        <PARAM name="Path"
+            help="Path file MRTdump"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mrtdump-file-set "${Path}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump-file"
+        help="Hapus mrtdump file">
+        <CONFIG operation="unset" pattern="^mrtdump-file"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mrtdump-file-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump-protocols"
+        help="Default global MRTdump per protokol (all, off, atau states,messages)">
+        <PARAM name="Spec"
+            help="all, off, atau daftar kelas dipisah koma"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mrtdump-protocols-set "${Spec}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump-protocols"
+        help="Hapus mrtdump protocols (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump-protocols"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mrtdump-protocols-del
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: hostname / graceful restart wait / timeformat / router-id-from -->
+    <COMMAND name="hostname"
+        help="Hostname yang dipakai BIRD (beda dari hostname sistem)">
+        <PARAM name="Name"
+            help="Nama host"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh hostname-set "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no hostname"
+        help="Hapus hostname BIRD (default uname -n)">
+        <CONFIG operation="unset" pattern="^hostname"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh hostname-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="graceful-restart-wait"
+        help="Timeout pemulihan graceful restart dalam detik (default BIRD 240)">
+        <PARAM name="Value"
+            help="Detik"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh graceful-restart-wait-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no graceful-restart-wait"
+        help="Hapus graceful restart wait (default BIRD 240)">
+        <CONFIG operation="unset" pattern="^graceful-restart-wait"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh graceful-restart-wait-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="timeformat"
+        help="Format tanggal dan waktu (route, protocol, base, atau log)">
+        <PARAM name="Kind"
+            help="route, protocol, base, atau log"
+            ptype="STRING"/>
+        <PARAM name="Format"
+            help="Shorthand iso long, iso short ms, atau format strftime"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh timeformat-set "${Kind}" "${Format}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="timeformat-limit"
+        help="Format tanggal dan waktu dengan format kedua untuk waktu lampau">
+        <PARAM name="Kind"
+            help="route, protocol, base, atau log"
+            ptype="STRING"/>
+        <PARAM name="Format"
+            help="Format pertama"
+            ptype="STRING"/>
+        <PARAM name="Limit"
+            help="Batas detik"
+            ptype="UINT"/>
+        <PARAM name="Format2"
+            help="Format kedua"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh timeformat-set "${Kind}" "${Format}" limit "${Limit}" "${Format2}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no timeformat"
+        help="Hapus timeformat (default BIRD iso short ms, iso long ms)">
+        <PARAM name="Kind"
+            help="route, protocol, base, atau log"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^timeformat ${Kind}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh timeformat-del "${Kind}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="router-id-from"
+        help="Ambil router-id dari alamat interface yang cocok pola (mask atau prefix, minus untuk exclude)">
+        <PARAM name="Pattern"
+            help="Pola interface, mis. eth bintang atau prefix"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh router-id-from-set "${Pattern}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router-id-from"
+        help="Hapus router-id-from">
+        <CONFIG operation="unset" pattern="^router-id-from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh router-id-from-del
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: include / define / attribute -->
+    <COMMAND name="include"
+        help="Sertakan file konfigurasi BIRD lain (wildcard diizinkan)">
+        <PARAM name="File"
+            help="Path file"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh include-add "${File}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no include"
+        help="Hapus include file ini">
+        <PARAM name="File"
+            help="Path file"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^include ${File}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh include-del "${File}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- B7: cli socket tambahan (Bab 4.2: BC6/BC7) -->
+    <COMMAND name="cli"
+        help="Socket remote-control BIRD tambahan (Bab 4.2; default hanya bird.ctl)">
+        <PARAM name="Socket"
+            help="Path socket"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh cli-add "${Socket}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="cli restrict"
+        help="Socket remote-control BIRD tambahan, restricted (read-only, seperti birdc -r)">
+        <PARAM name="Socket"
+            help="Path socket"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh cli-add "${Socket}" restrict
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no cli"
+        help="Hapus socket remote-control BIRD tambahan ini">
+        <PARAM name="Socket"
+            help="Path socket"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^cli ${Socket}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh cli-del "${Socket}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="define"
+        help="Definisi konstanta BIRD (int, pair, string, prefix, atau bool)">
+        <PARAM name="Name"
+            help="Nama konstanta"
+            ptype="STRING"/>
+        <PARAM name="Expr"
+            help="Ekspresi (mis. 24, (65000,100), teks, 10.0.0.0/8, true)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh define-add "${Name}" "${Expr}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no define"
+        help="Hapus definisi konstanta">
+        <PARAM name="Name"
+            help="Nama konstanta"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^define ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh define-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="attribute"
+        help="Deklarasi atribut route kustom">
+        <PARAM name="Type"
+            help="int, bool, string, ip, prefix, pair, quad, bytestring, bgppath, clist, eclist, lclist, rd"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama atribut"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh attribute-add "${Type}" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no attribute"
+        help="Hapus deklarasi atribut kustom">
+        <PARAM name="Name"
+            help="Nama atribut"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^attribute ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh attribute-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: template -->
+    <COMMAND name="template"
+        help="Template protokol untuk pewarisan opsi (template OSPF tidak didukung BIRD)">
+        <PARAM name="Proto"
+            help="bgp, rip, static, direct, kernel, device, bfd, atau pipe"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama template"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh template-add "${Proto}" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="template-from"
+        help="Template protokol yang mewarisi template lain">
+        <PARAM name="Proto"
+            help="bgp, rip, static, direct, kernel, device, bfd, atau pipe"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama template"
+            ptype="STRING"/>
+        <PARAM name="Parent"
+            help="Nama template induk"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh template-add "${Proto}" "${Name}" from "${Parent}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no template"
+        help="Hapus template protokol">
+        <PARAM name="Proto"
+            help="bgp, rip, static, direct, kernel, device, bfd, atau pipe"
+            ptype="STRING"/>
+        <PARAM name="Name"
+            help="Nama template"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^template ${Proto} ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh template-del "${Proto}" "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- B6: MPLS domain + label range (EKSPERIMENTAL) -->
+    <COMMAND name="mpls-domain"
+        help="Definisi MPLS domain baru (EKSPERIMENTAL)">
+        <PARAM name="Name"
+            help="Nama domain"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mpls-domain-add "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-domain"
+        help="Hapus MPLS domain (label-range di dalamnya ikut dihapus)">
+        <PARAM name="Name"
+            help="Nama domain"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^mpls-domain ${Name}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mpls-domain-del "${Name}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mpls-label-range"
+        help="Label range di dalam MPLS domain (EKSPERIMENTAL)">
+        <PARAM name="Domain"
+            help="Nama domain"
+            ptype="STRING"/>
+        <PARAM name="Range"
+            help="Nama range"
+            ptype="STRING"/>
+        <PARAM name="Start"
+            help="Label awal (1 atau lebih)"
+            ptype="UINT"/>
+        <PARAM name="Length"
+            help="Panjang range (1 atau lebih)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mpls-label-range-add "${Domain}" "${Range}" "${Start}" "${Length}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-label-range"
+        help="Hapus label range">
+        <PARAM name="Domain"
+            help="Nama domain"
+            ptype="STRING"/>
+        <PARAM name="Range"
+            help="Nama range"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^mpls-label-range ${Domain} ${Range}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh mpls-label-range-del "${Domain}" "${Range}"
+        </ACTION>
+    </COMMAND>
 </VIEW>
 
 <VIEW name="enable-view">
@@ -346,6 +5001,14 @@
         interrupt="true">
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh show
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show global"
+        help="Status opsi global BIRD (intent + section)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh show
         </ACTION>
     </COMMAND>
 </VIEW>
