@@ -1162,6 +1162,164 @@ commit
 save
 ```
 
+### 9b.7 TCP MD5 authentication (RFC 2385) — hanya untuk testing lab
+
+> **Catatan:** password BGP MD5 di sini HANYA untuk testing lab.
+> Bukan kredensial produksi. Password test yang dipakai di lab
+> dicatat di `HASIL.md` (tindak lanjut FASE 3) — bukan di panduan
+> ini — karena panduan ini prosedur umum, passwordnya spesifik
+> per sesi test.
+
+TCP MD5 menandatangani setiap segmen TCP sesi BGP dengan kunci
+rahasia bersama (shared secret). Kedua sisi HARUS memakai password
+yang SAMA persis — satu karakter beda saja = sesi GAGAL total
+(tidak ada fallback ke tanpa-MD5).
+
+**Syarat mutlak:** password IDENTIK di BSDRP dan di RB3011.
+Bila hanya satu sisi yang dipasang MD5, sesi TIDAK PERNAH
+Established — sisi tanpa MD5 menolak SYN yang ditandatangani MD5,
+sisi dengan MD5 menolak SYN tanpa tanda tangan. Gejalanya di
+`show protocol`: sesi mentok `Active` / `Connect` dengan
+`Socket: Connection closed` atau `Connection refused`, dan di
+`tcpdump` terlihat SYN berulang (retransmit) tanpa SYN-ACK.
+Itu BUKAN masalah link — itu MD5 tidak cocok / hanya satu sisi.
+
+**1. Generate password (host-side, di mesin BSDRP)**
+
+Password acak kuat, 20 karakter alfanumerik (tanpa spasi — klish
+menolak spasi). Generate di mesin, JANGAN tulis di chat:
+
+```
+PW=$(LC_ALL=C tr -dc "A-Za-z0-9" < /dev/urandom | head -c 20)
+echo "$PW" > /tmp/bgpmd5-test-pw.txt; chmod 600 /tmp/bgpmd5-test-pw.txt
+```
+
+(`LC_ALL=C` wajib — `tr` FreeBSD tanpa itu gagal
+`Illegal byte sequence` pada byte acak. Cek panjang = 20
+sebelum dipakai.)
+
+**2. Sisi BSDRP (klish) — pasang password ke neighbor**
+
+Perintah klish ada di view `neighbor` (`password <teks>`),
+atau via backend `titian-bgp.sh`:
+
+```
+configure terminal
+router bird
+neighbor 10.99.40.2
+password <PASSWORD-TEST>
+exit
+end
+configure terminal
+commit
+save
+```
+
+Atau via backend (hasil sama — intent yang ditulis identik):
+
+```
+/opt/titian/sbin/titian-bgp.sh neighbor-set 10.99.40.2 password <PASSWORD-TEST>
+/opt/titian/sbin/titian-bgp.sh generate
+```
+
+Hasil di bird.conf (section `bgp_10_99_40_2`):
+
+```
+protocol bgp bgp_10_99_40_2 {
+    ...
+    neighbor 10.99.40.2 as 65001;
+    password "<PASSWORD-TEST>";
+    ...
+}
+```
+
+**3. Sisi RB3011 (RouterOS 7) — pasang kunci yang SAMA**
+
+Password dibaca dari file di mesin BSDRP (jangan ketik ulang
+manual — rawan typo satu karakter = sesi gagal):
+
+```
+PW=$(cat /tmp/bgpmd5-test-pw.txt)
+ssh -i /root/.ssh/rb3011_key agoes@192.168.91.32 \
+  "/routing/bgp/connection/set [find name=bgp-bsdRP] tcp-md5-key=$PW"
+```
+
+Atau langsung di terminal RB3011:
+
+```
+/routing/bgp/connection/set [find name=bgp-bsdRP] tcp-md5-key=<PASSWORD-TEST>
+```
+
+Gotcha RouterOS 7.25.1:
+
+- `tcp-md5-key` adalah properti **connection**, BUKAN template.
+  Set di template DITOLAK: `bad parameter tcp-md5-key`.
+- `print` (termasuk `print detail`) TIDAK menampilkan
+  `tcp-md5-key` — RouterOS menyembunyikan nilai kunci.
+  Tidak tampil di print BUKAN berarti tidak terpasang.
+  `set` yang sukses (exit 0, tanpa error) = terpasang.
+  Verifikasi nyata = sesi Established + digest MD5 valid
+  (lihat § verifikasi di bawah).
+
+**4. Verifikasi — sesi kembali Established dengan MD5 aktif**
+
+Sesi akan drop saat MD5 dipasang di satu sisi, lalu
+re-Established sesudah kedua sisi sama. Tunggu sampai
+`show protocol` menunjukkan `Established` (di link lossy
+bisa beberapa menit — retransmit TCP butuh jendela loss
+rendah; itu masalah link, bukan MD5):
+
+```
+show protocol bgp           # harus Established
+birdc show route protocol bgp_10_99_40_2
+```
+
+Bukti MD5 aktif (dari mesin BSDRP) — tangkap SYN port 179,
+cek opsi MD5 pada paket:
+
+```
+tcpdump -n -v -i bridge0 "tcp port 179 and tcp[tcpflags] & tcp-syn != 0"
+```
+
+SYN dari peer yang memakai MD5 menampilkan
+`options [..., md5 ..., mss ...]`. Untuk memverifikasi
+digest-nya cocok dengan password yang dipakai, beri password
+ke tcpdump lewat `-M`:
+
+```
+PW=$(cat /tmp/bgpmd5-test-pw.txt)
+tcpdump -n -v -M "$PW" -i bridge0 "tcp port 179 and tcp[tcpflags] & tcp-syn != 0"
+```
+
+Hasil yang benar: `options [nop,nop,md5 valid,mss ...]`.
+`md5 valid` = digest cocok = kedua sisi memakai password
+yang sama. Bila digest salah, tcpdump melaporkan MD5 gagal —
+artinya password kedua sisi TIDAK sama, samakan ulang.
+
+**5. Mencabut MD5 (kembali tanpa password)**
+
+```
+configure terminal
+router bird
+neighbor 10.99.40.2
+no password
+exit
+end
+configure terminal
+commit
+save
+```
+
+Dan di RB3011:
+
+```
+/routing/bgp/connection/set [find name=bgp-bsdRP] tcp-md5-key=""
+```
+
+Cabut di KEDUA sisi — bila hanya satu sisi dicabut, sesi
+gagal dengan gejala yang sama seperti di atas (satu sisi
+ber-MD5, satu tidak).
+
 ---
 
 ## 9c. FRR — routing suite alternatif (bukan BIRD)
