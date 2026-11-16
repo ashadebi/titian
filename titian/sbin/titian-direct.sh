@@ -155,7 +155,125 @@ cmd_channel_del() {
         *) err "channel harus ipv4|ipv6|ipv6-sadr: $1" ;;
     esac
     dellines "^channel $1\$"
+    # Hapus juga opsi channel (preference/import/export) bila ada.
+    dellines "^channel $1 preference "
+    dellines "^channel $1 import "
+    dellines "^channel $1 export "
     echo "Direct channel $1 dihapus"
+}
+
+valid_name() {
+    # $1=nama $2=konteks: simbol BIRD [A-Za-z_][A-Za-z0-9_]*.
+    case "$1" in
+        ''|*[!A-Za-z0-9_]*) err "$2 harus nama BIRD [A-Za-z0-9_]: $1" ;;
+    esac
+    case "$1" in [A-Za-z_]*) ;; *) err "$2 harus diawali huruf/underscore: $1" ;; esac
+}
+
+valid_num() {
+    # valid_num <nilai> <lo> <hi> <label> — bilangan bulat dalam range.
+    case "$1" in ''|*[!0-9]*) err "$4 harus bilangan $2..$3: $1" ;; esac
+    [ "$1" -ge "$2" ] 2>/dev/null && [ "$1" -le "$3" ] 2>/dev/null || \
+        err "$4 harus bilangan $2..$3: $1"
+}
+
+cond_validate() {
+    # cond_validate <COND> — validasi ekspresi filter bentuk ringkas
+    # (mis. net~10.0.0.0/8) via titian-bgp.sh cond-to-bird. Bila script
+    # itu tidak ada (deploy parsial), fallback validasi ringan.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" >/dev/null
+    else
+        case "$1" in *[\;\{\}]* ) err "where: ekspresi mengandung karakter terlarang (; { })" ;; esac
+    fi
+}
+
+cond_translate() {
+    # cond_translate <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai di generate untuk bentuk `import/export where <COND>`.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" || exit 33
+    else
+        err "penerjemah kondisi tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
+}
+
+cmd_disabled_set() { # disabled-set on|off (Bab 3.4-1)
+    case "$1" in
+        on|off) upsert '^disabled ' "disabled $1" ;;
+        *) err "disabled harus on|off: $1" ;;
+    esac
+    echo "Direct disabled = $1"
+}
+
+cmd_disabled_del() { # disabled-del
+    dellines '^disabled '
+    echo "Direct disabled dihapus (default BIRD: protokol aktif)"
+}
+
+cmd_from_set() { # from-set TEMPLATE (Bab 3.2-15/16; template direct)
+    [ -n "$1" ] || err "from butuh nama template direct"
+    valid_name "$1" "from"
+    upsert '^from ' "from $1"
+    echo "Direct from = $1"
+}
+
+cmd_from_del() { # from-del
+    dellines '^from '
+    echo "Direct from dihapus"
+}
+
+cmd_channel_set() { # channel-set <TYPE> <preference|import|export> <nilai...>
+    # (Bab 3.5-3/4/5; where = filter inline bentuk ringkas, mis.
+    # net~10.0.0.0/8 — diterjemahkan saat generate.)
+    _ch="$1"; _f="$2"; shift 2
+    case "$_ch" in ipv4|ipv6|ipv6-sadr) ;; *) err "channel harus ipv4|ipv6|ipv6-sadr: $_ch" ;; esac
+    if [ "$_ch" = "ipv6-sadr" ] && grep -q '^channel ipv6$' "$CONF" 2>/dev/null; then
+        err "ipv6-sadr tidak bisa bersama channel ipv6 (SADR menggantikan IPv6 reguler)"
+    fi
+    if [ "$_ch" = "ipv6" ] && grep -q '^channel ipv6-sadr$' "$CONF" 2>/dev/null; then
+        err "ipv6 tidak bisa bersama channel ipv6-sadr (SADR menggantikan IPv6 reguler)"
+    fi
+    # Opsi butuh channel: bila belum ada, tambahkan baris channel polos.
+    grep -q "^channel $_ch\$" "$CONF" 2>/dev/null || printf 'channel %s\n' "$_ch" >> "$CONF"
+    case "$_f" in
+        preference)
+            [ -n "$1" ] || err "channel $_ch preference butuh nilai 0..65535"
+            valid_num "$1" 0 65535 "preference"
+            upsert "^channel $_ch preference " "channel $_ch preference $1"
+            echo "Direct channel $_ch preference = $1"
+            return 0 ;;
+        import|export)
+            [ -n "$1" ] || err "channel $_ch $_f butuh all|none|filter <nama>|where <ekspresi>"
+            _val="$*"
+            case "$1" in
+                all|none) upsert "^channel $_ch $_f " "channel $_ch $_f $1" ;;
+                filter) [ -n "$2" ] || err "channel $_ch $_f filter butuh nama filter"
+                    valid_name "$2" "nama filter"
+                    upsert "^channel $_ch $_f " "channel $_ch $_f filter $2" ;;
+                where)
+                    shift
+                    [ -n "$*" ] || err "channel $_ch $_f where butuh ekspresi filter bentuk ringkas (mis. where net~10.0.0.0/8)"
+                    cond_validate "$*" || exit 33
+                    upsert "^channel $_ch $_f " "channel $_ch $_f where $*" ;;
+                *) err "channel $_ch $_f harus all|none|filter <nama>|where <ekspresi>: $1" ;;
+            esac
+            echo "Direct channel $_ch $_f = $_val"
+            return 0 ;;
+        *) err "channel field harus preference|import|export: $_f" ;;
+    esac
+}
+
+cmd_channel_unset() { # channel-unset <TYPE> <preference|import|export>
+    _ch="$1"; _f="$2"
+    case "$_ch" in ipv4|ipv6|ipv6-sadr) ;; *) err "channel harus ipv4|ipv6|ipv6-sadr: $_ch" ;; esac
+    case "$_f" in
+        preference|import|export) dellines "^channel $_ch $_f " ;;
+        *) err "channel field harus preference|import|export: $_f" ;;
+    esac
+    echo "Direct channel $_ch $_f dihapus (default BIRD)"
 }
 
 cmd_clear() {
@@ -190,6 +308,40 @@ emit_dbg() {
     case "$1" in all|off) echo "    $2 $1;" ;; *) echo "    $2 { $(printf '%s' "$1" | sed 's/,/, /g') };" ;; esac
 }
 
+# emit_direct_channel <TYPE> — `ipv4;`/`ipv6;`/`ipv6 sadr;` polos, atau
+# blok channel bila ada opsi (preference/import/export). Default BIRD
+# Bab 3.5 bila channel diekspos: import all, export none.
+emit_direct_channel() {
+    _dc="$1"
+    _dbird="$_dc"; [ "$_dc" = "ipv6-sadr" ] && _dbird="ipv6 sadr"
+    _pref=$(grep "^channel $_dc preference " "$CONF" 2>/dev/null | head -1 | awk '{print $4}')
+    _imp=$(grep "^channel $_dc import " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}')
+    _exp=$(grep "^channel $_dc export " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}')
+    if [ -z "$_pref" ] && [ -z "$_imp" ] && [ -z "$_exp" ]; then
+        echo "    $_dbird;"
+        return 0
+    fi
+    echo "    $_dbird {"
+    [ -n "$_pref" ] && echo "        preference $_pref;"
+    if [ -n "$_imp" ]; then
+        case "$_imp" in
+            where\ *) _wcond=${_imp#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        import where $_wbird;" ;;
+            *) echo "        import $_imp;" ;;
+        esac
+    else
+        echo "        import all;"
+    fi
+    if [ -n "$_exp" ]; then
+        case "$_exp" in
+            where\ *) _wcond=${_exp#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        export where $_wbird;" ;;
+            *) echo "        export $_exp;" ;;
+        esac
+    else
+        echo "        export none;"
+    fi
+    echo "    };"
+}
+
 cmd_debug_set() { # B9: debug-set SPEC (Bab 3.4-2)
     [ -n "$1" ] || err "debug butuh all|off|kelas,kelas,..."
     valid_spec "$1" debug
@@ -217,16 +369,26 @@ cmd_generate() {
     mkdir -p "$SECTION_DIR" 2>/dev/null || die "cannot mkdir $SECTION_DIR"
     _tmp="$SECTION.tmp.$$"
     if has_facts; then
+        # `from` wajib merujuk template direct yang ada di bird-global.conf
+        # (template hanya didefinisikan di sana; bila belum ada, gagal jelas).
+        _from=$(grep '^from ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
+        if [ -n "$_from" ]; then
+            _gf="$STATE_ROOT/bird-global.conf"
+            [ -f "$_gf" ] && grep -q "^template direct $_from\( \|$\)" "$_gf" 2>/dev/null || \
+                err "direct: from template direct $_from tidak ada di bird-global.conf (template-add direct $_from dulu)"
+        fi
+        _dis=$(grep '^disabled ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
         {
             echo "# direct.conf - generated by titian-direct.sh, do not edit by hand"
-            echo "protocol direct {"
+            if [ -n "$_from" ]; then echo "protocol direct from $_from {"; else echo "protocol direct {"; fi
+            case "$_dis" in on) echo "    disabled;" ;; esac
             _dbg=$(grep '^debug ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
             _mrt=$(grep '^mrtdump ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
             [ -n "$_dbg" ] && emit_dbg "$_dbg" debug
             [ -n "$_mrt" ] && emit_dbg "$_mrt" mrtdump
-            grep -q '^channel ipv4$' "$CONF" 2>/dev/null && echo "    ipv4;"
-            grep -q '^channel ipv6$' "$CONF" 2>/dev/null && echo "    ipv6;"
-            grep -q '^channel ipv6-sadr$' "$CONF" 2>/dev/null && echo "    ipv6 sadr;"
+            grep -q '^channel ipv4$' "$CONF" 2>/dev/null && emit_direct_channel ipv4
+            grep -q '^channel ipv6$' "$CONF" 2>/dev/null && emit_direct_channel ipv6
+            grep -q '^channel ipv6-sadr$' "$CONF" 2>/dev/null && emit_direct_channel ipv6-sadr
             _ifs=$(grep '^interface ' "$CONF" 2>/dev/null | awk '{print $2}')
             if [ -n "$_ifs" ]; then
                 _list=""
@@ -261,6 +423,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
@@ -270,7 +440,7 @@ cmd_show() {
     [ -f "$SECTION" ] && cat "$SECTION" || echo "(belum di-generate)"
     echo "--- birdc show protocol direct ---"
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" show protocol direct 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) show protocol direct 2>&1); then
         echo "$_out" | grep -v '^BIRD'
     else
         echo "(BIRD tidak jalan / protocol direct belum ada — birdc show protocol direct gagal)"
@@ -285,6 +455,12 @@ case "$1" in
     check-link-set) shift; cmd_check_link_set "$@" ;;
     channel-add) shift; cmd_channel_add "$@" ;;
     channel-del) shift; cmd_channel_del "$@" ;;
+    channel-set) shift; cmd_channel_set "$@" ;;
+    channel-unset) shift; cmd_channel_unset "$@" ;;
+    disabled-set) shift; cmd_disabled_set "$@" ;;
+    disabled-del) cmd_disabled_del ;;
+    from-set) shift; cmd_from_set "$@" ;;
+    from-del) cmd_from_del ;;
     clear) cmd_clear ;;
     debug-set) shift; cmd_debug_set "$@" ;;
     debug-del) cmd_debug_del ;;
@@ -292,5 +468,5 @@ case "$1" in
     mrtdump-del) cmd_mrtdump_del ;;
     generate) cmd_generate ;;
     show) cmd_show ;;
-    *) echo "Usage: $0 {direct-touch|has-facts|interface-add PATTERN|interface-del PATTERN|check-link-set on|off|debug-set SPEC|debug-del|mrtdump-set SPEC|mrtdump-del|channel-add ipv4|ipv6|ipv6-sadr|channel-del ipv4|ipv6|ipv6-sadr|clear|generate|show}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {direct-touch|has-facts|interface-add PATTERN|interface-del PATTERN|check-link-set on|off|debug-set SPEC|debug-del|mrtdump-set SPEC|mrtdump-del|channel-add ipv4|ipv6|ipv6-sadr|channel-del ipv4|ipv6|ipv6-sadr|channel-set ipv4|ipv6|ipv6-sadr preference N|import|export all|none|filter NAME|where COND|channel-unset ipv4|ipv6|ipv6-sadr preference|import|export|disabled-set on|off|disabled-del|from-set TEMPLATE|from-del|clear|generate|show}" >&2; exit 2 ;;
 esac

@@ -23,6 +23,10 @@
 #           bgp_large_community.add((AA, X, NN));
 #       };
 #   }
+# B13 (S30): blok filter per-route UMUM — statement filter apa pun
+# (set:/unset:/method:/accept/reject + if COND then STMT [else STMT])
+# via `route filter-add` / `route filter-if` (intent `fstmt`, urut SEQ);
+# `route-attr-set` tetap sebagai jalan pintas 7 field.
 # Satu instance = satu network type: route IPv4 -> `protocol static
 # static4`, route IPv6 -> `protocol static static6`. `check link` dan
 # `igp table` adalah opsi level protokol (sama di kedua instance).
@@ -229,6 +233,122 @@ cmd_igp_table_del() {
     echo "Static igp-table dihapus (kembali ke tabel protokol)"
 }
 
+valid_num() {
+    # valid_num <nilai> <lo> <hi> <label> — bilangan bulat dalam range.
+    case "$1" in ''|*[!0-9]*) err "$4 harus bilangan $2..$3: $1" ;; esac
+    [ "$1" -ge "$2" ] 2>/dev/null && [ "$1" -le "$3" ] 2>/dev/null || \
+        err "$4 harus bilangan $2..$3: $1"
+}
+
+cond_validate() {
+    # cond_validate <COND> — validasi ekspresi filter bentuk ringkas
+    # (mis. net~10.0.0.0/8) via titian-bgp.sh cond-to-bird. Bila script
+    # itu tidak ada (deploy parsial), fallback validasi ringan.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" >/dev/null
+    else
+        case "$1" in *[\;\{\}]* ) err "where: ekspresi mengandung karakter terlarang (; { })" ;; esac
+    fi
+}
+
+cond_translate() {
+    # cond_translate <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai di generate untuk bentuk `import/export where <COND>`.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" || exit 33
+    else
+        err "penerjemah kondisi tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
+}
+
+klish_unescape() {
+    printf '%s' "$1" | sed -e 's/\\>/>/g' -e 's/\\</</g' -e 's/\\(/(/g' -e 's/\\)/)/g' -e 's/\\&/\&/g' -e 's/\\|/|/g' -e 's/\\;/;/g' -e 's/\\\\/\\/g'
+}
+
+bgp_stmt_to_bird() { # bgp_stmt_to_bird <STMT> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai validasi + generate statement filter per-route (S30, B13).
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" stmt-to-bird "$1" || exit 33
+    else
+        err "penerjemah statement tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
+}
+
+bgp_cond_to_bird() { # bgp_cond_to_bird <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai generate `route-filter-if` (S30, B13) — sama dengan cond_translate.
+    cond_translate "$1"
+}
+
+cmd_disabled_set() { # disabled-set on|off (Bab 3.4-1; berlaku instance static4/static6)
+    case "$1" in
+        on|off) upsert '^disabled ' "disabled $1" ;;
+        *) err "disabled harus on|off: $1" ;;
+    esac
+    echo "Static disabled = $1"
+}
+
+cmd_disabled_del() { # disabled-del
+    dellines '^disabled '
+    echo "Static disabled dihapus (default BIRD: protokol aktif)"
+}
+
+cmd_from_set() { # from-set TEMPLATE (Bab 3.2-15/16; template static)
+    [ -n "$1" ] || err "from butuh nama template static"
+    valid_name "$1" "from"
+    upsert '^from ' "from $1"
+    echo "Static from = $1"
+}
+
+cmd_from_del() { # from-del
+    dellines '^from '
+    echo "Static from dihapus"
+}
+
+cmd_channel_set() { # channel-set <ipv4|ipv6> <preference|import|export> <nilai...>
+    # (Bab 3.5-3/4/5; channel static4/static6; where = filter inline
+    # bentuk ringkas, mis. net~10.0.0.0/8 — diterjemahkan saat generate.)
+    _ch="$1"; _f="$2"; shift 2
+    case "$_ch" in ipv4|ipv6) ;; *) err "channel harus ipv4|ipv6: $_ch" ;; esac
+    case "$_f" in
+        preference)
+            [ -n "$1" ] || err "channel $_ch preference butuh nilai 0..65535"
+            valid_num "$1" 0 65535 "preference"
+            upsert "^channel $_ch preference " "channel $_ch preference $1" ;;
+        import|export)
+            [ -n "$1" ] || err "channel $_ch $_f butuh all|none|filter <nama>|where <ekspresi>"
+            _val="$*"
+            case "$1" in
+                all|none) upsert "^channel $_ch $_f " "channel $_ch $_f $1" ;;
+                filter) [ -n "$2" ] || err "channel $_ch $_f filter butuh nama filter"
+                    valid_name "$2" "nama filter"
+                    upsert "^channel $_ch $_f " "channel $_ch $_f filter $2" ;;
+                where)
+                    shift
+                    [ -n "$*" ] || err "channel $_ch $_f where butuh ekspresi filter bentuk ringkas (mis. where net~10.0.0.0/8)"
+                    cond_validate "$*" || exit 33
+                    upsert "^channel $_ch $_f " "channel $_ch $_f where $*" ;;
+                *) err "channel $_ch $_f harus all|none|filter <nama>|where <ekspresi>: $1" ;;
+            esac
+            echo "Static channel $_ch $_f = $_val"
+            return 0 ;;
+        *) err "channel field harus preference|import|export: $_f" ;;
+    esac
+    echo "Static channel $_ch $_f = $*"
+}
+
+cmd_channel_del() { # channel-del <ipv4|ipv6> <preference|import|export>
+    _ch="$1"; _f="$2"
+    case "$_ch" in ipv4|ipv6) ;; *) err "channel harus ipv4|ipv6: $_ch" ;; esac
+    case "$_f" in
+        preference|import|export) dellines "^channel $_ch $_f " ;;
+        *) err "channel field harus preference|import|export: $_f" ;;
+    esac
+    echo "Static channel $_ch $_f dihapus (default BIRD)"
+}
+
 cmd_route_touch() {
     _p="$1"
     [ -n "$_p" ] || err "route butuh prefix CIDR"
@@ -369,6 +489,59 @@ cmd_route_recursive_del() {
     echo "Static route $_p recursive dihapus"
 }
 
+# --- mpls per-route (Bab 2.5-4; B14) ---
+# `mpls <label>` — label MPLS statis pada route (berlaku untuk via,
+# recursive, dan sink; emit sesudah prefix, sebelum nexthop).
+# `recursive-mpls <a/b/...>` — stack label untuk nexthop rekursif
+# (maks 8 label, maks BIRD 2.2-11); hanya untuk route recursive.
+cmd_route_mpls_set() {
+    _p="$1"; _n="$2"
+    [ -n "$_p" ] && [ -n "$_n" ] || err "route-mpls-set butuh PREFIX LABEL"
+    valid_prefix "$_p"
+    case "$_n" in ''|*[!0-9]*) err "label MPLS harus bilangan 0..1048575: $_n" ;; esac
+    [ "$_n" -le 1048575 ] 2>/dev/null || err "label MPLS harus bilangan 0..1048575: $_n"
+    [ "$(route_kind "$_p")" != "none" ] || \
+        err "route $_p belum ada — tambah via/recursive/sink dulu sebelum mpls"
+    upsert "^route $_p mpls " "route $_p mpls $_n"
+    echo "Static route $_p mpls = $_n"
+}
+
+cmd_route_mpls_del() {
+    _p="$1"
+    [ -n "$_p" ] || err "route-mpls-del butuh PREFIX"
+    _tmp="$CONF.tmp.$$"
+    awk -v p="$_p" '!($1=="route" && $2==p && $3=="mpls")' "$CONF" 2>/dev/null > "$_tmp" || true
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    echo "Static route $_p mpls dihapus"
+}
+
+cmd_route_recursive_mpls_set() {
+    _p="$1"; _s="$2"
+    [ -n "$_p" ] && [ -n "$_s" ] || err "route-recursive-mpls-set butuh PREFIX STACK"
+    valid_prefix "$_p"
+    [ "$(route_kind "$_p")" = "recursive" ] || \
+        err "route $_p bukan recursive — recursive-mpls hanya untuk route recursive"
+    _n=0; _rest="$_s"
+    while [ -n "$_rest" ]; do
+        case "$_rest" in */*) _one=${_rest%%/*}; _rest=${_rest#*/} ;; *) _one="$_rest"; _rest="" ;; esac
+        case "$_one" in ''|*[!0-9]*) err "stack MPLS harus label 0..1048575 dipisah '/': $_s" ;; esac
+        [ "$_one" -le 1048575 ] 2>/dev/null || err "label MPLS harus 0..1048575: $_one (stack $_s)"
+        _n=$((_n+1))
+    done
+    [ "$_n" -ge 1 ] && [ "$_n" -le 8 ] || err "stack MPLS maks 8 label (maks BIRD 2.2-11): $_s"
+    upsert "^route $_p recursive-mpls " "route $_p recursive-mpls $_s"
+    echo "Static route $_p recursive-mpls = $_s"
+}
+
+cmd_route_recursive_mpls_del() {
+    _p="$1"
+    [ -n "$_p" ] || err "route-recursive-mpls-del butuh PREFIX"
+    _tmp="$CONF.tmp.$$"
+    awk -v p="$_p" '!($1=="route" && $2==p && $3=="recursive-mpls")' "$CONF" 2>/dev/null > "$_tmp" || true
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    echo "Static route $_p recursive-mpls dihapus"
+}
+
 cmd_route_sink_set() {
     _p="$1"; _k="$2"
     [ -n "$_p" ] && [ -n "$_k" ] || err "route-sink-set butuh PREFIX KIND"
@@ -436,6 +609,67 @@ cmd_route_attr_del() {
     awk -v p="$_p" -v f="$_f" '!($1=="route" && $2==p && $3=="attr" && $4==f)' "$CONF" 2>/dev/null > "$_tmp" || true
     mv "$_tmp" "$CONF" || die "cannot write $CONF"
     echo "Static route $_p $_f dihapus"
+}
+
+# --- B13: filter per-route umum (S30, docs §6.17 3e) ---
+# Bentuk intent: `route <PREFIX> fstmt <SEQ> <STMT>` — STMT satu token
+# (tanpa spasi) dalam bahasa statement filter yang sama dengan filter
+# bernama (stmt_to_bird): set:ATTR=NILAI | unset:ATTR |
+# method:OBJ.METHOD(args) | accept | reject; atau
+# `route <PREFIX> fstmt <SEQ> if <COND> then <THEN> [else <ELSE>]`.
+# Urutan eksekusi = urutan SEQ (naik); atribut route-attr-set dicetak
+# DULU (kanonik), baru fstmt. Generate menerjemahkan via titian-bgp.sh
+# (cond-to-bird + stmt-to-bird); bird -p adalah otoritas akhir.
+_next_fstmt_seq() { # <PREFIX> -> SEQ berikutnya (1 bila belum ada)
+    _nfs=$(grep "^route $1 fstmt " "$CONF" 2>/dev/null | awk '{print $4}' | sort -n | tail -1)
+    [ -n "$_nfs" ] && printf '%s' $((_nfs + 1)) || printf '1'
+}
+cmd_route_filter_add() { # route-filter-add <PREFIX> <STMT>
+    _p="$1"; _s=$(klish_unescape "$2")
+    [ -n "$_p" ] && [ -n "$_s" ] || err "route-filter-add butuh PREFIX STMT (satu token, mis. set:ospf_metric1=20)"
+    valid_prefix "$_p"
+    [ "$(route_kind "$_p")" != "none" ] || \
+        err "route $_p belum ada — tambah via/recursive/sink dulu sebelum filter"
+    bgp_stmt_to_bird "$_s" >/dev/null || exit 33
+    _seq=$(_next_fstmt_seq "$_p")
+    _line="route $_p fstmt $_seq $_s"
+    touch_conf; _tmp="$CONF.tmp.$$"
+    awk -v line="$_line" '$0 != line' "$CONF" > "$_tmp" 2>/dev/null || true
+    printf '%s\n' "$_line" >> "$_tmp"
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    echo "Static route $_p filter #$_seq: $_s"
+}
+cmd_route_filter_if() { # route-filter-if <PREFIX> <COND> <THEN> [ELSE]
+    _p="$1"; _c=$(klish_unescape "$2"); _t=$(klish_unescape "$3"); _e=$(klish_unescape "$4")
+    [ -n "$_p" ] && [ -n "$_c" ] && [ -n "$_t" ] || err "route-filter-if butuh PREFIX COND THEN [ELSE]"
+    valid_prefix "$_p"
+    [ "$(route_kind "$_p")" != "none" ] || \
+        err "route $_p belum ada — tambah via/recursive/sink dulu sebelum filter"
+    cond_validate "$_c" || exit 33
+    bgp_stmt_to_bird "$_t" >/dev/null || exit 33
+    [ -n "$_e" ] && { bgp_stmt_to_bird "$_e" >/dev/null || exit 33; }
+    _seq=$(_next_fstmt_seq "$_p")
+    _line="route $_p fstmt $_seq if $_c then $_t"
+    [ -n "$_e" ] && _line="$_line else $_e"
+    touch_conf; _tmp="$CONF.tmp.$$"
+    awk -v line="$_line" '$0 != line' "$CONF" > "$_tmp" 2>/dev/null || true
+    printf '%s\n' "$_line" >> "$_tmp"
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    echo "Static route $_p filter #$_seq: if $_c then $_t${_e:+ else $_e}"
+}
+cmd_route_filter_del() { # route-filter-del <PREFIX> [SEQ] — hapus satu statement / semua
+    _p="$1"; _s="$2"
+    [ -n "$_p" ] || err "route-filter-del butuh PREFIX [SEQ]"
+    _tmp="$CONF.tmp.$$"
+    if [ -n "$_s" ]; then
+        case "$_s" in ''|*[!0-9]*) err "route-filter-del SEQ harus bilangan: $_s" ;; esac
+        awk -v p="$_p" -v s="$_s" '!($1=="route" && $2==p && $3=="fstmt" && $4==s)' "$CONF" 2>/dev/null > "$_tmp" || true
+        echo "Static route $_p filter #$_s dihapus"
+    else
+        awk -v p="$_p" '!($1=="route" && $2==p && $3=="fstmt")' "$CONF" 2>/dev/null > "$_tmp" || true
+        echo "Static route $_p semua filter dihapus"
+    fi
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
 }
 
 # --- B8: Flowspec (RFC 5575, docs §6.17 S16-S29) ---
@@ -677,6 +911,31 @@ cmd_flow_table_del() { # flow-table-del <4|6>
     dellines "^flow-table $_fam "
     echo "Static flow-table $_fam dihapus"
 }
+
+cmd_mpls_table_set() { # mpls-table-set <NAME>
+    # BIRD 2.20: route berlabel MPLS butuh channel `mpls` DAN tabel MPLS
+    # DAN domain MPLS (B14, Bab 2.5-4 — teruji bird -p rc=0):
+    #   tanpa channel -> "Route ... has MPLS label, but MPLS channel not specified"
+    #   tanpa table   -> "Routing table not specified"
+    #   tanpa domain  -> "No MPLS domain defined"
+    # Tabel + domain didefinisikan di bird global view (B6):
+    #   table-add mpls <NAMA>  +  mpls-domain-add <NAMA>.
+    _name="$1"
+    [ -n "$_name" ] || err "mpls-table-set butuh NAMA"
+    valid_name "$_name" "mpls-table"
+    _gfile="$STATE_ROOT/bird-global.conf"
+    [ -f "$_gfile" ] || err "mpls-table $_name belum didefinisikan (bird-global.conf belum ada — definisikan dulu: global -> table-add mpls $_name)"
+    grep -q "^table mpls $_name\$" "$_gfile" 2>/dev/null || \
+        err "mpls-table $_name bukan tabel mpls di bird-global.conf (global -> table-add mpls $_name)"
+    grep -q '^mpls domain ' "$_gfile" 2>/dev/null || \
+        err "belum ada MPLS domain di bird-global.conf — definisikan dulu: global -> mpls-domain-add <NAMA>"
+    upsert "^mpls-table " "mpls-table $_name"
+    echo "Static mpls-table = $_name"
+}
+cmd_mpls_table_del() { # mpls-table-del
+    dellines "^mpls-table "
+    echo "Static mpls-table dihapus"
+}
 # emit_flowroutes <FAM>: cetak blok `route flow4/6 { ... };` per ID.
 emit_flowroutes() {
     _fam="$1"
@@ -738,6 +997,49 @@ emit_attrs() {
     }' "$CONF" 2>/dev/null
 }
 
+# emit_fstmts <prefix>: cetak statement filter umum (satu per baris,
+# indent 12 spasi) dari intent `route <P> fstmt <SEQ> ...`, urut SEQ naik.
+# Diterjemahkan via titian-bgp.sh (cond-to-bird + stmt-to-bird); gagal
+# -> return 33 (generate berhenti; bird -p otoritas akhir).
+emit_fstmts() {
+    _p="$1"
+    _ftmp="$CONF.fstmt.$$"
+    grep "^route $_p fstmt " "$CONF" 2>/dev/null | sort -t' ' -k4,4n > "$_ftmp" || true
+    _frc=0
+    while IFS= read -r _fl; do
+        [ -n "$_fl" ] || continue
+        _fr=${_fl#*fstmt }
+        _fr=${_fr#* }
+        case "$_fr" in
+            'if '*)
+                _fr2=${_fr#if }
+                _fc=${_fr2%%' then '*}
+                _fr3=${_fr2#*' then '}
+                case "$_fr3" in
+                    *' else '*)
+                        _ft=${_fr3%%' else '*}; _fe=${_fr3#*' else '}
+                        _fbc=$(bgp_cond_to_bird "$_fc") || { _frc=33; break; }
+                        _fbt=$(bgp_stmt_to_bird "$_ft") || { _frc=33; break; }
+                        _fbe=$(bgp_stmt_to_bird "$_fe") || { _frc=33; break; }
+                        printf '            if %s then %s; else %s;\n' "$_fbc" "$_fbt" "$_fbe"
+                        ;;
+                    *)
+                        _fbc=$(bgp_cond_to_bird "$_fc") || { _frc=33; break; }
+                        _fbt=$(bgp_stmt_to_bird "$_fr3") || { _frc=33; break; }
+                        printf '            if %s then %s;\n' "$_fbc" "$_fbt"
+                        ;;
+                esac
+                ;;
+            *)
+                _fbs=$(bgp_stmt_to_bird "$_fr") || { _frc=33; break; }
+                printf '            %s;\n' "$_fbs"
+                ;;
+        esac
+    done < "$_ftmp"
+    rm -f "$_ftmp"
+    return $_frc
+}
+
 # emit_routes <family 4|6>: cetak statement `route ...;` untuk prefix
 # keluarga itu, urut kemunculan pertama di intent.
 emit_routes() {
@@ -746,14 +1048,19 @@ emit_routes() {
     for _p in $(grep '^route ' "$CONF" 2>/dev/null | awk '{print $2}' | awk '!s[$0]++'); do
         [ "$(prefix_family "$_p")" = "$_fam" ] || continue
         _attrs=$(emit_attrs "$_p")
+        _fstmts=$(emit_fstmts "$_p") || exit 33
         _sink=$(awk -v p="$_p" '$1=="route" && $2==p && ($3=="blackhole" || $3=="unreachable" || $3=="prohibit") {print $3; exit}' "$CONF" 2>/dev/null)
         _rec=$(awk -v p="$_p" '$1=="route" && $2==p && $3=="recursive" {print $4; exit}' "$CONF" 2>/dev/null)
+        # MPLS per-route (B14, Bab 2.5-4): label statis sesudah prefix;
+        # stack rekursif sesudah nexthop recursive.
+        _mpls=$(awk -v p="$_p" '$1=="route" && $2==p && $3=="mpls" {print $4; exit}' "$CONF" 2>/dev/null)
+        _rmpls=$(awk -v p="$_p" '$1=="route" && $2==p && $3=="recursive-mpls" {print $4; exit}' "$CONF" 2>/dev/null)
         if [ -n "$_sink" ]; then
-            _stmt="    route $_p $_sink"
+            _stmt="    route $_p${_mpls:+ mpls $_mpls} $_sink"
         elif [ -n "$_rec" ]; then
-            _stmt="    route $_p recursive $_rec"
+            _stmt="    route $_p${_mpls:+ mpls $_mpls} recursive $_rec${_rmpls:+ mpls $_rmpls}"
         else
-            _stmt="    route $_p"
+            _stmt="    route $_p${_mpls:+ mpls $_mpls}"
             # via IP (urut file) + via interface
             _stmt="$_stmt$(awk -v p="$_p" '$1=="route" && $2==p && $3=="via" {
                 s=" via " $4
@@ -767,8 +1074,12 @@ emit_routes() {
             }' "$CONF" 2>/dev/null)"
             _stmt="$_stmt$(awk -v p="$_p" '$1=="route" && $2==p && $3=="via-iface" { printf " via \"%s\"", $4 }' "$CONF" 2>/dev/null)"
         fi
-        if [ -n "$_attrs" ]; then
-            printf '%s {\n%s\n    };\n' "$_stmt" "$_attrs"
+        _block="$_attrs"
+        [ -n "$_block" ] && [ -n "$_fstmts" ] && _block="$_block
+$_fstmts"
+        [ -z "$_block" ] && _block="$_fstmts"
+        if [ -n "$_block" ]; then
+            printf '%s {\n%s\n    };\n' "$_stmt" "$_block"
         else
             printf '%s;\n' "$_stmt"
         fi
@@ -795,6 +1106,51 @@ valid_spec() {
 # emit_dbg <SPEC> <debug|mrtdump> — satu baris debug/mrtdump (indent 4 spasi).
 emit_dbg() {
     case "$1" in all|off) echo "    $2 $1;" ;; *) echo "    $2 { $(printf '%s' "$1" | sed 's/,/, /g') };" ;; esac
+}
+
+# emit_static_head <NAMA> — header `protocol static <NAMA> [from <T> {]`
+# + opsi global (disabled, check link, igp table, debug, mrtdump).
+# Memakai variabel generate: _from, _dis, _checklink, _igp, _dbg, _mrt.
+emit_static_head() {
+    if [ -n "$_from" ]; then echo "protocol static $1 from $_from {"; else echo "protocol static $1 {"; fi
+    case "$_dis" in on) echo "    disabled;" ;; esac
+    [ "$_checklink" = "on" ] && echo "    check link;"
+    [ -n "$_igp" ] && echo "    igp table $_igp;"
+    [ -n "$_dbg" ] && emit_dbg "$_dbg" debug
+    [ -n "$_mrt" ] && emit_dbg "$_mrt" mrtdump
+}
+
+# emit_static_channel <ipv4|ipv6> — blok channel bila ada opsi
+# (preference/import/export), else baris `<ch>;` polos. Default BIRD
+# Bab 3.5 bila channel diekspos: import all, export none.
+emit_static_channel() {
+    _sc="$1"
+    _pref=$(grep "^channel $_sc preference " "$CONF" 2>/dev/null | head -1 | awk '{print $4}')
+    _imp=$(grep "^channel $_sc import " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}')
+    _exp=$(grep "^channel $_sc export " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}')
+    if [ -z "$_pref" ] && [ -z "$_imp" ] && [ -z "$_exp" ]; then
+        echo "    $_sc;"
+        return 0
+    fi
+    echo "    $_sc {"
+    [ -n "$_pref" ] && echo "        preference $_pref;"
+    if [ -n "$_imp" ]; then
+        case "$_imp" in
+            where\ *) _wcond=${_imp#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        import where $_wbird;" ;;
+            *) echo "        import $_imp;" ;;
+        esac
+    else
+        echo "        import all;"
+    fi
+    if [ -n "$_exp" ]; then
+        case "$_exp" in
+            where\ *) _wcond=${_exp#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        export where $_wbird;" ;;
+            *) echo "        export $_exp;" ;;
+        esac
+    else
+        echo "        export none;"
+    fi
+    echo "    };"
 }
 
 # valid_asn <nilai> <label> — AS 1..4294967295 (B9; script ini belum punya).
@@ -943,6 +1299,15 @@ cmd_generate() {
         _igp=$(grep '^igp-table ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
         _dbg=$(grep '^debug ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
         _mrt=$(grep '^mrtdump ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
+        _dis=$(grep '^disabled ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
+        _from=$(grep '^from ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
+        # `from` wajib merujuk template static yang ada di bird-global.conf
+        # (template hanya didefinisikan di sana; bila belum ada, gagal jelas).
+        if [ -n "$_from" ]; then
+            _gf="$STATE_ROOT/bird-global.conf"
+            [ -f "$_gf" ] && grep -q "^template static $_from\( \|$\)" "$_gf" 2>/dev/null || \
+                err "static: from template static $_from tidak ada di bird-global.conf (template-add static $_from dulu)"
+        fi
         _has4=$(grep '^route ' "$CONF" 2>/dev/null | awk '{print $2}' | grep -v ':' | head -1)
         _has6=$(grep '^route ' "$CONF" 2>/dev/null | awk '{print $2}' | grep ':' | head -1)
         # Flowroute = instance TERPISAH (BIRD 2.20: satu protocol static
@@ -959,15 +1324,27 @@ cmd_generate() {
         _flowtab6=$(grep '^flow-table 6 ' "$CONF" 2>/dev/null | head -1 | awk '{print $3}')
         [ -n "$_hasflow4" ] && [ -z "$_flowtab4" ] && err "static flow4 butuh tabel (flow-table-set 4 <NAMA> dulu — tanpa table BIRD menolak: Routing table not specified)"
         [ -n "$_hasflow6" ] && [ -z "$_flowtab6" ] && err "static flow6 butuh tabel (flow-table-set 6 <NAMA> dulu — tanpa table BIRD menolak: Routing table not specified)"
+        # MPLS per-route (B14, Bab 2.5-4): route berlabel butuh channel
+        # `mpls` + tabel + domain; tanpa ketiganya BIRD menolak config.
+        _mpls4=""; _mpls6=""
+        for _p in $(grep '^route ' "$CONF" 2>/dev/null | awk '$3=="mpls" || $3=="recursive-mpls" {print $2}' | awk '!s[$0]++'); do
+            case "$_p" in *:* ) _mpls6=1 ;; *) _mpls4=1 ;; esac
+        done
+        _mplstab=$(grep '^mpls-table ' "$CONF" 2>/dev/null | head -1 | awk '{print $2}')
+        if [ -n "$_mpls4" ] || [ -n "$_mpls6" ]; then
+            [ -n "$_mplstab" ] || err "static route berlabel MPLS tapi mpls-table belum diset (mpls-table-set <NAMA> dulu — tanpa table BIRD menolak: Routing table not specified)"
+            _gfile="$STATE_ROOT/bird-global.conf"
+            grep -q "^table mpls $_mplstab\$" "$_gfile" 2>/dev/null || \
+                err "mpls-table $_mplstab bukan tabel mpls di bird-global.conf (global -> table-add mpls $_mplstab)"
+            grep -q '^mpls domain ' "$_gfile" 2>/dev/null || \
+                err "static route berlabel MPLS tapi belum ada MPLS domain di bird-global.conf (global -> mpls-domain-add <NAMA> dulu — tanpa domain BIRD menolak: No MPLS domain defined)"
+        fi
         {
             echo "# static.conf - generated by titian-static.sh, do not edit by hand"
             if [ -n "$_has4" ]; then
-                echo "protocol static static4 {"
-                [ "$_checklink" = "on" ] && echo "    check link;"
-                [ -n "$_igp" ] && echo "    igp table $_igp;"
-                [ -n "$_dbg" ] && emit_dbg "$_dbg" debug
-                [ -n "$_mrt" ] && emit_dbg "$_mrt" mrtdump
-                echo "    ipv4;"
+                emit_static_head static4
+                emit_static_channel ipv4
+                [ -n "$_mpls4" ] && echo "    mpls { table $_mplstab; import all; export all; };"
                 emit_routes 4
                 echo "}"
                 echo ""
@@ -980,12 +1357,9 @@ cmd_generate() {
                 echo ""
             fi
             if [ -n "$_has6" ]; then
-                echo "protocol static static6 {"
-                [ "$_checklink" = "on" ] && echo "    check link;"
-                [ -n "$_igp" ] && echo "    igp table $_igp;"
-                [ -n "$_dbg" ] && emit_dbg "$_dbg" debug
-                [ -n "$_mrt" ] && emit_dbg "$_mrt" mrtdump
-                echo "    ipv6;"
+                emit_static_head static6
+                emit_static_channel ipv6
+                [ -n "$_mpls6" ] && echo "    mpls { table $_mplstab; import all; export all; };"
                 emit_routes 6
                 echo "}"
                 echo ""
@@ -1000,12 +1374,8 @@ cmd_generate() {
             if [ -z "$_has4" ] && [ -z "$_hasflow4" ] && [ -z "$_has6" ] && [ -z "$_hasflow6" ]; then
                 # Hanya opsi global (check-link/igp-table/debug/mrtdump),
                 # tanpa route: satu instance v4 agar opsi tetap hidup.
-                echo "protocol static static4 {"
-                [ "$_checklink" = "on" ] && echo "    check link;"
-                [ -n "$_igp" ] && echo "    igp table $_igp;"
-                [ -n "$_dbg" ] && emit_dbg "$_dbg" debug
-                [ -n "$_mrt" ] && emit_dbg "$_mrt" mrtdump
-                echo "    ipv4;"
+                emit_static_head static4
+                emit_static_channel ipv4
                 echo "}"
                 echo ""
             fi
@@ -1033,6 +1403,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
@@ -1045,7 +1423,7 @@ cmd_show() {
     _done=0
     for _inst in static4 static6; do
         if grep -q "protocol static $_inst" "$SECTION" 2>/dev/null; then
-            if _out=$("$_birdc" show protocol "$_inst" 2>&1); then
+            if _out=$("$_birdc" $(birdc_sock) show protocol "$_inst" 2>&1); then
                 echo "$_out" | grep -v '^BIRD'
                 _done=1
             fi
@@ -1070,6 +1448,12 @@ case "$1" in
     check-link-set) shift; cmd_check_link_set "$@" ;;
     igp-table-set) shift; cmd_igp_table_set "$@" ;;
     igp-table-del) cmd_igp_table_del ;;
+    disabled-set) shift; cmd_disabled_set "$@" ;;
+    disabled-del) cmd_disabled_del ;;
+    from-set) shift; cmd_from_set "$@" ;;
+    from-del) cmd_from_del ;;
+    channel-set) shift; cmd_channel_set "$@" ;;
+    channel-del) shift; cmd_channel_del "$@" ;;
     route-touch) shift; cmd_route_touch "$@" ;;
     route-del) shift; cmd_route_del "$@" ;;
     route-via-add) shift; cmd_route_via_add "$@" ;;
@@ -1079,17 +1463,26 @@ case "$1" in
     route-via-iface-del) shift; cmd_route_via_iface_del "$@" ;;
     route-recursive-set) shift; cmd_route_recursive_set "$@" ;;
     route-recursive-del) shift; cmd_route_recursive_del "$@" ;;
+    route-mpls-set) shift; cmd_route_mpls_set "$@" ;;
+    route-mpls-del) shift; cmd_route_mpls_del "$@" ;;
+    route-recursive-mpls-set) shift; cmd_route_recursive_mpls_set "$@" ;;
+    route-recursive-mpls-del) shift; cmd_route_recursive_mpls_del "$@" ;;
     route-sink-set) shift; cmd_route_sink_set "$@" ;;
     route-sink-del) shift; cmd_route_sink_del "$@" ;;
     route-attr-set) shift; cmd_route_attr_set "$@" ;;
     route-attr-del) shift; cmd_route_attr_del "$@" ;;
+    route-filter-add) shift; cmd_route_filter_add "$@" ;;
+    route-filter-if) shift; cmd_route_filter_if "$@" ;;
+    route-filter-del) shift; cmd_route_filter_del "$@" ;;
     flowroute-touch) shift; cmd_flowroute_touch "$@" ;;
     flowroute-set) shift; cmd_flowroute_set "$@" ;;
     flowroute-unset) shift; cmd_flowroute_unset "$@" ;;
     flowroute-del) shift; cmd_flowroute_del "$@" ;;
     flow-table-set) shift; cmd_flow_table_set "$@" ;;
     flow-table-del) shift; cmd_flow_table_del "$@" ;;
+    mpls-table-set) shift; cmd_mpls_table_set "$@" ;;
+    mpls-table-del) shift; cmd_mpls_table_del "$@" ;;
     generate) cmd_generate ;;
     show) cmd_show ;;
-    *) echo "Usage: $0 {static-touch|has-facts|check-link-set on|off|igp-table-set NAME|igp-table-del|debug-set SPEC|debug-del|mrtdump-set SPEC|mrtdump-del|roa-add PREFIX MAXLEN AS [TABLE]|roa-del PREFIX|aspa-providers-add ASN LIST [TABLE]|aspa-transit-add ASN [TABLE]|aspa-del ASN|route-touch PREFIX|route-del PREFIX|route-via-add PREFIX IP|route-via-del PREFIX IP|route-via-set PREFIX IP FIELD VALUE|route-via-iface-add PREFIX IFACE|route-via-iface-del PREFIX IFACE|route-recursive-set PREFIX IP|route-recursive-del PREFIX|route-sink-set PREFIX KIND|route-sink-del PREFIX|route-attr-set PREFIX FIELD VALUE|route-attr-del PREFIX FIELD|flowroute-touch CTX|flowroute-set CTX FIELD VALUE|flowroute-unset CTX FIELD [KIND]|flowroute-del CTX|flow-table-set 4|6 NAME|flow-table-del 4|6|generate|show}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {static-touch|has-facts|check-link-set on|off|igp-table-set NAME|igp-table-del|disabled-set on|off|disabled-del|from-set TEMPLATE|from-del|channel-set ipv4|ipv6 preference N|import|export all|none|filter NAME|where COND|channel-del ipv4|ipv6 preference|import|export|debug-set SPEC|debug-del|mrtdump-set SPEC|mrtdump-del|roa-add PREFIX MAXLEN AS [TABLE]|roa-del PREFIX|aspa-providers-add ASN LIST [TABLE]|aspa-transit-add ASN [TABLE]|aspa-del ASN|route-touch PREFIX|route-del PREFIX|route-via-add PREFIX IP|route-via-del PREFIX IP|route-via-set PREFIX IP FIELD VALUE|route-via-iface-add PREFIX IFACE|route-via-iface-del PREFIX IFACE|route-recursive-set PREFIX IP|route-recursive-del PREFIX|route-mpls-set PREFIX LABEL|route-mpls-del PREFIX|route-recursive-mpls-set PREFIX STACK|route-recursive-mpls-del PREFIX|route-sink-set PREFIX KIND|route-sink-del PREFIX|route-attr-set PREFIX FIELD VALUE|route-attr-del PREFIX FIELD|route-filter-add PREFIX STMT|route-filter-if PREFIX COND THEN [ELSE]|route-filter-del PREFIX [SEQ]|flowroute-touch CTX|flowroute-set CTX FIELD VALUE|flowroute-unset CTX FIELD [KIND]|flowroute-del CTX|flow-table-set 4|6 NAME|flow-table-del 4|6|mpls-table-set NAME|mpls-table-del|generate|show}" >&2; exit 2 ;;
 esac

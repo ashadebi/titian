@@ -45,7 +45,8 @@
 #               generate to "<date>"; accept from "<date>";
 #               accept to "<date>"; from "<date>"; to "<date>";
 #               algorithm (keyed md5|keyed sha1|hmac sha1|hmac sha256|
-#               hmac sha384|hmac sha512); };
+#               hmac sha384|hmac sha512|blake2s128|blake2s256|blake2b256|
+#               blake2b512); };
 #       };
 #   }
 #   protocol rip ng ripng6 {
@@ -74,9 +75,9 @@
 # kecuali user mengaturnya eksplisit di klish.
 #
 # TIDAK diimplementasi di batch ini:
-#   - `version only` (R12): dideskripsikan di teks Bab 6.15 tapi TIDAK
-#     ADA di blok template sintaks — PERLU VERIFIKASI via `bird -p`
-#     sebelum masuk klish (lihat BIRD-COVERAGE.md §2.4 R12).
+#   - `version only` (R12): TERIMPLEMENTASI batch 5 (B15) — `bird -p` live
+#     rc=0 untuk `version only yes;` dan `version only on;` (BIRD 2.20.0);
+#     perintah klish `version-only <on|off>` (RIP IPv4 saja, bukan RIPng).
 #   - `tx priority` (R23): Linux-specific (lihat Bab 3.4-10); tidak ada
 #     padanan FreeBSD.
 #   - `rip_metric` / `rip_tag` sebagai filter umum: hanya didukung
@@ -92,10 +93,10 @@
 #   instance <I> export-rip-metric <N>      (0..255, default BIRD 1)
 #   instance <I> export-rip-tag <N>         (0..65535, default BIRD 0)
 #   instance <I> interface <PAT> <field> <value>
-#     field: metric|mode|passive|address|port|version|split-horizon|
-#       poison-reverse|demand-circuit|check-zero|update-time|
-#       timeout-time|garbage-time|ecmp-weight|ttl-security|tx-class|
-#       tx-dscp|rx-buffer|tx-length|check-link|authentication
+#     field: metric|mode|passive|address|port|version|version-only|
+#       split-horizon|poison-reverse|demand-circuit|check-zero|
+#       update-time|timeout-time|garbage-time|ecmp-weight|ttl-security|
+#       tx-class|tx-dscp|rx-buffer|tx-length|check-link|authentication
 #   instance <I> interface <PAT> password <TEXT>
 #   instance <I> interface <PAT> password <TEXT> <field> <value>
 #     field password: id|generate-from|generate-to|accept-from|
@@ -198,6 +199,22 @@ valid_ip() {
     esac
 }
 
+valid_ip4() {
+    # $1=ip $2=konteks: harus IPv4 dotted quad, tiap oktet 0..255.
+    case "$1" in
+        *:*|*[!0-9.]*) err "$2 harus alamat IPv4: $1" ;;
+    esac
+    _o1=${1%%.*}; _rest=${1#*.}
+    _o2=${_rest%%.*}; _rest=${_rest#*.}
+    _o3=${_rest%%.*}; _o4=${_rest#*.}
+    case "$_o4" in *.*) err "$2 harus alamat IPv4 (4 oktet): $1" ;; esac
+    for _o in "$_o1" "$_o2" "$_o3" "$_o4"; do
+        case "$_o" in ''|*[!0-9]*) err "$2 harus alamat IPv4: $1" ;; esac
+        [ "$_o" -ge 0 ] 2>/dev/null && [ "$_o" -le 255 ] 2>/dev/null || \
+            err "$2 harus alamat IPv4 (oktet 0..255): $1"
+    done
+}
+
 ip_family() {
     case "${1%%\%*}" in *:* ) echo 6 ;; *) echo 4 ;; esac
 }
@@ -281,6 +298,68 @@ cmd_ecmp_del() {
     echo "RIP $_i ecmp dihapus (default BIRD: enabled bila Kernel mendukung)"
 }
 
+cmd_disabled_set() { # disabled-set INST on|off (Bab 3.4-1)
+    _i="$1"; _v="$2"
+    valid_inst "$_i"
+    valid_onoff "$_v" "disabled"
+    upsert "^instance $_i disabled " "instance $_i disabled $_v"
+    echo "RIP $_i disabled = $_v"
+}
+
+cmd_disabled_del() { # disabled-del INST
+    _i="$1"
+    valid_inst "$_i"
+    dellines "^instance $_i disabled "
+    echo "RIP $_i disabled dihapus (default BIRD: protokol aktif)"
+}
+
+cmd_router_id_set() { # router-id-set INST IP (Bab 3.4-4; router id per-protocol)
+    _i="$1"; _v="$2"
+    valid_inst "$_i"
+    [ -n "$_v" ] || err "router-id butuh alamat IP"
+    valid_ip4 "$_v" "router-id"
+    upsert "^instance $_i router-id " "instance $_i router-id $_v"
+    echo "RIP $_i router-id = $_v"
+}
+
+cmd_router_id_del() { # router-id-del INST (kembali ke router id global)
+    _i="$1"
+    valid_inst "$_i"
+    dellines "^instance $_i router-id "
+    echo "RIP $_i router-id dihapus (router id global BIRD)"
+}
+
+cmd_description_set() { # description-set INST TEKS... (Bab 3.4-5; label protokol)
+    _i="$1"; shift
+    valid_inst "$_i"
+    [ -n "$*" ] || err "description butuh teks"
+    upsert "^instance $_i description " "instance $_i description $*"
+    echo "RIP $_i description = $*"
+}
+
+cmd_description_del() { # description-del INST
+    _i="$1"
+    valid_inst "$_i"
+    dellines "^instance $_i description "
+    echo "RIP $_i description dihapus"
+}
+
+cmd_from_set() { # from-set INST TEMPLATE (Bab 3.2-15/16; template rip)
+    _i="$1"; _v="$2"
+    valid_inst "$_i"
+    [ -n "$_v" ] || err "from butuh nama template rip"
+    valid_name "$_v" "from"
+    upsert "^instance $_i from " "instance $_i from $_v"
+    echo "RIP $_i from = $_v"
+}
+
+cmd_from_del() { # from-del INST
+    _i="$1"
+    valid_inst "$_i"
+    dellines "^instance $_i from "
+    echo "RIP $_i from dihapus"
+}
+
 cmd_ecmp_limit_set() {
     _i="$1"; _v="$2"
     valid_inst "$_i"
@@ -298,7 +377,9 @@ cmd_ecmp_limit_del() {
 }
 
 cmd_chan_set() {
-    # chan-set <inst> <import|export> <all|none|filter NAME>
+    # chan-set <inst> <import|export> <all|none|filter NAME|where COND>
+    # (Bab 3.5-4/5; where = filter inline bentuk ringkas, mis.
+    # net~10.0.0.0/8 — diterjemahkan ke BIRD saat generate.)
     _i="$1"; _d="$2"; _v="$3"; _n="$4"
     valid_inst "$_i"
     case "$_d" in import|export) ;; *) err "channel harus import|export: $_d" ;; esac
@@ -308,7 +389,11 @@ cmd_chan_set() {
             [ -n "$_n" ] || err "$_d filter butuh NAMA filter"
             valid_name "$_n" "nama filter"
             upsert "^instance $_i $_d " "instance $_i $_d filter $_n" ;;
-        *) err "$_d harus all|none|filter NAME: $_v" ;;
+        where)
+            [ -n "$_n" ] || err "$_d where butuh ekspresi filter bentuk ringkas (mis. where net~10.0.0.0/8)"
+            cond_validate "$_n" || exit 33
+            upsert "^instance $_i $_d " "instance $_i $_d where $_n" ;;
+        *) err "$_d harus all|none|filter NAME|where COND: $_v" ;;
     esac
     echo "RIP $_i $_d = $_v${_n:+ $_n}"
 }
@@ -525,6 +610,10 @@ cmd_interface_set() {
                 1|2) upsert "^instance $_i interface $_re version " "instance $_i interface $_pat version $_v" ;;
                 *) err "version harus 1|2: $_v" ;;
             esac ;;
+        version-only)
+            [ "$_i" = "ripng" ] && err "version-only tidak didukung di RIPng (hanya RIP IPv4; RIPng tidak punya konsep version)"
+            valid_onoff "$_v" "version-only"
+            upsert "^instance $_i interface $_re version-only " "instance $_i interface $_pat version-only $_v" ;;
         split-horizon|poison-reverse|demand-circuit|check-zero|check-link)
             valid_onoff "$_v" "$_f"
             upsert "^instance $_i interface $_re $_f " "instance $_i interface $_pat $_f $_v" ;;
@@ -553,7 +642,7 @@ cmd_interface_set() {
                 none|plaintext|cryptographic) upsert "^instance $_i interface $_re authentication " "instance $_i interface $_pat authentication $_v" ;;
                 *) err "authentication harus none|plaintext|cryptographic: $_v" ;;
             esac ;;
-        *) err "field interface RIP tidak dikenal: $_f (metric|mode|passive|address|port|version|split-horizon|poison-reverse|demand-circuit|check-zero|update-time|timeout-time|garbage-time|ecmp-weight|ttl-security|tx-class|tx-dscp|rx-buffer|tx-length|check-link|authentication)" ;;
+        *) err "field interface RIP tidak dikenal: $_f (metric|mode|passive|address|port|version|version-only|split-horizon|poison-reverse|demand-circuit|check-zero|update-time|timeout-time|garbage-time|ecmp-weight|ttl-security|tx-class|tx-dscp|rx-buffer|tx-length|check-link|authentication)" ;;
     esac
     echo "RIP $_i interface $_pat $_f = $_v"
 }
@@ -565,7 +654,7 @@ cmd_interface_unset() {
     [ -n "$_pat" ] && [ -n "$_f" ] || err "interface-unset butuh INSTANCE PATTERN FIELD"
     _re=$(re_esc "$_pat")
     case "$_f" in
-        metric|mode|passive|address|port|version|split-horizon|poison-reverse|demand-circuit|check-zero|update-time|timeout-time|garbage-time|ecmp-weight|ttl-security|tx-class|tx-dscp|rx-buffer|tx-length|check-link|authentication)
+        metric|mode|passive|address|port|version|version-only|split-horizon|poison-reverse|demand-circuit|check-zero|update-time|timeout-time|garbage-time|ecmp-weight|ttl-security|tx-class|tx-dscp|rx-buffer|tx-length|check-link|authentication)
             dellines "^instance $_i interface $_re $_f " ;;
         password)
             err "password dihapus via password-del (hapus kunci + semua sub-opsinya sekaligus)" ;;
@@ -632,9 +721,9 @@ cmd_password_set() {
             upsert "^instance $_i interface $_re password $_pwre $_f " "instance $_i interface $_pat password $_pw $_f $_v" ;;
         algorithm)
             case "$_v" in
-                keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512)
+                keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512)
                     upsert "^instance $_i interface $_re password $_pwre algorithm " "instance $_i interface $_pat password $_pw algorithm $_v" ;;
-                *) err "algorithm harus keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512: $_v" ;;
+                *) err "algorithm harus keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512: $_v" ;;
             esac ;;
         *) err "field password tidak dikenal: $_f (id|generate-from|generate-to|accept-from|accept-to|from|to|algorithm)" ;;
     esac
@@ -664,8 +753,32 @@ get_inst_field() {
 }
 
 get_chan() {
-    # $1=inst $2=import|export -> "all"|"none"|"filter NAME"
+    # $1=inst $2=import|export -> "all" | "none" | "filter NAME" | "where COND"
+    # (juga dipakai untuk nilai multi-kata lain, mis. description).
     grep "^instance $1 $2 " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}'
+}
+
+cond_validate() {
+    # cond_validate <COND> — validasi ekspresi filter bentuk ringkas
+    # (mis. net~10.0.0.0/8) via titian-bgp.sh cond-to-bird. Bila script
+    # itu tidak ada (deploy parsial), fallback validasi ringan.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" >/dev/null
+    else
+        case "$1" in *[\;\{\}]* ) err "where: ekspresi mengandung karakter terlarang (; { })" ;; esac
+    fi
+}
+
+cond_translate() {
+    # cond_translate <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai di generate untuk bentuk `import/export where <COND>`.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" || exit 33
+    else
+        err "penerjemah kondisi tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
 }
 
 get_iface_field() {
@@ -750,6 +863,7 @@ emit_iface() {
     [ -n "$_addr" ] && echo "        address $_addr;"
     [ -n "$_port" ] && echo "        port $_port;"
     [ -n "$_ver" ] && echo "        version $_ver;"
+    emit_switch "$_i" "$_pat" version-only "version only"
     emit_switch "$_i" "$_pat" split-horizon "split horizon"
     emit_switch "$_i" "$_pat" poison-reverse "poison reverse"
     emit_switch "$_i" "$_pat" demand-circuit "demand circuit"
@@ -802,6 +916,10 @@ emit_instance() {
     _ikf=$(get_inst_field "$_i" import-keep-filtered)
     _dbg=$(get_inst_field "$_i" debug)
     _mrt=$(get_inst_field "$_i" mrtdump)
+    _dis=$(get_inst_field "$_i" disabled)
+    _rid=$(get_inst_field "$_i" router-id)
+    _desc=$(get_chan "$_i" description)
+    _from=$(get_inst_field "$_i" from)
     [ -n "$_import" ] || _import="all"
     [ -n "$_export" ] || _export="all"
     if [ -n "$_rmetric" ] || [ -n "$_rtag" ]; then
@@ -816,12 +934,15 @@ emit_instance() {
         err "ecmp-limit di instance $_i tanpa ecmp on — set dulu ecmp on (atau hapus ecmp-limit)"
     fi
     if [ "$_i" = "rip" ]; then
-        echo "protocol rip rip4 {"
+        if [ -n "$_from" ]; then echo "protocol rip rip4 from $_from {"; else echo "protocol rip rip4 {"; fi
         _chan="ipv4"
     else
-        echo "protocol rip ng ripng6 {"
+        if [ -n "$_from" ]; then echo "protocol rip ng ripng6 from $_from {"; else echo "protocol rip ng ripng6 {"; fi
         _chan="ipv6"
     fi
+    case "$_dis" in on) echo "    disabled;" ;; esac
+    [ -n "$_rid" ] && echo "    router id $_rid;"
+    [ -n "$_desc" ] && echo "    description \"$_desc\";"
     [ -n "$_inf" ] && echo "    infinity $_inf;"
     case "$_ecmp" in
         on)
@@ -837,7 +958,10 @@ emit_instance() {
     fi
     echo "    $_chan {"
     [ -n "$_pref" ] && echo "        preference $_pref;"
-    echo "        import $_import;"
+    case "$_import" in
+        where\ *) _wcond=${_import#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        import where $_wbird;" ;;
+        *) echo "        import $_import;" ;;
+    esac
     case "$_ikf" in on) echo "        import keep filtered on;" ;; off) echo "        import keep filtered off;" ;; esac
     emit_limit "$_i" import
     emit_limit "$_i" receive
@@ -848,7 +972,10 @@ emit_instance() {
         echo "            accept;"
         echo "        };"
     else
-        echo "        export $_export;"
+        case "$_export" in
+            where\ *) _wcond=${_export#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        export where $_wbird;" ;;
+            *) echo "        export $_export;" ;;
+        esac
     fi
     emit_limit "$_i" export
     echo "    };"
@@ -880,6 +1007,16 @@ cmd_generate() {
             esac
         done
     done
+    # Guard: `from` wajib merujuk template rip yang ada di
+    # bird-global.conf (template hanya didefinisikan di sana; bila
+    # belum ada, gagal jelas — cermin guard BGP di titian-bgp.sh).
+    for _i in rip ripng; do
+        _ff=$(get_inst_field "$_i" from)
+        [ -z "$_ff" ] && continue
+        _gf="$STATE_ROOT/bird-global.conf"
+        [ -f "$_gf" ] && grep -q "^template rip $_ff\( \|$\)" "$_gf" 2>/dev/null || \
+            err "instance $_i: from template rip $_ff tidak ada di bird-global.conf (template-add rip $_ff dulu)"
+    done
     if has_facts; then
         {
             echo "# rip.conf - generated by titian-rip.sh, do not edit by hand"
@@ -908,6 +1045,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
@@ -920,7 +1065,7 @@ cmd_show() {
     _done=0
     for _inst in rip4 ripng6; do
         if grep -q "protocol rip.*$_inst" "$SECTION" 2>/dev/null; then
-            if _out=$("$_birdc" show protocol "$_inst" 2>&1); then
+            if _out=$("$_birdc" $(birdc_sock) show protocol "$_inst" 2>&1); then
                 echo "$_out" | grep -v '^BIRD'
                 _done=1
             fi
@@ -958,6 +1103,14 @@ case "$1" in
     infinity-del) shift; cmd_infinity_del "$@" ;;
     ecmp-set) shift; cmd_ecmp_set "$@" ;;
     ecmp-del) shift; cmd_ecmp_del "$@" ;;
+    disabled-set) shift; cmd_disabled_set "$@" ;;
+    disabled-del) shift; cmd_disabled_del "$@" ;;
+    router-id-set) shift; cmd_router_id_set "$@" ;;
+    router-id-del) shift; cmd_router_id_del "$@" ;;
+    description-set) shift; cmd_description_set "$@" ;;
+    description-del) shift; cmd_description_del "$@" ;;
+    from-set) shift; cmd_from_set "$@" ;;
+    from-del) shift; cmd_from_del "$@" ;;
     ecmp-limit-set) shift; cmd_ecmp_limit_set "$@" ;;
     ecmp-limit-del) shift; cmd_ecmp_limit_del "$@" ;;
     chan-set) shift; cmd_chan_set "$@" ;;
@@ -986,5 +1139,5 @@ case "$1" in
     password-unset) shift; split_pw_ctx "$1"; shift; cmd_password_unset "$_CX_I" "$_CX_PAT" "$_CX_TEXT" "$@" ;;
     generate) cmd_generate ;;
     show) cmd_show ;;
-    *) echo "Usage: $0 {rip-touch INST|has-facts|infinity-set INST N|infinity-del INST|ecmp-set INST on|off|ecmp-del INST|ecmp-limit-set INST N|ecmp-limit-del INST|chan-set INST import|export all|none|filter NAME|preference-set INST N|preference-del INST|import-keep-filtered-set INST on|off|import-keep-filtered-del INST|limit-set INST import|receive|export N|off [ACTION]|limit-action-set INST import|receive|export warn|block|restart|disable|limit-del INST import|receive|export|debug-set INST SPEC|debug-del INST|mrtdump-set INST SPEC|mrtdump-del INST|export-rip-metric-set INST N|export-rip-metric-del INST|export-rip-tag-set INST N|export-rip-tag-del INST|interface-add CTX-IFACE|interface-del CTX-IFACE|interface-set CTX-IFACE FIELD VALUE|interface-unset CTX-IFACE FIELD|password-add CTX-PW|password-del CTX-PW|password-set CTX-PW FIELD VALUE|password-unset CTX-PW FIELD|generate|show}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {rip-touch INST|has-facts|infinity-set INST N|infinity-del INST|ecmp-set INST on|off|ecmp-del INST|disabled-set INST on|off|disabled-del INST|router-id-set INST IP|router-id-del INST|description-set INST TEKS|description-del INST|from-set INST TEMPLATE|from-del INST|ecmp-limit-set INST N|ecmp-limit-del INST|chan-set INST import|export all|none|filter NAME|where COND|preference-set INST N|preference-del INST|import-keep-filtered-set INST on|off|import-keep-filtered-del INST|limit-set INST import|receive|export N|off [ACTION]|limit-action-set INST import|receive|export warn|block|restart|disable|limit-del INST import|receive|export|debug-set INST SPEC|debug-del INST|mrtdump-set INST SPEC|mrtdump-del INST|export-rip-metric-set INST N|export-rip-metric-del INST|export-rip-tag-set INST N|export-rip-tag-del INST|interface-add CTX-IFACE|interface-del CTX-IFACE|interface-set CTX-IFACE FIELD VALUE|interface-unset CTX-IFACE FIELD|password-add CTX-PW|password-del CTX-PW|password-set CTX-PW FIELD VALUE|password-unset CTX-PW FIELD|generate|show}" >&2; exit 2 ;;
 esac

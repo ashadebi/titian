@@ -280,6 +280,79 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="show route filter"
+        help="Uji filter inline terhadap tabel route (birdc show route filter { if ... then accept; }); bentuk bernama TIDAK didukung BIRD 2.20 — hanya inline"
+        lock="false"
+        interrupt="true">
+        <PARAM name="cond"
+            help="Kondisi COND satu token (mis. net~10.0.0.0/8 atau roa:R4,net,bgp_path.last=ROA_VALID)"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-filter "${cond}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- show route primary/filtered + import/export table (BGP-132, B13) -->
+    <!-- `show route import` telanjang = induk klish untuk `... table`
+         (pola sama seperti `mrt`/`mrt dump` di bawah); birdc tidak punya
+         perintah `show route import` tanpa `table`. -->
+    <COMMAND name="show route import"
+        help="Import table channel (birdc show route import table &lt;protokol.channel&gt;)"/>
+    <COMMAND name="show route primary"
+        help="Hanya route primary (aktif) di tabel (birdc show route primary)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-primary
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show route primary count"
+        help="Statistik route primary (birdc show route primary count)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-primary count
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show route filtered"
+        help="Route yang tertahan filter (tidak primary) di tabel (birdc show route filtered)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-filtered
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show route filtered count"
+        help="Statistik route tertahan filter (birdc show route filtered count)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-filtered count
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show route import table"
+        help="Isi import table satu channel (birdc show route import table &lt;protokol.channel&gt;); channel tanpa import table menjawab kosong"
+        lock="false"
+        interrupt="true">
+        <PARAM name="proto_channel"
+            help="Protokol.channel BIRD (mis. bgp_10_99_40_2.ipv4)"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-import-table "${proto_channel}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="show route export table"
+        help="Isi export table satu channel (birdc show route export table &lt;protokol.channel&gt;); channel tanpa export table menjawab kosong"
+        lock="false"
+        interrupt="true">
+        <PARAM name="proto_channel"
+            help="Protokol.channel BIRD (mis. bgp_10_99_40_2.ipv4)"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh show-route-export-table "${proto_channel}"
+        </ACTION>
+    </COMMAND>
+
     <!-- show ospf detail (BC10-BC14; show ospf + show ospf neighbor sudah ada) -->
     <COMMAND name="show ospf interface"
         help="Info detail interface OSPF (birdc show ospf interface [nama] [interface])"
@@ -397,6 +470,16 @@
     </COMMAND>
 
     <!-- configure (BGP-135/136/137) -->
+    <!-- Nama klish `configure reload`: bare `configure` sudah dipakai
+         mode-entry (enable-mode.xml) — tidak bisa duplikat di view ini. -->
+    <COMMAND name="configure reload"
+        help="Muat ulang bird.conf ke daemon yang sedang jalan (birdc configure; setara SIGHUP)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure
+        </ACTION>
+    </COMMAND>
     <COMMAND name="configure check"
         help="Cek validitas bird.conf tanpa apply (birdc configure check)"
         lock="false"
@@ -419,6 +502,93 @@
         interrupt="true">
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh configure-undo
+        </ACTION>
+    </COMMAND>
+    <!-- configure [soft] ["<file>"] [timeout [<num>]] (BGP-135, B13) —
+         7 bentuk; `configure` polos = `configure reload` (di atas).
+         timeout tanpa angka = default BIRD (300 dtk). -->
+    <COMMAND name="configure soft"
+        help="Muat ulang konfigurasi tanpa restart protokol (birdc configure soft)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv soft
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="configure timeout"
+        help="Muat ulang konfigurasi dengan timer undo (birdc configure timeout [detik]; tanpa angka = 300 dtk; konfirmasi: configure confirm)"
+        lock="false"
+        interrupt="true">
+        <PARAM name="num"
+            help="Timeout detik; kosong = default BIRD (300)"
+            optional="true"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv timeout "${num}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="configure file"
+        help="Muat konfigurasi dari file lain (birdc configure &quot;&lt;file&gt;&quot;; file harus ada + bisa dibaca)"
+        lock="false"
+        interrupt="true">
+        <PARAM name="path"
+            help="Path file konfigurasi absolut"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv file "${path}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="configure soft timeout"
+        help="Muat ulang tanpa restart protokol + timer undo (birdc configure soft timeout [detik])"
+        lock="false"
+        interrupt="true">
+        <PARAM name="num"
+            help="Timeout detik; kosong = default BIRD (300)"
+            optional="true"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv soft timeout "${num}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="configure soft file"
+        help="Muat konfigurasi dari file lain tanpa restart protokol (birdc configure soft &quot;&lt;file&gt;&quot;)"
+        lock="false"
+        interrupt="true">
+        <PARAM name="path"
+            help="Path file konfigurasi absolut"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv soft file "${path}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="configure file timeout"
+        help="Muat konfigurasi dari file lain + timer undo (birdc configure &quot;&lt;file&gt;&quot; timeout [detik])"
+        lock="false"
+        interrupt="true">
+        <PARAM name="path"
+            help="Path file konfigurasi absolut"
+            ptype="STRING"/>
+        <PARAM name="num"
+            help="Timeout detik; kosong = default BIRD (300)"
+            optional="true"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv file "${path}" timeout "${num}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="configure soft file timeout"
+        help="Muat konfigurasi dari file lain tanpa restart protokol + timer undo (birdc configure soft &quot;&lt;file&gt;&quot; timeout [detik])"
+        lock="false"
+        interrupt="true">
+        <PARAM name="path"
+            help="Path file konfigurasi absolut"
+            ptype="STRING"/>
+        <PARAM name="num"
+            help="Timeout detik; kosong = default BIRD (300)"
+            optional="true"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh configure-adv soft file "${path}" timeout "${num}"
         </ACTION>
     </COMMAND>
 
@@ -599,6 +769,43 @@
         </PARAM>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh timeformat-session "${fmt}" "${fmt2}"
+        </ACTION>
+    </COMMAND>
+
+    <!-- birdc passthrough + socket (BC1/BC8, B13) -->
+    <!-- `birdc "<perintah>"`: perintah BIRD apa pun yang belum punya
+         perintah klish sendiri, diteruskan utuh ke birdc. `down` dan
+         `graceful restart` DIBLOK di backend (pakai gerbang konfirmasi
+         dua langkah di atas). -->
+    <COMMAND name="birdc"
+        help="Perintah birdc mentah (kutip seluruhnya, mis. birdc &quot;show status&quot;); down/graceful restart diblok — pakai gerbang konfirmasi"
+        lock="false"
+        interrupt="true">
+        <PARAM name="cmd"
+            help="Perintah BIRD (kutip bila mengandung spasi)"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh birdc-passthrough "${cmd}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="birdc socket"
+        help="Tampilkan/set socket kontrol birdc yang dipakai klish (default: bird.ctl); set wajib socket sudah ada + menjawab birdc"
+        lock="false"
+        interrupt="true">
+        <PARAM name="path"
+            help="Path socket UNIX absolut; kosong = tampilkan saja"
+            optional="true"
+            ptype="STRING"/>
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh birdc-socket "${path}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="birdc socket-del"
+        help="Kembalikan socket kontrol birdc ke default (bird.ctl)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-birdc.sh birdc-socket-del
         </ACTION>
     </COMMAND>
 </VIEW>

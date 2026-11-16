@@ -63,6 +63,57 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="debug"
+        help="Debug protokol device (all|off|states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="Kelas debug (all|off|daftar koma)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-set debug "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug device (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-del debug
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="Dump MRT protokol device (all|off|states|messages)">
+        <PARAM name="Value"
+            help="Kelas mrtdump (all|off|states|messages)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-set mrtdump "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump device (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-del mrtdump
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disabled"
+        help="Nonaktifkan protokol device (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-set disabled on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali protokol device (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh device-del disabled
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="interface"
         help="Definisi per-interface (masuk ke interface view: preferred IP)"
         view="configure-bird-device-interface-view"

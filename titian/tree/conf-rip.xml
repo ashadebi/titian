@@ -12,13 +12,13 @@
     <!--     / export-rip-tag), `interface <PATTERN>` (masuk ke -->
     <!--     interface view).                                   -->
     <!--   - Interface view: metric, mode, passive, address,   -->
-    <!--     port, version (RIP saja), split-horizon,           -->
-    <!--     poison-reverse, demand-circuit, check-zero, timer  -->
-    <!--     update/timeout/garbage, ecmp-weight, ttl-security, -->
-    <!--     tx-class/tx-dscp, rx-buffer, tx-length,            -->
-    <!--     check-link, authentication, `password <TEXT>`      -->
-    <!--     (masuk ke password view: id + rotasi berjadwal +   -->
-    <!--     algorithm).                                        -->
+    <!--     port, version (RIP saja), version-only (RIP saja, -->
+    <!--     B15), split-horizon, poison-reverse, demand-       -->
+    <!--     circuit, check-zero, timer update/timeout/garbage, -->
+    <!--     ecmp-weight, ttl-security, tx-class/tx-dscp,        -->
+    <!--     rx-buffer, tx-length, check-link, authentication,  -->
+    <!--     `password <TEXT>` (masuk ke password view: id +    -->
+    <!--     rotasi berjadwal + algorithm).                      -->
     <!--   - Intent di /etc/titian/rip.conf; generate via       -->
     <!--     titian-rip.sh (menulis section bird.d/rip.conf     -->
     <!--     lalu titian-bird.sh generate rip). Section ditulis -->
@@ -45,9 +45,9 @@
     <!--     keyed-MD5); rip_metric 1 / rip_tag 0 untuk route   -->
     <!--     non-RIP yang diekspor.                             -->
     <!--   - TIDAK diimplementasi (lihat titian-rip.sh):        -->
-    <!--     `version only` (tidak ada di blok template docs —  -->
-    <!--     PERLU VERIFIKASI via `bird -p`); `tx priority`     -->
-    <!--     (Linux-specific).                                  -->
+    <!--     `tx priority` (Linux-specific). `version only`    -->
+    <!--     TERIMPLEMENTASI batch 5 (B15): `version-only`      -->
+    <!--     (bird -p live rc=0 untuk yes/on).                  -->
 
 <VIEW name="configure-bird-rip-view"
     prompt="${SYSTEM_NAME}(config-bird-${rip_inst})# "
@@ -260,6 +260,75 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="router-id"
+        help="Router id khusus protokol ini (default: router id global BIRD)">
+        <PARAM name="IP"
+            help="Alamat IPv4 router id"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh router-id-set "${rip_inst}" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router-id"
+        help="Hapus router id protokol (kembali ke router id global BIRD)">
+        <CONFIG operation="unset" pattern="^router-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh router-id-del "${rip_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+        help="Label/deskripsi protokol ini">
+        <PARAM name="Text"
+            help="Teks deskripsi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh description-set "${rip_inst}" "${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no description"
+        help="Hapus deskripsi protokol">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh description-del "${rip_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disabled"
+        help="Nonaktifkan protokol ini (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh disabled-set "${rip_inst}" on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali protokol ini (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh disabled-del "${rip_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Ambil opsi dari template RIP (template-add rip &lt;NAMA&gt; dulu di router bird)">
+        <PARAM name="Name"
+            help="Nama template RIP"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh from-set "${rip_inst}" "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Lepas template RIP (opsi ditulis eksplisit)">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh from-del "${rip_inst}"
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="import all"
         help="Channel: import semua route (default)">
         <CONFIG/>
@@ -282,6 +351,16 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import where"
+        help="Channel: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" import where "${Cond}"
         </ACTION>
     </COMMAND>
 
@@ -307,6 +386,16 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export where"
+        help="Channel: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" export where "${Cond}"
         </ACTION>
     </COMMAND>
 
@@ -490,6 +579,21 @@
         <CONFIG operation="unset" pattern="^version"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" version
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="version-only"
+        help="Hanya terima paket RIP dengan versi yang dikonfigurasi (default BIRD no; RIP IPv4 saja)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" version-only on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no version-only"
+        help="Terima semua versi RIP (default BIRD)">
+        <CONFIG operation="unset" pattern="^version-only"/>
+        <ACTION>
+            ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" version-only off
         </ACTION>
     </COMMAND>
 
@@ -919,7 +1023,7 @@
     <COMMAND name="algorithm"
         help="Algoritma kunci ini (default keyed-MD5)">
         <PARAM name="Value"
-            help="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512"
+            help="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>

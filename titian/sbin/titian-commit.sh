@@ -35,6 +35,14 @@ WG_SH="$SBIN_DIR/titian-wireguard.sh"
 MON_SH="$SBIN_DIR/titian-monitoring.sh"
 err() { echo "Error(commit): $*" >&2; exit 33; }
 
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 apply_routing() {
     # Niat bird/frr dari $STATE_ROOT/netstate/routing.intent.
     local intent="$STATE_ROOT/netstate/routing.intent"
@@ -46,7 +54,7 @@ apply_routing() {
         if [ -n "$(pgrep -x bird 2>/dev/null | head -1)" ]; then
             sh "$BIRD_SH" check filter >/dev/null 2>&1 || true
             _birdc=$(command -v birdc 2>/dev/null || echo birdc)
-            $_birdc configure 2>&1 | grep -v '^BIRD' || true
+            $_birdc $(birdc_sock) configure 2>&1 | grep -v '^BIRD' || true
             echo "commit: bird already jalan — config at-reload (birdc configure)"
         else
             if command -v service >/dev/null 2>&1; then service bird start || err "service bird start gagal"; else echo "(service tidak ada — lewati: service bird start)"; fi

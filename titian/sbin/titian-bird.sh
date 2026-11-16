@@ -51,6 +51,14 @@ birdc_bin() {
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
 
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 # ---------------- deteksi varian (§1) ----------------
 # Urutan sumber (pertama yang berhasil dipakai):
 #   1. /etc/version.build (bird_version=2|3)
@@ -88,7 +96,7 @@ detect_variant() {
             elif pkg info -x '^bird2$' >/dev/null 2>&1; then variant=2; fi
         fi
         if [ -z "$variant" ] && command -v birdc >/dev/null 2>&1; then
-            bv=$(birdc show status 2>/dev/null | grep -i 'BIRD version' | head -1)
+            bv=$(birdc $(birdc_sock) show status 2>/dev/null | grep -i 'BIRD version' | head -1)
             case "$bv" in
                 *" 2."*) variant=2; bver=$(printf '%s' "$bv" | sed -n 's/.*BIRD version \([0-9.]*\).*/\1/p') ;;
                 *" 3."*) variant=3; bver=$(printf '%s' "$bv" | sed -n 's/.*BIRD version \([0-9.]*\).*/\1/p') ;;
@@ -379,7 +387,7 @@ do_generate() {
     # bird akan membaca file ini saat start berikutnya.
     if is_bird_running; then
         echo "--- birdc configure ---"
-        out=$("$birdc" configure 2>&1); rc=$?
+        out=$("$birdc" $(birdc_sock) configure 2>&1); rc=$?
         echo "$out" | grep -v '^BIRD'
         if [ "$rc" -ne 0 ]; then
             echo "Warning: birdc configure failed (config already tertulis; backup: $bakdir/bird.conf.$ts)" >&2
@@ -398,9 +406,9 @@ do_reload_filters() {
     [ "$variant" = "none" ] && err "no BIRD installed in this image (build with BIRD_VERSION=2 or 3)"
     birdc=$(birdc_bin)
     if [ "$variant" = "3" ]; then
-        out=$("$birdc" reload filters 2>&1); rc=$?
+        out=$("$birdc" $(birdc_sock) reload filters 2>&1); rc=$?
     else
-        out=$("$birdc" reload 2>&1); rc=$?
+        out=$("$birdc" $(birdc_sock) reload 2>&1); rc=$?
     fi
     echo "$out" | grep -v '^BIRD'
     [ "$rc" -ne 0 ] && exit 33
@@ -434,7 +442,7 @@ do_set_threads() {
     cat "$_tmp" > "$conf" || { rm -f "$_tmp"; err "gagal tulis $conf"; }
     rm -f "$_tmp"
     echo "threads $n ditulis to $conf"
-    out=$("$(birdc_bin)" configure 2>&1); rc=$?
+    out=$("$(birdc_bin)" $(birdc_sock) configure 2>&1); rc=$?
     echo "$out" | grep -v '^BIRD'
     [ "$rc" -ne 0 ] && err "birdc configure gagal sesudah threads $n"
 }

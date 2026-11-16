@@ -29,6 +29,22 @@
     <!--     [local <ip>] [multihop]; }. Satu instance tanpa    -->
     <!--     nama. Default BIRD: min rx 10 ms, min tx 100 ms,   -->
     <!--     idle tx 1 s, multiplier 5, passive off.            -->
+    <!--   - Opsi level-protokol (B17): `accept <ipv4|ipv6>           -->
+    <!--     <direct|multihop>` (satu baris per kombinasi; tanpa      -->
+    <!--     baris accept = terima semua, default BIRD), `strict-bind`-->
+    <!--     dan `zero-udp6-checksum-rx` (on/off). Bentuk klish       -->
+    <!--     `accept` WAJIB lengkap dua bagian — `accept ipv4;` /     -->
+    <!--     `accept direct;` / `accept;` valid di BIRD tapi tidak    -->
+    <!--     diekspos klish (kombinasi sama dicapai 2 baris lengkap). -->
+    <!--   - Auth/password BFD (B18, keputusan user 17 Nov ~05:18): -->
+    <!--     `authentication none|simple|keyed-md5|keyed-sha1|       -->
+    <!--     meticulous-keyed-md5|meticulous-keyed-sha1` + `password -->
+    <!--     <TEXT>` (+ rotasi id/generate/accept/from/to, TANGGAL   -->
+    <!--     saja YYYY-MM-DD) di interface view + multihop view;     -->
+    <!--     `no authentication` hapus auth (tolak bila password     -->
+    <!--     masih ada); pasangan auth+password divalidasi ketat     -->
+    <!--     rc=33 (BIRD sendiri hanya warning). Nilai password      -->
+    <!--     TIDAK PERNAH dicetak (`show` meredaksi).                -->
 
 <VIEW name="configure-bird-bfd-view"
     prompt="${SYSTEM_NAME}(config-bird-bfd)# "
@@ -108,6 +124,63 @@
         <CONFIG priority="0x1542" pattern="^${__line}$"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh multihop-touch
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept"
+        help="Terima request sesi BFD keluarga + jenis ini saja (tanpa baris accept = terima semua, default BIRD)">
+        <PARAM name="Family"
+            help="Keluarga alamat: ipv4 atau ipv6"
+            ptype="STRING"/>
+        <PARAM name="Type"
+            help="Jenis sesi: direct atau multihop"
+            ptype="STRING"/>
+        <CONFIG pattern="^accept ${Family} ${Type}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh accept-add "${Family}" "${Type}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no accept"
+        help="Hapus penerimaan kombinasi ini (hapus semua baris = kembali terima semua)">
+        <PARAM name="Family"
+            help="Keluarga alamat: ipv4 atau ipv6"
+            ptype="STRING"/>
+        <PARAM name="Type"
+            help="Jenis sesi: direct atau multihop"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^accept ${Family} ${Type}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh accept-del "${Family}" "${Type}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="strict-bind"
+        help="Tiap interface BFD pakai socket listen sendiri (default BIRD: socket bersama)">
+        <CONFIG pattern="^strict-bind$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh proto-set strict-bind on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no strict-bind"
+        help="Kembali ke socket listen bersama (default BIRD)">
+        <CONFIG operation="unset" pattern="^strict-bind$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh proto-set strict-bind off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="zero-udp6-checksum-rx"
+        help="Terima datagram IPv6 dengan UDP checksum nol (hanya platform yang mendukung)">
+        <CONFIG pattern="^zero-udp6-checksum-rx$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh proto-set zero-udp6-checksum-rx on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no zero-udp6-checksum-rx"
+        help="Tolak datagram IPv6 dengan UDP checksum nol (default BIRD)">
+        <CONFIG operation="unset" pattern="^zero-udp6-checksum-rx$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh proto-set zero-udp6-checksum-rx off
         </ACTION>
     </COMMAND>
 </VIEW>
@@ -192,6 +265,49 @@
         <CONFIG operation="unset" pattern="^passive"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" passive off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="authentication"
+        help="Metode autentikasi paket BFD di interface ini (default none; algoritma berlaku untuk SEMUA password di interface ini)">
+        <PARAM name="Value"
+            help="none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-auth-set "${bfd_iface}" "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no authentication"
+        help="Hapus authentication (kembali default none). Ditolak bila password masih ada — hapus dulu: no password &lt;TEXT&gt;">
+        <CONFIG operation="unset" pattern="^authentication"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh interface-auth-del "${bfd_iface}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="password"
+        help="Kunci autentikasi BFD di interface ini (masuk ke password view: id + rotasi; butuh authentication sudah diset, bukan none)"
+        view="configure-bird-bfd-password-view"
+        viewid="bfd_pw_ctx=interface:${bfd_iface}:${Text}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Text"
+            help="Password (tanpa spasi, tanpa &quot;, tanpa backslash, tanpa titik-dua)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1543" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-add "interface:${bfd_iface}:${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no password"
+        help="Hapus kunci ini (+ semua sub-opsinya)">
+        <PARAM name="Text"
+            help="Password yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^password ${Text}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-del "interface:${bfd_iface}:${Text}"
         </ACTION>
     </COMMAND>
 </VIEW>
@@ -327,6 +443,195 @@
         <CONFIG operation="unset" pattern="^passive"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh multihop-set passive off
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="authentication"
+        help="Metode autentikasi paket BFD multihop (default none; algoritma berlaku untuk SEMUA password multihop)">
+        <PARAM name="Value"
+            help="none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-auth-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no authentication"
+        help="Hapus authentication multihop (kembali default none). Ditolak bila password masih ada — hapus dulu: no password &lt;TEXT&gt;">
+        <CONFIG operation="unset" pattern="^authentication"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh multihop-auth-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="password"
+        help="Kunci autentikasi BFD multihop (masuk ke password view: id + rotasi; butuh authentication sudah diset, bukan none)"
+        view="configure-bird-bfd-password-view"
+        viewid="bfd_pw_ctx=multihop:${Text}"
+        ptype="SUBCOMMAND"
+        mode="subcommand">
+        <PARAM name="Text"
+            help="Password (tanpa spasi, tanpa &quot;, tanpa backslash, tanpa titik-dua)"
+            ptype="STRING"/>
+        <CONFIG priority="0x1544" pattern="^${__line}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-add "multihop:${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no password"
+        help="Hapus kunci multihop ini (+ semua sub-opsinya)">
+        <PARAM name="Text"
+            help="Password yang dihapus"
+            ptype="STRING"/>
+        <CONFIG operation="unset" pattern="^password ${Text}"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-del "multihop:${Text}"
+        </ACTION>
+    </COMMAND>
+</VIEW>
+
+<VIEW name="configure-bird-bfd-password-view"
+    prompt="${SYSTEM_NAME}(config-bird-bfd-pw)# "
+    depth="4">
+    <NAMESPACE ref="configure-bird-bfd-interface-view"
+        help="false"
+        completion="true"/>
+    <NAMESPACE ref="configure-bird-bfd-multihop-view"
+        help="false"
+        completion="true"/>
+    <COMMAND name="exit"
+        help="Back to interface/multihop mode"
+        lock="false">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+    <HOTKEY key="^Z" cmd="exit"/>
+
+    <COMMAND name="no"
+        help="Negate a command or set its defaults"/>
+
+    <COMMAND name="id"
+        help="ID kunci (untuk rotasi)">
+        <PARAM name="Value"
+            help="ID (0..4294967295)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" id "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no id"
+        help="Hapus id kunci ini">
+        <CONFIG operation="unset" pattern="^id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" id
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="generate-from"
+        help="Kunci mulai di-generate pada tanggal ini (TANGGAL saja YYYY-MM-DD — BIRD menolak tanggal+jam)">
+        <PARAM name="Value"
+            help="YYYY-MM-DD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" generate-from "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no generate-from"
+        help="Hapus generate-from kunci ini">
+        <CONFIG operation="unset" pattern="^generate-from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" generate-from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="generate-to"
+        help="Kunci berhenti di-generate pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        <PARAM name="Value"
+            help="YYYY-MM-DD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" generate-to "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no generate-to"
+        help="Hapus generate-to kunci ini">
+        <CONFIG operation="unset" pattern="^generate-to"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" generate-to
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept-from"
+        help="Kunci mulai diterima pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        <PARAM name="Value"
+            help="YYYY-MM-DD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" accept-from "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no accept-from"
+        help="Hapus accept-from kunci ini">
+        <CONFIG operation="unset" pattern="^accept-from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" accept-from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="accept-to"
+        help="Kunci berhenti diterima pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        <PARAM name="Value"
+            help="YYYY-MM-DD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" accept-to "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no accept-to"
+        help="Hapus accept-to kunci ini">
+        <CONFIG operation="unset" pattern="^accept-to"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" accept-to
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Kunci berlaku mulai tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        <PARAM name="Value"
+            help="YYYY-MM-DD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" from "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Hapus from kunci ini">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="to"
+        help="Kunci berlaku sampai tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        <PARAM name="Value"
+            help="YYYY-MM-DD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-set "${bfd_pw_ctx}" to "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no to"
+        help="Hapus to kunci ini">
+        <CONFIG operation="unset" pattern="^to"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" to
         </ACTION>
     </COMMAND>
 </VIEW>

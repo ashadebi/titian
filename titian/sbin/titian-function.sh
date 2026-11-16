@@ -110,6 +110,146 @@ valid_prefix() { # valid_prefix <nilai> <label> — CIDR IPv4
     [ "$_len" -le 32 ] 2>/dev/null || err "$_l panjang prefix harus 0..32: $_v"
 }
 
+# --- B12: validator tambahan, SALINAN titian-bgp.sh (drift B5: salinan ini
+# dulu tidak punya IPv6/RD/bytestring/define; ditambah untuk 5-45/5-64/65/66) ---
+valid_ipv6() { # valid_ipv6 <nilai> <label> — IPv6, '::' maks sekali, grup 1-4 hex
+    _v="$1"; _l="$2"
+    case "$_v" in *:*) ;; *) err "$_l harus alamat IPv6: $_v" ;; esac
+    case "$_v" in *[!0-9A-Fa-f:.]*) err "$_l harus alamat IPv6 (karakter tidak valid): $_v" ;; esac
+    case "$_v" in *[!:]:) err "$_l harus alamat IPv6 (':' tunggal di akhir): $_v" ;; esac
+    case "$_v" in :[!:]*) err "$_l harus alamat IPv6 (':' di awal tanpa '::'): $_v" ;; esac
+    _t=${_v#*::}
+    case "$_t" in *::*) err "$_l harus alamat IPv6 ('::' hanya boleh sekali): $_v" ;; esac
+    _dc=0; case "$_v" in *::*) _dc=1 ;; esac
+    _ng=0; _r="$_v"
+    case "$_r" in *.*)
+        _tail=${_r##*:}
+        valid_ipv4 "$_tail" "$_l"
+        _r=${_r%:*}
+        _ng=2 ;;
+    esac
+    while [ -n "$_r" ]; do
+        case "$_r" in *:*) _g=${_r%%:*}; _r=${_r#*:} ;; *) _g="$_r"; _r="" ;; esac
+        [ -z "$_g" ] && continue
+        case "$_g" in ?|??|???|????) ;; *) err "$_l harus alamat IPv6 (grup 1-4 digit hex): $_v" ;; esac
+        _ng=$((_ng + 1))
+    done
+    if [ "$_dc" = "1" ]; then
+        [ "$_ng" -le 7 ] 2>/dev/null || err "$_l harus alamat IPv6 (terlalu banyak grup untuk '::'): $_v"
+    else
+        [ "$_ng" -eq 8 ] 2>/dev/null || err "$_l harus alamat IPv6 (tanpa '::' harus 8 grup): $_v"
+    fi
+}
+valid_prefix6() { # valid_prefix6 <nilai> <label> — CIDR IPv6
+    _v="$1"; _l="$2"
+    case "$_v" in */*) ;; *) err "$_l harus prefix CIDR IPv6: $_v" ;; esac
+    _ip=${_v%/*}; _len=${_v#*/}
+    valid_ipv6 "$_ip" "$_l"
+    case "$_len" in ''|*[!0-9]*) err "$_l panjang prefix harus bilangan: $_v" ;; esac
+    [ "$_len" -le 128 ] 2>/dev/null || err "$_l panjang prefix harus 0..128: $_v"
+}
+valid_prefix_any() { # <nilai> <label> — CIDR IPv4 atau IPv6
+    case "$1" in *:*)
+        valid_prefix6 "$1" "$2" ;;
+        *) valid_prefix "$1" "$2" ;;
+    esac
+}
+valid_ip_any() { # <nilai> <label> — IPv4 atau IPv6 (salinan titian-bgp.sh, B12/5-122: from/bgp_next_hop/gw/net.ip bertipe ip BIRD = v4 atau v6)
+    case "$1" in *:*)
+        valid_ipv6 "$1" "$2" ;;
+        *) valid_ipv4 "$1" "$2" ;;
+    esac
+}
+valid_rd() { # <nilai> <label> — RD: ASN:u32 | ASN4:u16 | IP:u32
+    _b8v="$1"; _b8l="$2"
+    case "$_b8v" in *:*) ;; *) err "$_b8l harus RD (ASN:u32 | ASN4:u16 | IP:u32): $_b8v" ;; esac
+    _b8r1=${_b8v%%:*}; _b8r2=${_b8v#*:}
+    case "$_b8r2" in *:*|''|*[!0-9]*) err "$_b8l RD bagian kedua harus angka: $_b8v" ;; esac
+    case "$_b8r1" in *.*)
+        valid_ipv4 "$_b8r1" "$_b8l (RD IP)"
+        [ "$_b8r2" -le 65535 ] 2>/dev/null || err "$_b8l RD bentuk IP:u32 butuh u32 0..65535: $_b8v" ;;
+        *)
+        case "$_b8r1" in ''|*[!0-9]*) err "$_b8l RD ASN harus angka: $_b8v" ;; esac
+        [ "$_b8r1" -le 4294967295 ] 2>/dev/null || err "$_b8l RD ASN harus 0..4294967295: $_b8v"
+        [ "$_b8r2" -le 4294967295 ] 2>/dev/null || err "$_b8l RD bagian kedua harus 0..4294967295: $_b8v"
+        { [ "$_b8r1" -le 65535 ] 2>/dev/null || [ "$_b8r2" -le 65535 ] 2>/dev/null; } || err "$_b8l RD butuh bentuk ASN:u32 (ASN 0..65535) atau ASN4:u16 (u16 0..65535): $_b8v" ;;
+    esac
+}
+valid_bytestring() { # <nilai> <label> — bytestring (Bab 5.2 No 20)
+    _b8v="$1"; _b8l="$2"
+    case "$_b8v" in
+        from_hex\(\\\"*\\\"\))
+            _b8h=$(printf '%s' "$_b8v" | sed 's/^from_hex("//; s/")$//')
+            case "$_b8h" in ''|*[!0-9a-fA-F.:-]*) err "$_b8l from_hex: isi harus digit hex + pemisah . : - : $_b8v" ;; esac
+            case "$_b8h" in *[0-9a-fA-F]*) ;; *) err "$_b8l from_hex: butuh minimal 1 digit hex: $_b8v" ;; esac ;;
+        'hex:'*)
+            _b8h=${_b8v#hex:}
+            case "$_b8h" in ''|*[!0-9a-fA-F:]*) err "$_b8l bytestring hex: harus byte hex dipisah ':' (mis. hex:0e:10:20): $_b8v" ;; esac ;;
+        *)
+            case "$_b8v" in *[!0-9a-fA-F]*) err "$_b8l bytestring tanpa prefix hex: wajib string hex (tanpa spasi): $_b8v" ;; esac
+            _b8n=${#_b8v}
+            [ $(( _b8n % 2 )) -eq 0 ] || err "$_b8l bytestring tanpa prefix hex: jumlah digit harus genap: $_b8v"
+            [ "$_b8n" -ge 32 ] || err "$_b8l bytestring tanpa prefix hex: wajib >= 16 byte (32 digit hex); yang pendek wajib prefix hex: : $_b8v" ;;
+    esac
+}
+define_exists() {
+    { [ -f "$STATE_ROOT/bird-global.conf" ] && grep -q "^define $1 " "$STATE_ROOT/bird-global.conf" 2>/dev/null; } ||     grep -q "^define-int $1 " "$CONF" 2>/dev/null
+}
+
+# --- B12: literal net SADR/VPN/ROA (Bab 5.2 No 64-66) — SALINAN titian-bgp.sh ---
+# Bentuk ringkas satu token: DST,from,SRC | PREFIX,max,MAXLEN,as,ASN.
+# Literal ini konstanta net_ (T_NET) untuk posisi TERM (net=<literal>); TIDAK
+# bisa masuk prefix-set [ ... ] (fprefix hanya menerima net_ip_).
+# VPN (5-65): literal `rd RD PREFIX` DITOLAK BIRD 2.20.0 di filter (bird -p:
+# "unexpected RD"); bentuk ringkas rd,RD,PREFIX sengaja DITOLAK backend.
+# Cocokkan VPN via net.type=NET_VPN4|NET_VPN6 + net.rd=RD (keduanya rc=0).
+valid_net_literal() { # valid_net_literal <RINGKAS> <label>
+    _nl="$1"; _nll="$2"
+    case "$_nl" in
+        rd,*)  # B12/5-65 KOREKSI: BIRD 2.20.0 MENOLAK literal `rd ...` di filter
+            # (bird -p: "syntax error, unexpected RD"). Cocokkan VPN via
+            # net.type=NET_VPN4|NET_VPN6 + net.rd=RD (keduanya rc=0).
+            err "$_nll literal VPN rd,RD,PREFIX DITOLAK BIRD 2.20.0 (bird -p: unexpected RD) — cocokkan VPN via net.type=NET_VPN4|NET_VPN6 + net.rd=RD: $_nl" ;;
+        *',from,'*)
+            _nld=${_nl%%,from,*}; _nls=${_nl#*,from,}
+            case "$_nls" in *,*) err "$_nll literal SADR harus DST,from,SRC (tepat 3 bagian): $_nl" ;; esac
+            [ -n "$_nld" ] && [ -n "$_nls" ] || err "$_nll literal SADR harus DST,from,SRC: $_nl"
+            valid_prefix6 "$_nld" "$_nll"; valid_prefix6 "$_nls" "$_nll" ;;
+        *',max,'*',as,'*)
+            _nlp=${_nl%%,max,*}; _nlr=${_nl#*,max,}; _nlm=${_nlr%%,as,*}; _nla=${_nlr#*,as,}
+            case "$_nla" in *,*) err "$_nll literal ROA harus PREFIX,max,MAXLEN,as,ASN (tepat 5 bagian): $_nl" ;; esac
+            [ -n "$_nlp" ] && [ -n "$_nlm" ] && [ -n "$_nla" ] || err "$_nll literal ROA harus PREFIX,max,MAXLEN,as,ASN: $_nl"
+            valid_prefix_any "$_nlp" "$_nll"
+            case "$_nlm" in ''|*[!0-9]*) err "$_nll literal ROA maxlen harus bilangan: $_nl" ;; esac
+            _nlplen=${_nlp#*/}
+            [ "$_nlm" -ge "$_nlplen" ] 2>/dev/null || err "$_nll literal ROA maxlen harus >= panjang prefix ($_nlplen): $_nl"
+            case "$_nlp" in *:*)
+                [ "$_nlm" -le 128 ] 2>/dev/null || err "$_nll literal ROA maxlen harus 0..128: $_nl" ;;
+                *) [ "$_nlm" -le 32 ] 2>/dev/null || err "$_nll literal ROA maxlen harus 0..32: $_nl" ;; esac
+            valid_asn "$_nla" "$_nll" ;;
+        *) err "$_nll bukan literal net SADR/VPN/ROA (bentuk: DST,from,SRC | rd,RD,PREFIX | PREFIX,max,MAXLEN,as,ASN): $_nl" ;;
+    esac
+}
+net_literal_to_bird() { # net_literal_to_bird <RINGKAS> -> bentuk BIRD (sudah divalidasi)
+    _nl="$1"
+    case "$_nl" in
+        *',from,'*) printf '%s from %s' "${_nl%%,from,*}" "${_nl#*,from,}"; return 0 ;;
+        *',max,'*',as,'*) _nlp=${_nl%%,max,*}; _nlr=${_nl#*,max,}; printf '%s max %s as %s' "$_nlp" "${_nlr%%,as,*}" "${_nlr#*,as,}"; return 0 ;;
+    esac
+    printf '%s' "$_nl"
+}
+is_net_literal() { # is_net_literal <NILAI> -> 0 bila bentuk ringkas literal net
+    case "$1" in rd,*|*',from,'*|*',max,'*',as,'*) return 0 ;; *) return 1 ;; esac
+}
+prefix_value_to_bird() { # prefix_value_to_bird <ATTR> <NILAI> <label> -> bentuk BIRD
+    if [ "$1" = "net" ] && is_net_literal "$2"; then
+        valid_net_literal "$2" "$3" || exit 33
+        net_literal_to_bird "$2"; return 0
+    fi
+    valid_prefix_any "$2" "$3" || exit 33
+    printf '%s' "$2"
+}
+
 # --- B5: validator bahasa filter (Bab 5) ---
 # Semua gagal -> rc 33 via err. Dipakai saat filter-add (fail fast) DAN
 # saat generate (intent bisa diedit tangan; generate memvalidasi ulang).
@@ -206,6 +346,18 @@ valid_ec() { # <nilai> <label> — EC (rt|ro, A, B) (salinan bgp, B9)
     [ "$_eb" -le 4294967295 ] 2>/dev/null || err "$_el EC B harus 0..4294967295: $_ev"
     { [ "$_ea" -le 65535 ] 2>/dev/null || [ "$_eb" -le 65535 ] 2>/dev/null; } || err "$_el EC butuh bentuk (rt|ro, ASN16, u32) atau (rt|ro, ASN32, u16): $_ev"
 }
+valid_pair() { # <nilai> <label> — pair (AA,NN), tiap komponen 0..65535 (salinan bgp, B16: accessor/print literal pair)
+    _b8pv="$1"; _b8pl="$2"
+    case "$_b8pv" in '('*')') ;; *) err "$_b8pl harus pair (AA,NN): $_b8pv" ;; esac
+    _b8pe=${_b8pv#(}; _b8pe=${_b8pe%)}
+    case "$_b8pe" in *,*) ;; *) err "$_b8pl pair harus tepat 2 komponen: $_b8pv" ;; esac
+    _b8pa=${_b8pe%%,*}; _b8pn=${_b8pe#*,}
+    case "$_b8pn" in *,*) err "$_b8pl pair harus tepat 2 komponen: $_b8pv" ;; esac
+    case "$_b8pa" in ''|*[!0-9]*) err "$_b8pl pair AS harus angka: $_b8pv" ;; esac
+    case "$_b8pn" in ''|*[!0-9]*) err "$_b8pl pair NN harus angka: $_b8pv" ;; esac
+    [ "$_b8pa" -le 65535 ] 2>/dev/null || err "$_b8pl pair AS harus 0..65535: $_b8pv"
+    [ "$_b8pn" -le 65535 ] 2>/dev/null || err "$_b8pl pair NN harus 0..65535: $_b8pv"
+}
 valid_lc() { # <nilai> <label> — LC (A,B,C): A 0..4294967295, B/C 0..65535 (salinan bgp, B9)
     _lv="$1"; _ll="$2"
     case "$_lv" in '('*')') ;; *) err "$_ll harus LC (A,B,C): $_lv" ;; esac
@@ -225,7 +377,7 @@ valid_lc() { # <nilai> <label> — LC (A,B,C): A 0..4294967295, B/C 0..65535 (sa
 #   clist | eclist | lclist | enum:ORIGIN | enum:SOURCE | enum:DEST | unknown
 attr_kind() {
     case "$1" in
-        net.len|bgp_path.len|bgp_community.len|bgp_ext_community.len|bgp_large_community.len|bgp_cluster_list.len|bgp_local_pref|bgp_med|bgp_otc|preference|igp_metric|weight|rip_metric|bgp_path.first|bgp_path.last|bgp_path.last_nonaggregated|babel_metric|gw_mpls|mpls_label|mpls_class) echo int ;;
+        net.len|bgp_path.len|bgp_community.len|bgp_ext_community.len|bgp_large_community.len|bgp_cluster_list.len|bgp_local_pref|bgp_med|bgp_otc|preference|igp_metric|weight|rip_metric|bgp_path.first|bgp_path.last|bgp_path.last_nonaggregated|babel_metric|gw_mpls|mpls_label|mpls_class|net.maxlen|net.asn|ospf_metric1|ospf_metric2|ospf_tag) echo int ;;
         bgp_community.min|bgp_community.max) echo pair ;;
         bgp_ext_community.min|bgp_ext_community.max) echo ec ;;
         bgp_large_community.min|bgp_large_community.max) echo lc ;;
@@ -234,28 +386,75 @@ attr_kind() {
         mpls_policy) echo enum:MPLSPOLICY ;;
         source) echo enum:SOURCE ;;
         dest) echo enum:DEST ;;
+        net.type) echo enum:NETTYPE ;;
+        ra_preference) echo enum:RAPREF ;;
+        net.rd) echo rd ;;
         bgp_next_hop|gw|from|net.ip) echo ip ;;
         onlink) echo bool ;;
         proto|ifname) echo string ;;
-        net) echo prefix ;;
+        net|net.src|net.dst) echo prefix ;;
         bgp_path) echo bgppath ;;
         bgp_community|bgp_cluster_list) echo clist ;;
         bgp_ext_community) echo eclist ;;
         bgp_large_community) echo lclist ;;
-        *) echo unknown ;;
+        *) bgp_attr_exists "$1" && echo bytestring || echo unknown ;;
     esac
 }
 
-valid_int_expr() { # valid_int_expr <NILAI> <VARLIST> <label> — literal atau var int
-    case "$1" in ''|*[!0-9]*) ;; *) valid_u32 "$1" "$3"; return 0 ;; esac
-    _vt2=$(var_type "$2" "$1") && [ "$_vt2" = "int" ] && return 0
-    err "$3 harus bilangan atau variabel int: $1"
+valid_int_atom() { # valid_int_atom <OPERAND> <VARLIST> <label> — satu operand ekspresi int (B12/5-90/91, salinan titian-bgp.sh)
+    _ia="$1"; _ivl="$2"; _il="$3"
+    case "$_ia" in ''|*[!0-9]*) ;; *) valid_u32 "$_ia" "$_il"; return 0 ;; esac
+    case "$_ia" in 0x*) case "$_ia" in 0x*[!0-9a-fA-F]*) err "$_il operand hex tidak valid: $_ia" ;; esac; return 0 ;; esac
+    _ivt=$(var_type "$_ivl" "$_ia") && [ "$_ivt" = "int" ] && return 0
+    define_exists "$_ia" && return 0
+    [ "$(attr_kind "$_ia")" = "int" ] && return 0
+    accessor_bird "$_ia" "$_ivl" >/dev/null 2>&1 && return 0  # B16/5-46..50: p.asn / c.data1 (int)
+    err "$_il operand int tidak dikenal (harus bilangan/hex/variabel-int/define/atribut-int/accessor .asn/.data): $_ia"
+}
+valid_int_expr() { # valid_int_expr <NILAI> <VARLIST> <label> — literal/var/define/atribut-int/ekspresi aritmetika (+ - * / dan kurung, B12/5-90/91); otoritas akhir bird -p
+    # B12: unescape klish (lihat cond_to_bird) — nilai int via klish bisa
+    # membawa "\(" / "\>" dari substitusi ACTION.
+    set -- "$(klish_unescape "$1")" "$2" "$3"
+    _ie="$1"; _ivl="$2"; _il="$3"
+    [ -n "$_ie" ] || err "$_il ekspresi int tidak boleh kosong"
+    _iebad=$(printf '%s' "$_ie" | tr -d '0-9A-Za-z_+*/().-')
+    [ -z "$_iebad" ] || err "$_il ekspresi int mengandung karakter tidak valid: $_ie"
+    _ieo=$(printf '%s' "$_ie" | tr -cd '(' | wc -c); _iec=$(printf '%s' "$_ie" | tr -cd ')' | wc -c)
+    [ "$_ieo" = "$_iec" ] || err "$_il ekspresi int kurung tidak seimbang: $_ie"
+    _iecur=""; _ierest="$_ie"; _ieprev="start"
+    while [ -n "$_ierest" ]; do
+        _iech=${_ierest%"${_ierest#?}"}; _ierest=${_ierest#?}
+        case "$_iech" in
+            '+'|'-'|'*'|'/')
+                case "$_ieprev" in operand|close) ;; *) err "$_il ekspresi int: operator '$_iech' di posisi salah: $_ie" ;; esac
+                [ -n "$_iecur" ] && { valid_int_atom "$_iecur" "$_ivl" "$_il" || exit 33; _iecur=""; }
+                _ieprev="op" ;;
+            '(')
+                case "$_ieprev" in start|op|open) ;; *) err "$_il ekspresi int: '(' di posisi salah: $_ie" ;; esac
+                _ieprev="open" ;;
+            ')')
+                case "$_ieprev" in operand|close) ;; *) err "$_il ekspresi int: ')' di posisi salah (kurung kosong?): $_ie" ;; esac
+                [ -n "$_iecur" ] && { valid_int_atom "$_iecur" "$_ivl" "$_il" || exit 33; _iecur=""; }
+                _ieprev="close" ;;
+            *)
+                case "$_ieprev" in start|op|open|operand) ;; *) err "$_il ekspresi int: karakter '$_iech' di posisi salah: $_ie" ;; esac
+                _iecur="$_iecur$_iech"; _ieprev="operand" ;;
+        esac
+    done
+    case "$_ieprev" in operand|close) ;; *) err "$_il ekspresi int diakhiri operator/kurung buka: $_ie" ;; esac
+    [ -n "$_iecur" ] && { valid_int_atom "$_iecur" "$_ivl" "$_il" || exit 33; }
+    return 0
 }
 
-valid_attr_value() { # valid_attr_value <ATTR> <NILAI> <label>
+valid_attr_value() { # valid_attr_value <ATTR> <NILAI> <label> [VARLIST] — B12: int kini ekspresi aritmetika; tambah prefix/rd/bytestring/enum:NETTYPE/enum:RAPREF (5-45/5-64/65/66)
     _k=$(attr_kind "$1")
     case "$_k" in
-        int) valid_u32 "$2" "$3" ;;
+        int) valid_int_expr "$2" "${4:-}" "$3" ;;
+        prefix) valid_prefix_any "$2" "$3" ;;
+        rd) valid_rd "$2" "$3" ;;
+        bytestring) valid_bytestring "$2" "$3" ;;
+        enum:NETTYPE) case "$2" in NET_IP4|NET_IP6|NET_VPN4|NET_VPN6|NET_ROA4|NET_ROA6|NET_FLOW4|NET_FLOW6|NET_IP6_SADR|NET_MPLS|NET_ASPA|NET_EVPN|NET_NBR) ;; *) err "$3 harus NET_IP4|NET_IP6|NET_VPN4|NET_VPN6|NET_ROA4|NET_ROA6|NET_FLOW4|NET_FLOW6|NET_IP6_SADR|NET_MPLS|NET_ASPA|NET_EVPN|NET_NBR: $2" ;; esac ;;
+        enum:RAPREF) case "$2" in RA_PREF_LOW|RA_PREF_MEDIUM|RA_PREF_HIGH) ;; *) err "$3 harus RA_PREF_LOW|RA_PREF_MEDIUM|RA_PREF_HIGH: $2" ;; esac ;;
         pair)
             case "$2" in '('*','*')') ;; *) err "$3 harus pair (AA,NN): $2" ;; esac
             _vv_pa=${2#(}; _vv_pa=${_vv_pa%)}; _vv_a=${_vv_pa%%,*}; _vv_n=${_vv_pa#*,}
@@ -264,9 +463,9 @@ valid_attr_value() { # valid_attr_value <ATTR> <NILAI> <label>
             [ "$_vv_a" -le 65535 ] 2>/dev/null || err "$3 pair AS harus 0..65535: $2"
             [ "$_vv_n" -le 65535 ] 2>/dev/null || err "$3 pair NN harus 0..65535: $2" ;;
         enum:ORIGIN) case "$2" in ORIGIN_IGP|ORIGIN_EGP|ORIGIN_INCOMPLETE) ;; *) err "$3 harus ORIGIN_IGP|ORIGIN_EGP|ORIGIN_INCOMPLETE: $2" ;; esac ;;
-        enum:SOURCE) case "$2" in RTS_STATIC|RTS_INHERIT|RTS_DEVICE|RTS_RIP|RTS_OSPF|RTS_OSPF_IA|RTS_OSPF_EXT1|RTS_OSPF_EXT2|RTS_BGP|RTS_PIPE|RTS_BABEL) ;; *) err "$3 harus nilai RTS_*: $2" ;; esac ;;
+        enum:SOURCE) case "$2" in RTS_STATIC|RTS_STATIC_DEVICE|RTS_INHERIT|RTS_DEVICE|RTS_REDIRECT|RTS_RIP|RTS_OSPF|RTS_OSPF_IA|RTS_OSPF_EXT1|RTS_OSPF_EXT2|RTS_BGP|RTS_PIPE|RTS_BABEL|RTS_RPKI) ;; *) err "$3 harus nilai RTS_*: $2" ;; esac ;;
         enum:DEST) case "$2" in RTD_ROUTER|RTD_DEVICE|RTD_MULTIPATH|RTD_BLACKHOLE|RTD_UNREACHABLE|RTD_PROHIBIT) ;; *) err "$3 harus nilai RTD_*: $2" ;; esac ;;
-        ip) valid_ipv4 "$2" "$3" ;;
+        ip) valid_ip_any "$2" "$3" ;;
         bool) case "$2" in true|false) ;; *) err "$3 harus true|false: $2" ;; esac ;;
         string) valid_nospace "$2" "$3" ;;
         ec) valid_ec "$2" "$3" ;;
@@ -278,8 +477,24 @@ valid_attr_value() { # valid_attr_value <ATTR> <NILAI> <label>
 
 # Registry intent (dibaca dari $CONF; dipakai validasi lintas-baris).
 custom_attr_exists() { grep -q "^attribute-int $1\$" "$CONF" 2>/dev/null; }
-roa_table_exists() { grep -q "^roa-table $1\( \|$\)" "$CONF" 2>/dev/null; }
-aspa_table_exists() { grep -q "^aspa-table $1\$" "$CONF" 2>/dev/null; }
+bgp_attr_exists() { grep -q "^attribute-bgp [0-9]* $1\$" "$CONF" 2>/dev/null; } # B12/5-45: atribut BGP tak dikenal (attribute-bgp N NAME, bytestring)
+# B12/5-105: tabel ROA bisa didefinisikan di 3 tempat — bgp.conf (roa-table),
+# bird-global.conf (table roa4|roa6 NAMA), atau rpki.conf (instance ... roa4-table|
+# roa6-table NAMA). Ketiganya materialisasi jadi tabel BIRD yang sama di bird.conf.
+roa_table_exists() {
+    grep -q "^roa-table $1\( \|$\)" "$CONF" 2>/dev/null && return 0
+    grep -q "^table roa[46] $1\$" "${STATE_ROOT}/bird-global.conf" 2>/dev/null && return 0
+    grep -q " roa[46]-table $1\$" "${STATE_ROOT}/rpki.conf" 2>/dev/null && return 0
+    return 1
+}
+# B12/5-108: tabel ASPA — bgp.conf (aspa-table), bird-global.conf (table aspa
+# NAMA), atau rpki.conf (instance ... aspa-table NAMA).
+aspa_table_exists() {
+    grep -q "^aspa-table $1\$" "$CONF" 2>/dev/null && return 0
+    grep -q "^table aspa $1\$" "${STATE_ROOT}/bird-global.conf" 2>/dev/null && return 0
+    grep -q " aspa-table $1\$" "${STATE_ROOT}/rpki.conf" 2>/dev/null && return 0
+    return 1
+}
 # function_exists <NAMA> — net_is_private bawaan + intent function.intent
 function_exists() {
     [ "$1" = "net_is_private" ] && return 0
@@ -311,16 +526,17 @@ var_type() {
 # source/from (A4: assignment tidak dikonfirmasi docs), ifname (A12:
 # menghapus gateway). B9: gw_mpls/mpls_label/mpls_policy RW (ch5 5-131/133/134);
 # babel_metric/mpls_class RO (ch5 5-132/135) — hanya match, tidak di-set.
+# B13 (O60-O62): ospf_metric1/2/tag RW di filter (cermin titian-bgp.sh).
 settable_attr() {
     case "$1" in
-        preference|gw|bgp_local_pref|bgp_med|bgp_origin|bgp_next_hop|igp_metric|weight|onlink|rip_metric|dest|gw_mpls|mpls_label|mpls_policy) return 0 ;;
-        *) custom_attr_exists "$1" && return 0; return 1 ;;
+        preference|gw|bgp_local_pref|bgp_med|bgp_origin|bgp_next_hop|igp_metric|weight|onlink|rip_metric|dest|gw_mpls|mpls_label|mpls_policy|ospf_metric1|ospf_metric2|ospf_tag) return 0 ;;
+        *) custom_attr_exists "$1" && return 0; bgp_attr_exists "$1" && return 0; return 1 ;;
     esac
 }
 valid_set_stmt() { # valid_set_stmt <ATTR> <NILAI> [label] [VARLIST]
     _l="${3:-set}"; _vl="$4"
     if [ -n "$_vl" ]; then
-        _vt=$(var_type "$_vl" "$1") && { valid_var_value "$_vt" "$2" "$_l"; return 0; }
+        _vt=$(var_type "$_vl" "$1") && { valid_var_value "$_vt" "$2" "$_l" "$_vl"; return 0; }
     fi
     settable_attr "$1" || err "$_l atribut tidak bisa di-set di filter: $1 (RO / hanya method / hanya match — lihat header B5)"
     if [ "$1" = "dest" ]; then
@@ -331,37 +547,42 @@ valid_set_stmt() { # valid_set_stmt <ATTR> <NILAI> [label] [VARLIST]
         valid_u32 "$2" "$_l (atribut int $1)"
         return 0
     fi
-    valid_attr_value "$1" "$2" "$_l"
+    valid_attr_value "$1" "$2" "$_l" "$_vl"
+    case "$2" in ''|*[!0-9]*) ;; *)  # ekspresi (bukan bilangan polos): rentang dicek bird -p (B12/5-90/91)
     case "$1" in
         preference) [ "$2" -le 65535 ] 2>/dev/null || err "$_l preference harus 0..65535: $2" ;;
         net.len|bgp_path.len|bgp_community.len) ;; # u32 sudah cukup
         weight) { [ "$2" -ge 1 ] 2>/dev/null && [ "$2" -le 256 ] 2>/dev/null; } || err "$_l weight harus 1..256: $2" ;;
         mpls_label|gw_mpls) [ "$2" -le 1048575 ] 2>/dev/null || err "$_l $1 harus label 20-bit 0..1048575: $2" ;;
+        ospf_metric1) { [ "$2" -ge 1 ] 2>/dev/null && [ "$2" -le 65535 ] 2>/dev/null; } || err "$_l ospf_metric1 harus 1..65535 (docs Bab 6.11, infinity 65535): $2" ;;
     esac
+    ;; esac
 }
 # unsettable_attr <ATTR> -> 0 bila boleh di-unset.
 unsettable_attr() {
     case "$1" in
-        bgp_community|bgp_ext_community|bgp_large_community|bgp_med|bgp_local_pref|bgp_origin|bgp_next_hop|bgp_originator_id|bgp_cluster_list|bgp_otc|bgp_path|rip_metric) return 0 ;;
-        *) custom_attr_exists "$1" && return 0; return 1 ;;
+        bgp_community|bgp_ext_community|bgp_large_community|bgp_med|bgp_local_pref|bgp_origin|bgp_next_hop|bgp_originator_id|bgp_cluster_list|bgp_otc|bgp_path|rip_metric|ospf_metric1|ospf_metric2|ospf_tag) return 0 ;;
+        *) custom_attr_exists "$1" && return 0; bgp_attr_exists "$1" && return 0; return 1 ;;
     esac
 }
 valid_unset_attr() { # valid_unset_attr <ATTR> [label]
     unsettable_attr "$1" || err "${2:-unset} atribut tidak bisa di-unset: $1 (wajib/RO — net/proto/ifindex tidak bisa di-unset)"
 }
 valid_var_type() { # valid_var_type <TIPE> <label>
-    case "$1" in int|bool|pair|ip|prefix|string) ;; *) err "$2 tipe variabel harus int|bool|pair|ip|prefix|string: $1" ;; esac
+    # B16: +lc (accessor .asn/.data1/.data2, 5-48..50). quad/bytestring/rd/ec
+    # tetap belum diterima di sini (drift B12, TERBUKA — bukan bagian batch ini).
+    case "$1" in int|bool|pair|ip|prefix|string|lc) ;; *) err "$2 tipe variabel harus int|bool|pair|ip|prefix|string|lc: $1" ;; esac
 }
-valid_var_value() { # valid_var_value <TIPE> <NILAI> <label>
+valid_var_value() { # valid_var_value <TIPE> <NILAI> <label> [VARLIST]
     case "$1" in
-        int) valid_u32 "$2" "$3" ;;
+        int) valid_int_expr "$2" "${4:-}" "$3" ;;
         bool) case "$2" in true|false) ;; *) err "$3 harus true|false: $2" ;; esac ;;
         pair)
             case "$2" in '('*','*')') ;; *) err "$3 harus pair (AA,NN): $2" ;; esac
             _vv_pa=${2#(}; _vv_pa=${_vv_pa%)}; _vv_a=${_vv_pa%%,*}; _vv_n=${_vv_pa#*,}
             [ "$_vv_a" -le 65535 ] 2>/dev/null || err "$3 pair AS harus 0..65535: $2"
             [ "$_vv_n" -le 65535 ] 2>/dev/null || err "$3 pair NN harus 0..65535: $2" ;;
-        ip) valid_ipv4 "$2" "$3" ;;
+        ip) valid_ip_any "$2" "$3" ;;
         prefix) valid_prefix "$2" "$3" ;;
         string) valid_nospace "$2" "$3" ;;
     esac
@@ -383,25 +604,65 @@ atom_to_bird() {
             valid_prefix_pattern "$_p" "kondisi net~"
             case "$_p" in *+|*-|*{*}) printf 'net ~ [ %s ]' "$_p" ;; *) printf 'net ~ [ %s+ ]' "$_p" ;; esac
             return 0 ;;
+        'net!~'*) _p=${_at#net!~}  # B16/5-95 (cermin bgp)
+            valid_prefix_pattern "$_p" "kondisi net!~"
+            case "$_p" in *+|*-|*{*}) printf 'net !~ [ %s ]' "$_p" ;; *) printf 'net !~ [ %s+ ]' "$_p" ;; esac
+            return 0 ;;
         'path~'*) _m=${_at#path~}
             valid_bgpmask "$_m" "kondisi path~"
             printf 'bgp_path ~ %s' "$(bgpmask_to_bird "$_m")"; return 0 ;;
+        'path!~'*) _m=${_at#path!~}  # B16/5-95 (cermin bgp)
+            valid_bgpmask "$_m" "kondisi path!~"
+            printf 'bgp_path !~ %s' "$(bgpmask_to_bird "$_m")"; return 0 ;;
         'community~'*) _c=${_at#community~}
             valid_community "$_c" "kondisi community~"
             printf 'bgp_community ~ [ (%s, %s) ]' "${_c%%:*}" "${_c#*:}"; return 0 ;;
+        'community!~'*) _c=${_at#community!~}  # B16/5-95 (cermin bgp)
+            valid_community "$_c" "kondisi community!~"
+            printf 'bgp_community !~ [ (%s, %s) ]' "${_c%%:*}" "${_c#*:}"; return 0 ;;
         'ext-community~'*) _c=${_at#ext-community~}
             valid_ext_community "$_c" "kondisi ext-community~"
             printf 'bgp_ext_community ~ [ (%s, %s, %s) ]' "${_c%%:*}" "$(echo "$_c" | cut -d: -f2)" "$(echo "$_c" | cut -d: -f3)"; return 0 ;;
+        'ext-community!~'*) _c=${_at#ext-community!~}  # B16/5-95 (cermin bgp)
+            valid_ext_community "$_c" "kondisi ext-community!~"
+            printf 'bgp_ext_community !~ [ (%s, %s, %s) ]' "${_c%%:*}" "$(echo "$_c" | cut -d: -f2)" "$(echo "$_c" | cut -d: -f3)"; return 0 ;;
         'large-community~'*) _c=${_at#large-community~}
             valid_large_community "$_c" "kondisi large-community~"
             printf 'bgp_large_community ~ [ (%s, %s, %s) ]' "$(echo "$_c" | cut -d: -f2)" "$(echo "$_c" | cut -d: -f3)" "$(echo "$_c" | cut -d: -f4)"; return 0 ;;
+        'large-community!~'*) _c=${_at#large-community!~}  # B16/5-95 (cermin bgp)
+            valid_large_community "$_c" "kondisi large-community!~"
+            printf 'bgp_large_community !~ [ (%s, %s, %s) ]' "$(echo "$_c" | cut -d: -f2)" "$(echo "$_c" | cut -d: -f3)" "$(echo "$_c" | cut -d: -f4)"; return 0 ;;
         'net.ip.is_v4') printf 'net.ip.is_v4'; return 0 ;;
         '!net.ip.is_v4') printf '! net.ip.is_v4'; return 0 ;;
         'roa:'*'='*)
             _t=${_at#roa:}; _t=${_t%%=*}; _r=${_at#*=}
-            roa_table_exists "$_t" || err "kondisi roa: tabel roa $_t belum didefinisikan (roa-table $_t)"
             case "$_r" in ROA_VALID|ROA_INVALID|ROA_UNKNOWN) ;; *) err "kondisi roa: hasil harus ROA_VALID|ROA_INVALID|ROA_UNKNOWN: $_r" ;; esac
-            printf 'roa_check(%s) = %s' "$_t" "$_r"; return 0 ;;
+            case "$_t" in *,*,*)  # B12/5-105: bentuk 3-argumen roa_check(TABEL,PREFIX,ASN)
+                _rt=${_t%%,*}; _rr=${_t#*,}; _rp=${_rr%%,*}; _ra=${_rr#*,}
+                case "$_ra" in *,*) err "kondisi roa: harus roa:TABEL,PREFIX,ASN=ROA_* (tepat 3 bagian): $_at" ;; esac
+                [ -n "$_rt" ] && [ -n "$_rp" ] && [ -n "$_ra" ] || err "kondisi roa: harus roa:TABEL,PREFIX,ASN=ROA_*: $_at"
+                roa_table_exists "$_rt" || err "kondisi roa: tabel roa $_rt belum didefinisikan (roa-table $_rt)"
+                case "$_rp" in net) ;; *) valid_prefix_any "$_rp" "kondisi roa prefix" ;; esac
+                case "$_ra" in bgp_path.last) ;; *) valid_asn "$_ra" "kondisi roa ASN" ;; esac
+                printf 'roa_check(%s, %s, %s) = %s' "$_rt" "$_rp" "$_ra" "$_r"; return 0 ;;
+                *)
+                roa_table_exists "$_t" || err "kondisi roa: tabel roa $_t belum didefinisikan (roa-table $_t)"
+                printf 'roa_check(%s) = %s' "$_t" "$_r"; return 0 ;;
+            esac ;;
+        'aspa:'*'='*)  # B12/5-108: aspa_check 3-argumen (TABEL,PATH,BOOL)
+            _t=${_at#aspa:}; _t=${_t%%=*}; _r=${_at#*=}
+            case "$_t" in *,*,*)
+                _st=${_t%%,*}; _sr=${_t#*,}; _sp=${_sr%%,*}; _sb=${_sr#*,}
+                case "$_sb" in *,*) err "kondisi aspa: harus aspa:TABEL,PATH,BOOL=ASPA_* (tepat 3 bagian): $_at" ;; esac
+                [ -n "$_st" ] && [ -n "$_sp" ] && [ -n "$_sb" ] || err "kondisi aspa: harus aspa:TABEL,PATH,BOOL=ASPA_*: $_at"
+                aspa_table_exists "$_st" || err "kondisi aspa: tabel aspa $_st belum didefinisikan (aspa-table $_st)"
+                case "$_sp" in bgp_path) ;; *) err "kondisi aspa: PATH harus bgp_path (satu-satunya bgppath): $_sp" ;; esac
+                case "$_sb" in true|up) _sb=true ;; false|down) _sb=false ;; *) err "kondisi aspa: BOOL harus true|up (upstream) atau false|down (downstream): $_sb" ;; esac
+                case "$_r" in ASPA_VALID|ASPA_INVALID|ASPA_UNKNOWN) ;; *) err "kondisi aspa: hasil harus ASPA_VALID|ASPA_INVALID|ASPA_UNKNOWN: $_r" ;; esac
+                printf 'aspa_check(%s, %s, %s) = %s' "$_st" "$_sp" "$_sb" "$_r"; return 0 ;;
+                *)
+                err "kondisi aspa: harus aspa:TABEL,PATH,BOOL=ASPA_* (bentuk 1-argumen pakai aspa-down:/aspa-up:): $_at" ;;
+            esac ;;
         'aspa-down:'*'='*)
             _t=${_at#aspa-down:}; _t=${_t%%=*}; _r=${_at#*=}
             aspa_table_exists "$_t" || err "kondisi aspa-down: tabel aspa $_t belum didefinisikan (aspa-table $_t)"
@@ -423,10 +684,21 @@ atom_to_bird() {
             _narg=0; [ -n "$_args" ] && _narg=$(printf '%s' "$_args" | awk -F, '{print NF}')
             if [ "$_narg" -ne "$_nwant" ]; then err "kondisi call: $_fn butuh $_nwant argumen, diberi $_narg"; fi
             printf '%s(%s)' "$_fn" "$_args"; return 0 ;;
+        *'!~path')  # B16/5-95 (cermin bgp; WAJIB sebelum ~path)
+            _a=${_at%'!~path'}
+            valid_asn "$_a" "kondisi ASN!~path"
+            printf '%s !~ bgp_path' "$_a"; return 0 ;;
         *'~path')
             _a=${_at%'~path'}
             valid_asn "$_a" "kondisi ASN~path"
             printf '%s ~ bgp_path' "$_a"; return 0 ;;
+        *'!~'*|*'~'*)  # B16/5-95/96/97 (cermin bgp): bentuk umum ~ / !~
+            case "$_at" in
+                *'!~'*) _gl=${_at%%'!~'*}; _gr=${_at##*'!~'}; _go='!~' ;;
+                *) _gl=${_at%%'~'*}; _gr=${_at##*'~'}; _go='~' ;;
+            esac
+            _gb=$(generic_match_bird "$_gl" "$_gr" "$_go" "$_vl") || exit 33
+            printf '%s' "$_gb"; return 0 ;;
     esac
     # Perbandingan ATTR<op>VAL — coba operator terpanjang dulu.
     for _op in '!=' '<=' '>=' '=' '<' '>'; do
@@ -447,16 +719,31 @@ atom_to_bird() {
             if [ "$_k" != "unknown" ]; then
                 case "$_k" in
                     int) valid_int_expr "$_rhs" "$_vl" "kondisi $_lhs" ;;
-                    *) valid_attr_value "$_lhs" "$_rhs" "kondisi $_lhs" ;;
+                    prefix) _rhs=$(prefix_value_to_bird "$_lhs" "$_rhs" "kondisi $_lhs") || exit 33 ;;
+                    *) valid_attr_value "$_lhs" "$_rhs" "kondisi $_lhs" "$_vl" ;;
                 esac
-                case "$_k" in pair) _rhs="( $(echo "$_rhs" | sed 's/^(\(.*\))$/\1/; s/,/, /') )" ;; esac
+                case "$_k" in pair) _rhs="( $(echo "$_rhs" | sed 's/^(\(.*\))$/\1/; s/,/, /') )" ;; string) _rhs="\"$_rhs\"" ;; esac
                 printf '%s %s %s' "$_lhs" "$_op" "$_rhs"; return 0
             fi
-            _vt=$(var_type "$_vl" "$_lhs") || continue
+            # B16/5-46..50 (cermin bgp): accessor .asn/.data/.data1/.data2 (hasil int)
+            case "$_lhs" in *.asn|*.data|*.data1|*.data2)
+                _acc=$(accessor_bird "$_lhs" "$_vl") || err "kondisi: accessor tidak dikenal: $_lhs (harus variabel pair/lc, literal pair/lc, atau bgp_community/bgp_large_community .min/.max)"
+                valid_int_expr "$_rhs" "$_vl" "kondisi $_lhs"
+                printf '%s %s %s' "$_acc" "$_op" "$_rhs"; return 0 ;;
+            esac
+            _vt=$(var_type "$_vl" "$_lhs") || {
+                # B12/5-90/91: LHS ekspresi aritmetika (mis. bgp_path.len+1>2);
+                # validasi di subshell agar err() tidak mematikan proses.
+                if (valid_int_expr "$_lhs" "$_vl" "kondisi $_lhs" 2>/dev/null) && (valid_int_expr "$_rhs" "$_vl" "kondisi $_rhs" 2>/dev/null); then
+                    printf '%s %s %s' "$_lhs" "$_op" "$_rhs"; return 0
+                fi
+                continue
+            }
             case "$_vt" in
                 int) valid_int_expr "$_rhs" "$_vl" "kondisi variabel $_lhs" ;;
                 bool) case "$_rhs" in true|false) ;; *) err "kondisi variabel bool $_lhs harus true|false: $_rhs" ;; esac ;;
-                *) err "kondisi: variabel $_lhs (tipe $_vt) tidak bisa dibandingkan langsung — hanya int/bool" ;;
+                string) valid_nospace "$_rhs" "kondisi variabel string $_lhs"; _rvt=$(var_type "$_vl" "$_rhs" 2>/dev/null || true); [ "$_rvt" = "string" ] || _rhs="\"$_rhs\"" ;;
+                *) err "kondisi: variabel $_lhs (tipe $_vt) tidak bisa dibandingkan langsung — hanya int/bool/string" ;;
             esac
             printf '%s %s %s' "$_lhs" "$_op" "$_rhs"; return 0
             ;;
@@ -508,9 +795,193 @@ filter_minmax_bird() {
     printf 'filter(%s, %s).%s' "$_fmobj" "$_fmset" "$_fmsuf"
 }
 
+# --- B16 (cermin titian-bgp.sh): accessor .asn/.data/.data1/.data2 (Bab 5.2, 5-46..50) ---
+# accessor_bird <EKSPRESI> <VARLIST> -> cetak ekspresi BIRD (int) atau
+# return 1 TANPA err — pemanggil yang memutuskan pesannya, agar bisa dipakai
+# di valid_int_atom tanpa mematikan proses.
+accessor_bird() {
+    _ae="$1"; _avl="$2"
+    case "$_ae" in
+        *.asn) _abase=${_ae%.asn}; _apart=asn ;;
+        *.data1) _abase=${_ae%.data1}; _apart=data1 ;;
+        *.data2) _abase=${_ae%.data2}; _apart=data2 ;;
+        *.data) _abase=${_ae%.data}; _apart=data ;;
+        *) return 1 ;;
+    esac
+    # basis: variabel pair/lc yang dideklarasikan
+    _abt=$(var_type "$_avl" "$_abase" 2>/dev/null || true)
+    case "$_abt:$_apart" in
+        pair:asn|pair:data|lc:asn|lc:data1|lc:data2) printf '%s' "$_ae"; return 0 ;;
+        pair:data1|pair:data2|lc:data) return 1 ;;
+    esac
+    # basis: atribut min/max clist/lclist (bentuk tetap; sudah ada di attr_kind
+    # untuk bgp_community/bgp_large_community — ditangani di sana dulu; ini
+    # penangkap bila attr_kind dilewati)
+    case "$_abase:$_apart" in
+        bgp_community.min:asn|bgp_community.min:data|bgp_community.max:asn|bgp_community.max:data|bgp_large_community.min:asn|bgp_large_community.min:data1|bgp_large_community.min:data2|bgp_large_community.max:asn|bgp_large_community.max:data1|bgp_large_community.max:data2)
+            printf '%s' "$_ae"; return 0 ;;
+    esac
+    # basis: literal pair/lc — (65000,100).asn, (65000,100,200).data1
+    case "$_abase" in '('*')')
+        case "$_apart" in
+            asn|data)
+                (valid_pair "$_abase" "accessor $_ae" 2>/dev/null) || return 1
+                printf '%s.%s' "$_abase" "$_apart"; return 0 ;;
+            data1|data2)
+                (valid_lc "$_abase" "accessor $_ae" 2>/dev/null) || return 1
+                printf '%s.%s' "$_abase" "$_apart"; return 0 ;;
+        esac ;;
+    esac
+    return 1
+}
+
+# valid_shell_pattern <POLA> <label> — pola shell Bab 5.3 (5-96): tanpa
+# spasi / ';' / kutip ganda (klish: COND satu token; spasi memecah token).
+valid_shell_pattern() {
+    case "$1" in
+        ''|*' '*|*';'*|*'"'*) err "$2 pola shell tidak boleh kosong/mengandung spasi, ';', atau kutip ganda: $1" ;;
+    esac
+}
+
+# generic_match_bird <LHS> <RHS> <OP ~|!~> <VARLIST> -> ekspresi BIRD.
+# B16/5-96/97: LHS bertipe string (proto/ifname/variabel-string/literal
+# string berkutip) vs pola shell, atau bertipe ip (from/gw/bgp_next_hop/
+# net.ip/variabel-ip/literal IP) vs prefix. Bentuk spesifik (net~/path~/
+# community~/ext-community~/large-community~/src~/dst~/~set:/~path)
+# ditangani SEBELUM pemanggilan ini — yang sampai sini hanya bentuk umum.
+generic_match_bird() {
+    _gl="$1"; _gr="$2"; _go="$3"; _gvl="$4"
+    [ -n "$_gl" ] && [ -n "$_gr" ] || err "kondisi $_go butuh LHS$_go RHS: $_gl$_go$_gr"
+    # LHS atribut ip -> RHS harus prefix (5-97)
+    case "$_gl" in
+        from|gw|bgp_next_hop|net.ip)
+            valid_prefix_any "$_gr" "kondisi $_gl$_go prefix"
+            printf '%s %s %s' "$_gl" "$_go" "$_gr"; return 0 ;;
+        proto|ifname)
+            _grt=$(var_type "$_gvl" "$_gr" 2>/dev/null || true)
+            if [ "$_grt" = "string" ]; then printf '%s %s %s' "$_gl" "$_go" "$_gr"; return 0; fi
+            case "$_gr" in '"'*'"') _gr=${_gr#\"}; _gr=${_gr%\"} ;; esac
+            valid_shell_pattern "$_gr" "kondisi $_gl$_go pola"
+            printf '%s %s "%s"' "$_gl" "$_go" "$_gr"; return 0 ;;
+    esac
+    # LHS variabel -> ikut tipenya
+    _gt=$(var_type "$_gvl" "$_gl" 2>/dev/null || true)
+    case "$_gt" in
+        ip)
+            valid_prefix_any "$_gr" "kondisi $_gl$_go prefix"
+            printf '%s %s %s' "$_gl" "$_go" "$_gr"; return 0 ;;
+        string)
+            _grt=$(var_type "$_gvl" "$_gr" 2>/dev/null || true)
+            if [ "$_grt" = "string" ]; then printf '%s %s %s' "$_gl" "$_go" "$_gr"; return 0; fi
+            case "$_gr" in '"'*'"') _gr=${_gr#\"}; _gr=${_gr%\"} ;; esac
+            valid_shell_pattern "$_gr" "kondisi $_gl$_go pola"
+            printf '%s %s "%s"' "$_gl" "$_go" "$_gr"; return 0 ;;
+    esac
+    # LHS literal IP (5-97: 127.0.0.5 ~ 127.0.0.0/8)
+    if (valid_ip_any "$_gl" "kondisi" 2>/dev/null); then
+        valid_prefix_any "$_gr" "kondisi $_gl$_go prefix"
+        printf '%s %s %s' "$_gl" "$_go" "$_gr"; return 0
+    fi
+    # LHS literal string berkutip (5-96: "eth0" ~ "eth*") — backend langsung;
+    # via klish kutip dimakan tokenizer, pakai atribut/variabel string saja.
+    case "$_gl" in '"'*'"')
+        _gs=${_gl#\"}; _gs=${_gs%\"}
+        case "$_gs" in ''|*'"'*) err "kondisi string: literal tidak boleh kosong/mengandung kutip ganda: $_gl" ;; esac
+        _grt=$(var_type "$_gvl" "$_gr" 2>/dev/null || true)
+        if [ "$_grt" = "string" ]; then printf '%s %s %s' "$_gl" "$_go" "$_gr"; return 0; fi
+        case "$_gr" in '"'*'"') _gr=${_gr#\"}; _gr=${_gr%\"} ;; esac
+        valid_shell_pattern "$_gr" "kondisi $_gl$_go pola"
+        printf '%s %s "%s"' "$_gl" "$_go" "$_gr"; return 0 ;;
+    esac
+    err "kondisi $_go tidak dikenal: LHS $_gl harus atribut ip/string (from|gw|bgp_next_hop|net.ip|proto|ifname), variabel ip/string, literal IP, atau string berkutip: $_gl$_go$_gr"
+}
+
+# --- B16: print/printn (Bab 5.6, 5-157/158) ---
+# print_arg_to_bird <ARG> <VARLIST> -> satu ekspresi BIRD.
+# Bentuk ARG (satu token, tanpa spasi):
+#   s:TEKS      string literal (bentuk klish; TEKS tanpa spasi/;/koma/kutip)
+#   "TEKS"      string literal (backend langsung; via klish kutip dimakan)
+#   true|false  bool · bilangan/hex · atribut route · variabel terdeklarasi
+#   X.asn|X.data|X.data1|X.data2   accessor pair/lc (5-46..50)
+#   (A,B)|(A,B,C)   literal pair/lc
+print_arg_to_bird() {
+    _pe="$1"; _pvl="$2"
+    case "$_pe" in
+        's:'*)
+            _st=${_pe#s:}
+            case "$_st" in ''|*'"'*|*';'*|*','*|*' '*) err "print: string s:TEKS tidak boleh kosong/mengandung kutip, ';', koma, atau spasi: $_pe" ;; esac
+            printf '"%s"' "$_st"; return 0 ;;
+        '"'*'"')
+            _st=${_pe#\"}; _st=${_st%\"}
+            case "$_st" in ''|*'"'*) err "print: string tidak boleh kosong/mengandung kutip ganda: $_pe" ;; esac
+            printf '"%s"' "$_st"; return 0 ;;
+        true|false) printf '%s' "$_pe"; return 0 ;;
+        '('*')')
+            (valid_pair "$_pe" "print" 2>/dev/null) && { printf '%s' "$_pe"; return 0; }
+            (valid_lc "$_pe" "print" 2>/dev/null) && { printf '%s' "$_pe"; return 0; }
+            err "print: literal pair/lc tidak valid: $_pe" ;;
+    esac
+    case "$_pe" in *.asn|*.data|*.data1|*.data2)
+        _ab=$(accessor_bird "$_pe" "$_pvl") || err "print: accessor tidak dikenal: $_pe"
+        printf '%s' "$_ab"; return 0 ;;
+    esac
+    case "$_pe" in ''|*[!0-9]*) ;; *) (valid_u32 "$_pe" "print" 2>/dev/null) && { printf '%s' "$_pe"; return 0; } ;; esac
+    case "$_pe" in 0x*) case "$_pe" in 0x*[!0-9a-fA-F]*) ;; *) printf '%s' "$_pe"; return 0 ;; esac ;; esac
+    _pt=$(var_type "$_pvl" "$_pe" 2>/dev/null || true)
+    [ -n "$_pt" ] && { printf '%s' "$_pe"; return 0; }
+    [ "$(attr_kind "$_pe")" != "unknown" ] && { printf '%s' "$_pe"; return 0; }
+    err "print: argumen tidak dikenal (harus s:TEKS, \"TEKS\", atribut, variabel, bilangan, accessor .asn/.data, atau literal pair/lc): $_pe"
+}
+
+# print_args_to_bird <ARGS-koma> <VARLIST> -> "ekspr, ekspr, ..." (BIRD).
+# Pisah koma yang peka-kurung (literal pair/lc mengandung koma).
+print_args_to_bird() {
+    _pa="$1"; _pvl="$2"
+    [ -n "$_pa" ] || err "print butuh minimal satu argumen"
+    case "$_pa" in *';'*) err "print: argumen tidak boleh mengandung ';': $_pa" ;; esac
+    _pout=""; _cur=""; _depth=0; _rest="$_pa"
+    while [ -n "$_rest" ]; do
+        _ch=${_rest%"${_rest#?}"}
+        _rest=${_rest#?}
+        case "$_ch" in
+            '(') _depth=$((_depth + 1)); _cur="$_cur$_ch" ;;
+            ')') _depth=$((_depth - 1)); [ "$_depth" -ge 0 ] || err "print: kurung tutup tanpa buka: $_pa"; _cur="$_cur$_ch" ;;
+            ',')
+                if [ "$_depth" -eq 0 ]; then
+                    [ -n "$_cur" ] || err "print: argumen kosong (koma ganda/akhir): $_pa"
+                    _pb=$(print_arg_to_bird "$_cur" "$_pvl") || exit 33
+                    if [ -z "$_pout" ]; then _pout="$_pb"; else _pout="$_pout, $_pb"; fi
+                    _cur=""
+                else
+                    _cur="$_cur$_ch"
+                fi ;;
+            *) _cur="$_cur$_ch" ;;
+        esac
+    done
+    [ "$_depth" -eq 0 ] || err "print: kurung tidak seimbang: $_pa"
+    [ -n "$_cur" ] || err "print: argumen kosong (koma di akhir): $_pa"
+    _pb=$(print_arg_to_bird "$_cur" "$_pvl") || exit 33
+    if [ -z "$_pout" ]; then _pout="$_pb"; else _pout="$_pout, $_pb"; fi
+    printf '%s' "$_pout"
+}
+
 # cond_to_bird <COND> <VARLIST> -> cetak ekspresi BIRD (atom diparentesis).
+# B12: klish meng-escape karakter shell-special di PARAM saat substitusi ACTION
+# (">" -> "\>", "&&" -> "\&\&", "(" -> "\(", ";" -> "\;"). Backend menerima
+# bentuk ber-escape itu; unescape "\X" -> "X" untuk X shell-special.
+# Backslash ganda ("\\") adalah backslash literal -> jadi satu backslash.
+# Urutan: escape satu-karakter dulu, "\\" -> "\" terakhir.
+klish_unescape() {
+    printf '%s' "$1" | sed -e 's/\\!/!/g' -e 's/\\>/>/g' -e 's/\\</</g' -e 's/\\(/(/g' -e 's/\\)/)/g' -e 's/\\&/\&/g' -e 's/\\|/|/g' -e 's/\\;/;/g' -e 's/\\\\/\\/g'
+}
 cond_to_bird() {
     _c="$1"; _vl="$2"
+    # B12: klish meng-escape karakter shell-special di PARAM saat substitusi
+    # ACTION (">" -> "\>", "&&" -> "\&\&", "(" -> "\("). B16: klish juga
+    # meng-escape "!" ("!" -> "\!") — tanpa ini COND `!~` gagal di klish
+    # (backend terima `net\!~...`, LHS jadi `net\`). COND tidak pernah
+    # mengandung backslash yang sah — buang semua backslash di awal.
+    _c=$(klish_unescape "$_c")
     case "$_c" in
         *'&&'*'|'*|*'|'*'&&'*) err "kondisi campuran && dan || tidak didukung (presedensi tidak ada di docs Bab 5, A3): $_c" ;;
     esac
@@ -536,14 +1007,29 @@ cond_to_bird() {
 stmt_to_bird() {
     case "$1" in
         accept|reject) printf '%s' "$1"; return 0 ;;
+        'accept "'*'"'|'reject "'*'"')  # B12/5-159: accept/reject berpesan (5.6 contoh not_too_far); pesan satu token shell, spasi di dalam kutip
+            _smact=${1%% *}
+            _smmsg=${1#*\"}; _smmsg=${_smmsg%\"}
+            case "$_smmsg" in ''|*'"'*) err "statement pesan tidak boleh kosong/mengandung kutip ganda: $1" ;; esac
+            case "$_smmsg" in *' else '*) err "statement pesan tidak boleh mengandung ' else ' (pemecah baris if): $1" ;; esac
+            printf '%s "%s"' "$_smact" "$_smmsg"; return 0 ;;
         'set:'*) _s=${1#set:}; _a=${_s%%=*}; _v=${_s#*=}
             [ -n "$_a" ] && [ -n "$_v" ] || err "statement set: butuh set:ATTR=NILAI: $1"
             valid_set_stmt "$_a" "$_v" "statement set" "$2"
+            _sat=$(var_type "$2" "$_a" 2>/dev/null || true)
+            if [ "$_sat" = "string" ]; then _svt=$(var_type "$2" "$_v" 2>/dev/null || true); [ "$_svt" = "string" ] || _v="\"$_v\""; fi
             printf '%s = %s' "$_a" "$_v"; return 0 ;;
+        'return:'*) _rv=${1#return:}  # B12: one-line if di fungsi boleh return (BIRD: if COND then return X;)
+            _rb=$(return_to_bird "$_rv" "$2") || exit 33
+            printf 'return %s' "$_rb"; return 0 ;;
         'unset:'*) _a=${1#unset:}
             valid_unset_attr "$_a" "statement unset"
             printf 'unset(%s)' "$_a"; return 0 ;;
-        *) err "statement tidak dikenal: $1 (accept|reject|set:ATTR=NILAI|unset:ATTR)" ;;
+        'print:'*|'printn:'*)  # B16/5-157/158 (cermin bgp)
+            _pk=${1%%:*}; _pa=${1#*:}
+            _pb=$(print_args_to_bird "$_pa" "$2") || exit 33
+            printf '%s %s' "$_pk" "$_pb"; return 0 ;;
+        *) err "statement tidak dikenal: $1 (accept|reject|accept \"PESAN\"|reject \"PESAN\"|return:EKSPRESI|set:ATTR=NILAI|unset:ATTR|print:ARGS|printn:ARGS)" ;;
     esac
 }
 
@@ -681,9 +1167,9 @@ cmd_return() { # function-return <NAMA> <EKSPRESI> (append; boleh >1 cabang)
 cmd_set() { # function-set <NAMA> <ATTR> <NILAI>
     _n="$1"; _a="$2"; _v="$3"
     [ -n "$_n" ] && [ -n "$_a" ] && [ -n "$_v" ] || err "function-set butuh NAMA ATTR NILAI"
-    _b5_n="$_n"; _b5_a="$_a"; _b5_v="$_v"
+    _b5_n="$_n"; _b5_a="$_a"; _b5_v=$(klish_unescape "$_v")
     valid_symbol "$_n" "function"
-    valid_set_stmt "$_a" "$_v" "function-set" "$(function_vars "$_n")"
+    valid_set_stmt "$_a" "$_b5_v" "function-set" "$(function_vars "$_n")"
     upsert_f "^function $_b5_n set $_b5_a $(re_escape "$_b5_v")\$" "function $_b5_n set $_b5_a $_b5_v"
     echo "fungsi $_b5_n set $_b5_a = $_b5_v"
 }
@@ -695,8 +1181,19 @@ cmd_unset() { # function-unset <NAMA> <ATTR>
     upsert_f "^function $_n unset $_a\$" "function $_n unset $_a"
     echo "fungsi $_n unset $_a"
 }
+cmd_print() { # B16/5-157/158 (cermin bgp): function-print <NAMA> print|printn <ARGS>
+    _n="$1"; _k="$2"; _a="$3"
+    [ -n "$_n" ] && [ -n "$_k" ] && [ -n "$_a" ] || err "function-print butuh NAMA print|printn ARGS"
+    case "$_k" in print|printn) ;; *) err "function-print: jenis harus print|printn: $_k" ;; esac
+    valid_symbol "$_n" "function"
+    _vl=$(function_vars "$_n")
+    print_args_to_bird "$_a" "$_vl" >/dev/null || exit 33
+    touch_intent; printf 'function %s %s %s\n' "$_n" "$_k" "$_a" >> "$INTENT"
+    echo "fungsi $_n $_k $_a"
+}
 cmd_if() { # function-if <NAMA> <COND> <THEN> [ELSE]
     _n="$1"; _c="$2"; _t="$3"; _e="$4"
+    _c=$(klish_unescape "$_c"); _t=$(klish_unescape "$_t"); _e=$(klish_unescape "$_e")
     [ -n "$_n" ] && [ -n "$_c" ] && [ -n "$_t" ] || err "function-if butuh NAMA COND THEN [ELSE]"
     _b5_n="$_n"; _b5_c="$_c"; _b5_t="$_t"; _b5_e="$_e"
     valid_symbol "$_n" "function"
@@ -809,11 +1306,17 @@ cmd_generate() {
                     set)
                         _Lsa=${_Lv%% *}; _Lsv=${_Lv#* }
                         valid_set_stmt "$_Lsa" "$_Lsv" "fungsi $_Lfn set" "$_Lvars"
+                        _Lsat=$(var_type "$_Lvars" "$_Lsa" 2>/dev/null || true)
+                        if [ "$_Lsat" = "string" ]; then _Lsvt=$(var_type "$_Lvars" "$_Lsv" 2>/dev/null || true); [ "$_Lsvt" = "string" ] || _Lsv="\"$_Lsv\""; fi
                         printf '%s%s = %s;\n' "$_Lpad" "$_Lsa" "$_Lsv"
                         ;;
                     unset)
                         valid_unset_attr "$_Lv" "fungsi $_Lfn unset"
                         printf '%sunset(%s);\n' "$_Lpad" "$_Lv"
+                        ;;
+                    print|printn)  # B16/5-157/158 (cermin bgp)
+                        _Lpa=$(print_args_to_bird "$_Lv" "$_Lvars") || exit 33
+                        printf '%s%s %s;\n' "$_Lpad" "$_La" "$_Lpa"
                         ;;
                     if)
                         _Lc=${_Lv%% *}; _Lrest=${_Lv#* }
@@ -907,10 +1410,11 @@ case "$1" in
     function-return) shift; cmd_return "$@" ;;
     function-set) shift; cmd_set "$@" ;;
     function-unset) shift; cmd_unset "$@" ;;
+    function-print) shift; cmd_print "$@" ;;
     function-if) shift; cmd_if "$@" ;;
     function-block) shift; cmd_block "$@" ;;
     function-del) shift; cmd_del "$@" ;;
     generate) cmd_generate ;;
     show|status) cmd_show ;;
-    *) echo "Usage: $0 {function-returns NAME TYPE|-|function-param NAME TYPE VAR|function-param-del NAME VAR|function-var NAME TYPE VAR|function-return NAME EXPR|function-set NAME ATTR VALUE|function-unset NAME ATTR|function-if NAME COND THEN [ELSE]|function-block NAME if|else|for|case|when|otherwise|close [ARGS]|function-del NAME|generate|show}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {function-returns NAME TYPE|-|function-param NAME TYPE VAR|function-param-del NAME VAR|function-var NAME TYPE VAR|function-return NAME EXPR|function-set NAME ATTR VALUE|function-unset NAME ATTR|function-print NAME print|printn ARGS|function-if NAME COND THEN [ELSE]|function-block NAME if|else|for|case|when|otherwise|close [ARGS]|function-del NAME|generate|show}" >&2; exit 2 ;;
 esac

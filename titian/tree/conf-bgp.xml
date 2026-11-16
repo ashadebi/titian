@@ -609,7 +609,7 @@
     </COMMAND>
 
     <COMMAND name="import"
-        help="Import policy dari neighbor ini (all / none / filter NAME)"/>
+        help="Import policy dari neighbor ini (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="import all"
         help="Import semua route dari neighbor">
@@ -635,9 +635,19 @@
             ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import filter "${Name}"
         </ACTION>
     </COMMAND>
+    <COMMAND name="import where"
+        help="Import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" import where "${Cond}"
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="export"
-        help="Export policy ke neighbor ini (all / none / filter NAME)"/>
+        help="Export policy ke neighbor ini (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="export all"
         help="Export semua route ke neighbor">
@@ -661,6 +671,16 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export where"
+        help="Export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" export where "${Cond}"
         </ACTION>
     </COMMAND>
 
@@ -3127,6 +3147,86 @@
             ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject aspa-up "${Table}" "${Result}"
         </ACTION>
     </COMMAND>
+    <COMMAND name="accept roa3"
+        help="Terima route dengan hasil roa_check 3-argumen di tabel ini (roa_check(TABEL, PREFIX, ASN))">
+
+        <PARAM name="Table"
+            help="Nama tabel roa"
+            ptype="STRING"/>
+        <PARAM name="Prefix"
+            help="Prefix route (mis. 10.0.0.0/8) atau net (prefix route itu sendiri)"
+            ptype="STRING"/>
+        <PARAM name="ASN"
+            help="ASN (mis. 65000) atau bgp_path.last"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ROA_VALID | ROA_INVALID | ROA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept roa3 "${Table}" "${Prefix}" "${ASN}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject roa3"
+        help="Tolak route dengan hasil roa_check 3-argumen di tabel ini (roa_check(TABEL, PREFIX, ASN))">
+
+        <PARAM name="Table"
+            help="Nama tabel roa"
+            ptype="STRING"/>
+        <PARAM name="Prefix"
+            help="Prefix route (mis. 10.0.0.0/8) atau net (prefix route itu sendiri)"
+            ptype="STRING"/>
+        <PARAM name="ASN"
+            help="ASN (mis. 65000) atau bgp_path.last"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ROA_VALID | ROA_INVALID | ROA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject roa3 "${Table}" "${Prefix}" "${ASN}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="accept aspa3"
+        help="Terima route dengan hasil aspa_check 3-argumen di tabel ini (aspa_check(TABEL, PATH, BOOL))">
+
+        <PARAM name="Table"
+            help="Nama tabel aspa"
+            ptype="STRING"/>
+        <PARAM name="Path"
+            help="Path BGP — hanya bgp_path"
+            ptype="STRING"/>
+        <PARAM name="Direction"
+            help="true|up (upstream) atau false|down (downstream)"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ASPA_VALID | ASPA_INVALID | ASPA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept aspa3 "${Table}" "${Path}" "${Direction}" "${Result}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="reject aspa3"
+        help="Tolak route dengan hasil aspa_check 3-argumen di tabel ini (aspa_check(TABEL, PATH, BOOL))">
+
+        <PARAM name="Table"
+            help="Nama tabel aspa"
+            ptype="STRING"/>
+        <PARAM name="Path"
+            help="Path BGP — hanya bgp_path"
+            ptype="STRING"/>
+        <PARAM name="Direction"
+            help="true|up (upstream) atau false|down (downstream)"
+            ptype="STRING"/>
+        <PARAM name="Result"
+            help="ASPA_VALID | ASPA_INVALID | ASPA_UNKNOWN"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject aspa3 "${Table}" "${Path}" "${Direction}" "${Result}"
+        </ACTION>
+    </COMMAND>
     <COMMAND name="accept community-len"
         help="Terima route dengan jumlah community sesuai operator">
 
@@ -3156,10 +3256,10 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="accept match"
-        help="Terima route dengan kondisi COND (satu token; lihat BIRD-B5-REPORT.md)">
+        help="Terima route dengan kondisi COND (satu token; aritmetika int + - * / dan kurung, literal net SADR/VPN/ROA, roa:/aspa: 3-argumen; lihat BIRD-B5-REPORT.md + BIRD-B12-REPORT.md)">
 
         <PARAM name="Cond"
-            help="Kondisi mis. defined:bgp_med&amp;&amp;bgp_local_pref=100"
+            help="Kondisi mis. defined:bgp_med&amp;&amp;bgp_local_pref=100 atau net=10.0.0.0/8,max,24,as,65000"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -3244,6 +3344,28 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="print"
+        help="Cetak debug ke log BIRD (syslog daemon.log): print ARGS — ARGS satu token dipisah koma (s:TEKS, atribut, variabel, bilangan, accessor .asn/.data)">
+        <PARAM name="Args"
+            help="Argumen print satu token dipisah koma (mis. s:match,net atau net,bgp_local_pref)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-print "${bgp_filter}" print "${Args}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="printn"
+        help="Cetak debug ke log BIRD tanpa newline: printn ARGS (bentuk sama seperti print)">
+        <PARAM name="Args"
+            help="Argumen printn satu token dipisah koma (mis. s:x=,p.asn)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-print "${bgp_filter}" printn "${Args}"
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="if"
         help="Buka blok if (tutup dengan close; else dengan else)">
         <PARAM name="Cond"
@@ -3260,6 +3382,37 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh filter-block "${bgp_filter}" else
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="if-then"
+        help="Satu baris if: if COND then STMT (STMT: accept|reject|set:ATTR=NILAI|unset:ATTR|print:ARGS|printn:ARGS; pesan: accept &quot;PESAN&quot;|reject &quot;PESAN&quot;)">
+        <PARAM name="Cond"
+            help="Kondisi COND satu token (mis. net~10.0.0.0/8, roa:R4,net,bgp_path.last=ROA_VALID)"
+            ptype="STRING"/>
+        <PARAM name="Then"
+            help="Statement THEN satu token (mis. accept, reject, set:bgp_local_pref=100+50)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-if "${bgp_filter}" "${Cond}" "${Then}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="if-then-else"
+        help="Satu baris if-else: if COND then STMT else STMT">
+        <PARAM name="Cond"
+            help="Kondisi COND satu token"
+            ptype="STRING"/>
+        <PARAM name="Then"
+            help="Statement THEN satu token"
+            ptype="STRING"/>
+        <PARAM name="Else"
+            help="Statement ELSE satu token"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh filter-if "${bgp_filter}" "${Cond}" "${Then}" "${Else}"
         </ACTION>
     </COMMAND>
 
@@ -3414,6 +3567,28 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="print"
+        help="Cetak debug ke log BIRD (syslog daemon.log): print ARGS — ARGS satu token dipisah koma (s:TEKS, atribut, variabel, bilangan, accessor .asn/.data)">
+        <PARAM name="Args"
+            help="Argumen print satu token dipisah koma (mis. s:match,net atau net,bgp_local_pref)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-print "${bird_function}" print "${Args}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="printn"
+        help="Cetak debug ke log BIRD tanpa newline: printn ARGS (bentuk sama seperti print)">
+        <PARAM name="Args"
+            help="Argumen printn satu token dipisah koma (mis. s:x=,p.asn)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-print "${bird_function}" printn "${Args}"
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="if"
         help="Buka blok if (tutup dengan close; else dengan else)">
         <PARAM name="Cond"
@@ -3430,6 +3605,37 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-function.sh function-block "${bird_function}" else
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="if-then"
+        help="Satu baris if: if COND then STMT (STMT: return:EKSPRESI|set:ATTR=NILAI|unset:ATTR|accept|reject|print:ARGS|printn:ARGS)">
+        <PARAM name="Cond"
+            help="Kondisi COND satu token"
+            ptype="STRING"/>
+        <PARAM name="Then"
+            help="Statement THEN satu token (mis. return:outer, set:bgp_local_pref=100+50)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-if "${bird_function}" "${Cond}" "${Then}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="if-then-else"
+        help="Satu baris if-else: if COND then STMT else STMT">
+        <PARAM name="Cond"
+            help="Kondisi COND satu token"
+            ptype="STRING"/>
+        <PARAM name="Then"
+            help="Statement THEN satu token"
+            ptype="STRING"/>
+        <PARAM name="Else"
+            help="Statement ELSE satu token"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-if "${bird_function}" "${Cond}" "${Then}" "${Else}"
         </ACTION>
     </COMMAND>
 
@@ -3517,7 +3723,7 @@
          vpn4mc (vpn4 multicast), vpn6mc (vpn6 multicast), flow4, flow6.
          Default BIRD Bab 3.5 bila tak diset: import all, export none. -->
     <COMMAND name="import"
-        help="Import policy channel ini (all, none, filter NAME)"/>
+        help="Import policy channel ini (all, none, filter NAME, where COND)"/>
 
     <COMMAND name="import all"
         help="Import semua route lewat channel ini">
@@ -3543,9 +3749,19 @@
             ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import" filter "${Name}"
         </ACTION>
     </COMMAND>
+    <COMMAND name="import where"
+        help="Import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "import" where "${Cond}"
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="export"
-        help="Export policy channel ini (all, none, filter NAME)"/>
+        help="Export policy channel ini (all, none, filter NAME, where COND)"/>
 
     <COMMAND name="export all"
         help="Export semua route lewat channel ini">
@@ -3569,6 +3785,16 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export" filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export where"
+        help="Export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-chan-set "${bgp_ch_ctx}" "export" where "${Cond}"
         </ACTION>
     </COMMAND>
 
@@ -4728,6 +4954,23 @@
         <CONFIG operation="unset" pattern="^graceful-restart-wait"/>
         <ACTION>
             ${RT_SBIN}/titian-global.sh graceful-restart-wait-del
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="graceful-restart-recovery"
+        help="Graceful restart recovery: bird start berikutnya pakai flag -R (default OFF; Bab 2.4-2)">
+        <PARAM name="Value"
+            help="on|off"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh graceful-restart-recovery-set "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no graceful-restart-recovery"
+        help="Matikan graceful restart recovery (bird start tanpa -R)">
+        <CONFIG operation="unset" pattern="^graceful-restart recovery"/>
+        <ACTION>
+            ${RT_SBIN}/titian-global.sh graceful-restart-recovery-del
         </ACTION>
     </COMMAND>
 

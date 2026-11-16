@@ -434,6 +434,44 @@ cmd_gr_wait_set() {
     echo "graceful restart wait $1"
 }
 cmd_gr_wait_del() { dellines '^graceful-restart wait '; echo "graceful restart wait dihapus (default BIRD 240)"; }
+
+# --- graceful restart recovery (flag -R saat bird start; Bab 2.4-2; B14) ---
+# Intent `graceful-restart recovery on|off` di bird-global.conf; setter
+# LANGSUNG menerapkan ke rc.conf via sysrc bird_flags (bukan config
+# BIRD — tidak ada langkah commit untuknya; intent adalah source of truth
+# dan sysrc disinkronkan saat set). TIDAK perlu patch rc script bird:
+# rc.subr FreeBSD SUDAH meneruskan ${bird_flags} otomatis ke daemon
+# (terbukti live B14: ps menunjukkan `bird -R ...` sekali dengan rc
+# script port asli; patch command_args malah menduplikasi -R). Tanpa
+# sysrc (mock/Linux) hanya intent yang ditulis + catatan ke stderr.
+apply_bird_flags() { # <"-R"|""> — set/hapus bird_flags di rc.conf
+    if command -v sysrc >/dev/null 2>&1; then
+        if [ -n "$1" ]; then
+            sysrc bird_flags="$1" >/dev/null || err "sysrc bird_flags gagal"
+        else
+            sysrc -x bird_flags >/dev/null 2>&1 || true
+        fi
+    else
+        echo "(sysrc tidak ada di host ini — bird_flags tidak diterapkan; intent tetap tersimpan)" >&2
+    fi
+}
+cmd_gr_recovery_set() { # graceful-restart-recovery-set on|off
+    [ -n "$1" ] || err "graceful-restart-recovery-set butuh on|off"
+    case "$1" in
+        on) upsert '^graceful-restart recovery ' "graceful-restart recovery on"
+            apply_bird_flags "-R"
+            echo "graceful restart recovery ON (bird start berikutnya pakai flag -R)" ;;
+        off) upsert '^graceful-restart recovery ' "graceful-restart recovery off"
+            apply_bird_flags ""
+            echo "graceful restart recovery OFF (bird start tanpa -R)" ;;
+        *) err "graceful-restart recovery harus on|off: $1" ;;
+    esac
+}
+cmd_gr_recovery_del() {
+    dellines '^graceful-restart recovery '
+    apply_bird_flags ""
+    echo "graceful restart recovery dihapus (default OFF — bird start tanpa -R)"
+}
 cmd_timeformat_set() { # timeformat-set <KIND> <FORMAT...> [limit <N> <FORMAT2...>]
     _kind="$1"; shift
     case "$_kind" in route|protocol|base|log) ;; *) err "timeformat KIND harus route|protocol|base|log: $_kind" ;; esac
@@ -1111,6 +1149,8 @@ case "$1" in
     hostname-del) cmd_hostname_del ;;
     graceful-restart-wait-set) shift; cmd_gr_wait_set "$@" ;;
     graceful-restart-wait-del) cmd_gr_wait_del ;;
+    graceful-restart-recovery-set) shift; cmd_gr_recovery_set "$@" ;;
+    graceful-restart-recovery-del) cmd_gr_recovery_del ;;
     timeformat-set) shift; cmd_timeformat_set "$@" ;;
     timeformat-del) shift; cmd_timeformat_del "$@" ;;
     router-id-from-set) shift; cmd_router_id_from_set "$@" ;;
@@ -1132,5 +1172,5 @@ case "$1" in
     mpls-label-range-del) shift; cmd_mpls_label_range_del "$@" ;;
     generate) cmd_generate ;;
     show|status) cmd_show ;;
-    *) echo "Usage: $0 {touch|include-add FILE|include-del FILE|cli-add PATH [restrict]|cli-del PATH|log-add DEST...|log-del DEST...|debug-set KIND SPEC|debug-del KIND|debug-commands-set N|debug-commands-del|debug-latency-set on|off|debug-latency-del|debug-latency-limit-set TIME|debug-latency-limit-del|watchdog-warning-set TIME|watchdog-warning-del|watchdog-timeout-set TIME|watchdog-timeout-del|mrtdump-file-set PATH|mrtdump-file-del|mrtdump-protocols-set SPEC|mrtdump-protocols-del|hostname-set NAME|hostname-del|graceful-restart-wait-set N|graceful-restart-wait-del|timeformat-set KIND FORMAT [limit N FORMAT2]|timeformat-del KIND|router-id-from-set PATTERN...|router-id-from-del|define-add NAME EXPR|define-del NAME|attribute-add TYPE NAME|attribute-del NAME|table-add NETTYPE NAME|table-del NAME|table-set NAME FIELD VALUE|table-unset NAME FIELD|show-tables|template-add PROTO NAME [from PARENT]|template-del PROTO NAME|mpls-domain-add NAME|mpls-domain-del NAME|mpls-label-range-add DOMAIN RANGE START LENGTH|mpls-label-range-del DOMAIN RANGE|generate|show}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {touch|include-add FILE|include-del FILE|cli-add PATH [restrict]|cli-del PATH|log-add DEST...|log-del DEST...|debug-set KIND SPEC|debug-del KIND|debug-commands-set N|debug-commands-del|debug-latency-set on|off|debug-latency-del|debug-latency-limit-set TIME|debug-latency-limit-del|watchdog-warning-set TIME|watchdog-warning-del|watchdog-timeout-set TIME|watchdog-timeout-del|mrtdump-file-set PATH|mrtdump-file-del|mrtdump-protocols-set SPEC|mrtdump-protocols-del|hostname-set NAME|hostname-del|graceful-restart-wait-set N|graceful-restart-wait-del|graceful-restart-recovery-set on|off|graceful-restart-recovery-del|timeformat-set KIND FORMAT [limit N FORMAT2]|timeformat-del KIND|router-id-from-set PATTERN...|router-id-from-del|define-add NAME EXPR|define-del NAME|attribute-add TYPE NAME|attribute-del NAME|table-add NETTYPE NAME|table-del NAME|table-set NAME FIELD VALUE|table-unset NAME FIELD|show-tables|template-add PROTO NAME [from PARENT]|template-del PROTO NAME|mpls-domain-add NAME|mpls-domain-del NAME|mpls-label-range-add DOMAIN RANGE START LENGTH|mpls-label-range-del DOMAIN RANGE|generate|show}" >&2; exit 2 ;;
 esac

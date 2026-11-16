@@ -28,9 +28,11 @@
 # Filter bernama (`import/export filter <name>`) merujuk filter yang
 # didefinisikan lewat perintah filter BIRD yang sudah ada
 # (`filter <NAME>` di bird-view / titian-bgp.sh filter-add). Filter
-# INLINE (`export filter { ... }`) TIDAK diekspos di batch ini —
-# bahasa filter umum menyusul batch filter.
-# Bila import/export tidak diset, opsi itu DIHILANGKAN dari blok
+# INLINE (`export filter { ... }`) TIDAK diekspos — keputusan B13 (P4/P5):
+# filter inline hanyalah syntactic sugar atas filter bernama (preseden B11:
+# "Filter inline murni tidak diekspos"); bentuk bernama + `where` (B11)
+# menutupi semua isi inline; bird -p membuktikan inline valid (probe B13
+# C2). Bila import/export tidak diset, opsi itu DIHILANGKAN dari blok
 # (default BIRD berlaku; jangan ditebak — docs tidak menyatakan
 # default import/export Pipe, dan channel default export adalah none).
 #
@@ -92,6 +94,29 @@ get_field() {
     # get_field <pipe> <field> -> nilai (kolom ke-4; untuk import/export
     # filter, kolom ke-5 adalah nama filter — ditangani pemanggil).
     grep "^pipe $1 $2 " "$CONF" 2>/dev/null | head -1 | awk '{print $4}'
+}
+
+cond_validate() {
+    # cond_validate <COND> — validasi ekspresi filter bentuk ringkas
+    # (mis. net~10.0.0.0/8) via titian-bgp.sh cond-to-bird. Bila script
+    # itu tidak ada (deploy parsial), fallback validasi ringan.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" >/dev/null
+    else
+        case "$1" in *[\;\{\}]* ) err "where: ekspresi mengandung karakter terlarang (; { })" ;; esac
+    fi
+}
+
+cond_translate() {
+    # cond_translate <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai di generate untuk bentuk `import/export where <COND>`.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" || exit 33
+    else
+        err "penerjemah kondisi tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
 }
 
 # table_nettype <nama> — tipe tabel (ipv4|ipv6|ipv6-sadr|...) dari
@@ -187,13 +212,27 @@ cmd_mrtdump_del() { # B9: mrtdump-del NAME
     echo "Pipe $1 mrtdump dihapus (default BIRD off)"
 }
 
+cmd_pipe_unset() { # pipe-unset <NAME> <field> — hapus satu field (kembali ke default BIRD)
+    _n="$1"; _f="$2"
+    [ -n "$_n" ] && [ -n "$_f" ] || err "pipe-unset butuh NAMA FIELD"
+    valid_name "$_n" "nama pipe"
+    case "$_f" in
+        table|peer-table|import|export|disabled|from) dellines "^pipe $_n $_f " ;;
+        *) err "field pipe tidak dikenal: $_f (table|peer-table|import|export|disabled|from)" ;;
+    esac
+    echo "Pipe $_n $_f dihapus (default BIRD)"
+}
+
 cmd_pipe_set() {
     # pipe-set <NAME> <field> <value...>
-    # field: table|peer-table|import|export
+    # field: table|peer-table|import|export|disabled|from
+    # (Bab 3.4-1 disabled; Bab 3.2-15/16 from; Bab 3.5-4/5 import/export
+    # where = filter inline bentuk ringkas, mis. net~10.0.0.0/8.)
     _n="$1"; _f="$2"; shift 2
     [ -n "$_n" ] && [ -n "$_f" ] && [ -n "$1" ] || \
         err "pipe-set butuh NAMA FIELD VALUE"
     valid_name "$_n" "nama pipe"
+    _val="$*"
     case "$_f" in
         table)
             valid_name "$1" "table"
@@ -201,6 +240,14 @@ cmd_pipe_set() {
         peer-table)
             valid_name "$1" "peer table"
             upsert "^pipe $_n peer-table " "pipe $_n peer-table $1" ;;
+        disabled)
+            case "$1" in
+                on|off) upsert "^pipe $_n disabled " "pipe $_n disabled $1" ;;
+                *) err "disabled harus on|off: $1" ;;
+            esac ;;
+        from)
+            valid_name "$1" "from"
+            upsert "^pipe $_n from " "pipe $_n from $1" ;;
         import|export)
             case "$1" in
                 all|none) upsert "^pipe $_n $_f " "pipe $_n $_f $1" ;;
@@ -208,11 +255,16 @@ cmd_pipe_set() {
                     [ -n "$2" ] || err "$_f filter butuh nama filter"
                     valid_name "$2" "nama filter"
                     upsert "^pipe $_n $_f " "pipe $_n $_f filter $2" ;;
-                *) err "$_f harus all|none|filter <nama>: $1" ;;
+                where)
+                    shift
+                    [ -n "$*" ] || err "$_f where butuh ekspresi filter bentuk ringkas (mis. where net~10.0.0.0/8)"
+                    cond_validate "$*" || exit 33
+                    upsert "^pipe $_n $_f " "pipe $_n $_f where $*" ;;
+                *) err "$_f harus all|none|filter <nama>|where <ekspresi>: $1" ;;
             esac ;;
-        *) err "field pipe tidak dikenal: $_f (table|peer-table|import|export)" ;;
+        *) err "field pipe tidak dikenal: $_f (table|peer-table|import|export|disabled|from)" ;;
     esac
-    echo "Pipe $_n $_f = $*"
+    echo "Pipe $_n $_f = $_val"
 }
 
 cmd_generate() {
@@ -236,7 +288,17 @@ cmd_generate() {
                 if [ -n "$_tt" ] && [ -n "$_pt" ] && [ "$_tt" != "$_pt" ]; then
                     err "pipe $_n: table $_tab ($_tt) dan peer table $_peer ($_pt) beda tipe — BIRD menolak (Primary table and peer table must have the same type)"
                 fi
-                echo "protocol pipe $_n {"
+                _from=$(get_field "$_n" from)
+                if [ -n "$_from" ]; then
+                    _gf="$STATE_ROOT/bird-global.conf"
+                    [ -f "$_gf" ] && grep -q "^template pipe $_from\( \|$\)" "$_gf" 2>/dev/null || \
+                        err "pipe $_n: from template pipe $_from tidak ada di bird-global.conf (template-add pipe $_from dulu)"
+                    echo "protocol pipe $_n from $_from {"
+                else
+                    echo "protocol pipe $_n {"
+                fi
+                _dis=$(get_field "$_n" disabled)
+                case "$_dis" in on) echo "    disabled;" ;; esac
                 echo "    table $_tab;"
                 echo "    peer table $_peer;"
                 _pdbg=$(grep "^pipe $_n debug " "$CONF" 2>/dev/null | head -1 | awk '{print $4}')
@@ -248,12 +310,14 @@ cmd_generate() {
                 if [ -n "$_imp" ]; then
                     case "$_imp" in
                         *' filter '*) echo "    import filter $(echo "$_imp" | awk '{print $5}');" ;;
+                        *' where '*) _wcond=$(echo "$_imp" | awk '{print $5}'); _wbird=$(cond_translate "$_wcond") || exit 33; echo "    import where $_wbird;" ;;
                         *) echo "    import $(echo "$_imp" | awk '{print $4}');" ;;
                     esac
                 fi
                 if [ -n "$_exp" ]; then
                     case "$_exp" in
                         *' filter '*) echo "    export filter $(echo "$_exp" | awk '{print $5}');" ;;
+                        *' where '*) _wcond=$(echo "$_exp" | awk '{print $5}'); _wbird=$(cond_translate "$_wcond") || exit 33; echo "    export where $_wbird;" ;;
                         *) echo "    export $(echo "$_exp" | awk '{print $4}');" ;;
                     esac
                 fi
@@ -283,6 +347,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
@@ -295,7 +367,7 @@ cmd_show() {
     _done=0
     set -f
     for _n in $(grep '^pipe ' "$CONF" 2>/dev/null | awk '{print $2}' | awk '!s[$0]++'); do
-        if _out=$("$_birdc" show protocol "$_n" 2>&1); then
+        if _out=$("$_birdc" $(birdc_sock) show protocol "$_n" 2>&1); then
             echo "$_out" | grep -v '^BIRD'
             _done=1
         fi
@@ -311,11 +383,12 @@ case "$1" in
     pipe-add) shift; cmd_pipe_add "$@" ;;
     pipe-del) shift; cmd_pipe_del "$@" ;;
     pipe-set) shift; cmd_pipe_set "$@" ;;
+    pipe-unset) shift; cmd_pipe_unset "$@" ;;
     debug-set) shift; cmd_debug_set "$@" ;;
     debug-del) shift; cmd_debug_del "$@" ;;
     mrtdump-set) shift; cmd_mrtdump_set "$@" ;;
     mrtdump-del) shift; cmd_mrtdump_del "$@" ;;
     generate) cmd_generate ;;
     show) cmd_show ;;
-    *) echo "Usage: $0 {pipe-touch NAME|has-facts|pipe-add NAME|pipe-del NAME|pipe-set NAME FIELD VALUE|debug-set NAME SPEC|debug-del NAME|mrtdump-set NAME SPEC|mrtdump-del NAME|generate|show}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {pipe-touch NAME|has-facts|pipe-add NAME|pipe-del NAME|pipe-set NAME table|peer-table|import|export|disabled|from VALUE|pipe-unset NAME table|peer-table|import|export|disabled|from|debug-set NAME SPEC|debug-del NAME|mrtdump-set NAME SPEC|mrtdump-del NAME|generate|show}" >&2; exit 2 ;;
 esac

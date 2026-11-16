@@ -23,12 +23,26 @@
 # POSIX sh.
 STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
 BGP_CONF="$STATE_ROOT/bgp.conf"
+BIRDC_CONF="$STATE_ROOT/birdc.conf"
 PROG="titian-birdc"
 err() { echo "Error($PROG): $*" >&2; exit 33; }
 
 birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
+}
+
+# birdc_sock — cetak "-s <path>" bila socket utama dikonfigurasi via klish
+# (BC8, B13; intent $STATE_ROOT/birdc.conf, baris `socket <PATH>`), kosong
+# bila default. Dipakai SEMUA pemanggilan birdc di file ini (+ titian-bird.sh)
+# agar satu pengaturan socket berlaku di seluruh Titian.
+birdc_sock() {
+    _s=$(grep '^socket ' "$BIRDC_CONF" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
+klish_unescape() {
+    printf '%s' "$1" | sed -e 's/\\>/>/g' -e 's/\\</</g' -e 's/\\(/(/g' -e 's/\\)/)/g' -e 's/\\&/\&/g' -e 's/\\|/|/g' -e 's/\\;/;/g' -e 's/\\\\/\\/g'
 }
 
 have_birdc() {
@@ -47,9 +61,13 @@ run_ro() {
         return 0
     fi
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" "$@" 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) "$@" 2>&1); then
         printf '%s\n' "$_out" | grep -v '^BIRD'
-    elif "$_birdc" show status >/dev/null 2>&1; then
+    elif "$_birdc" $(birdc_sock) show status >/dev/null 2>&1; then
+        # B13: cetak dulu jawaban asli birdc (mis. "No import table in
+        # channel ..." — BIRD memberi rc=1 untuk channel tanpa import/
+        # export table; itu JAWABAN, bukan perintah salah), baru diagnosa.
+        printf '%s\n' "$_out" | grep -v '^BIRD'
         echo "(birdc $_label gagal — daemon BIRD jalan; kemungkinan protokol tidak ada / argumen tidak valid: birdc $* gagal)"
     else
         echo "(BIRD tidak jalan — $_label gagal: birdc $* gagal)"
@@ -65,12 +83,31 @@ run_state() {
         err "birdc tidak ada — $_label tidak bisa jalan (BIRD belum terpasang di image ini)"
     fi
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" "$@" 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) "$@" 2>&1); then
         printf '%s\n' "$_out" | grep -v '^BIRD'
         return 0
     fi
     printf '%s\n' "$_out" | grep -v '^BIRD'
     err "$_label gagal (birdc $* rc != 0)"
+}
+
+# run_state_one <label> <perintah> — seperti run_state, tapi seluruh perintah
+# diteruskan sebagai SATU argumen ke birdc (B13). WAJIB untuk perintah yang
+# mengandung string dikutip (mis. `configure "/tmp/file.conf"`) — bentuk
+# multi-argumen GAGAL di birdc 2.20.0 ("syntax error, unexpected '/'",
+# terverifikasi live B13); bentuk satu-argumen jalan untuk semua perintah.
+run_state_one() {
+    _label=$1; _cmd=$2
+    if ! have_birdc; then
+        err "birdc tidak ada — $_label tidak bisa jalan (BIRD belum terpasang di image ini)"
+    fi
+    _birdc=$(birdc_bin)
+    if _out=$("$_birdc" $(birdc_sock) "$_cmd" 2>&1); then
+        printf '%s\n' "$_out" | grep -v '^BIRD'
+        return 0
+    fi
+    printf '%s\n' "$_out" | grep -v '^BIRD'
+    err "$_label gagal (birdc \"$_cmd\" rc != 0)"
 }
 
 # --- validator (semua gagal -> rc 33 via err) ---
@@ -188,6 +225,121 @@ cmd_show_route_where() {
     valid_no_semi "$1" "show route where <kondisi>"
     run_ro "show route where $1" show route where "$1"
 }
+cmd_show_route_filter() { # show-route-filter <COND> — birdc show route filter { if COND then accept; } (B12/5-14 + 5-161; bentuk bernama TIDAK didukung BIRD 2.20 — F3.10 tetap)
+    [ -n "$1" ] || err "show route filter butuh COND bentuk ringkas (mis. net~10.0.0.0/8)"
+    valid_no_semi "$1" "show route filter <kondisi>"
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    [ -x "$_bgpsh" ] || err "show route filter butuh $_bgpsh (tidak ditemukan)"
+    _bird=$(TITIAN_STATE_ROOT="$STATE_ROOT" sh "$_bgpsh" cond-to-bird "$1" 2>&1) || { echo "Error($PROG): kondisi tidak valid: $_bird" >&2; exit 33; }
+    run_ro "show route filter { if $_bird then accept; }" show route filter '{' if "$_bird" then 'accept;' '}'
+}
+
+# --- B13: subcommand show route BGP-132, configure BGP-135, passthrough BC1, socket BC8 ---
+cmd_show_route_primary() { # show-route-primary — show route primary [count]
+    run_ro "show route primary" show route primary "$@"
+}
+cmd_show_route_filtered() { # show-route-filtered — show route filtered [count]
+    run_ro "show route filtered" show route filtered "$@"
+}
+valid_proto_channel() { # <nilai> <label> — PROTO.CHANNEL (dua simbol BIRD)
+    case "$1" in *.*) _a=${1%%.*}; _b=${1#*.} ;;
+        *) err "$2 harus bentuk PROTO.CHANNEL (mis. bgp_10_99_40_2.ipv4): $1" ;; esac
+    valid_proto_name "$_a" "$2 (protokol)"
+    valid_proto_name "$_b" "$2 (channel)"
+}
+cmd_show_route_import_table() { # show-route-import-table <PROTO.CHANNEL>
+    valid_proto_channel "$1" "show route import table <PROTO.CHANNEL>"
+    run_ro "show route import table $1" show route import table "$1"
+}
+cmd_show_route_export_table() { # show-route-export-table <PROTO.CHANNEL>
+    valid_proto_channel "$1" "show route export table <PROTO.CHANNEL>"
+    run_ro "show route export table $1" show route export table "$1"
+}
+cmd_configure_adv() { # configure-adv [soft] [file PATH] [timeout [NUM]] — BGP-135
+    # Urutan argumen mengikuti sintaks BIRD: configure [soft] ["<file>"]
+    # [timeout [<num>]] (docs Bab 23). `configure` polos = 'configure reload'
+    # (bukan di sini). Selalu diteruskan sebagai SATU argumen ke birdc —
+    # bentuk multi-argumen gagal untuk path file berkutip (B13, live).
+    _soft=""; _file=""; _timeout=""; _tnum=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            '') shift ;;
+            soft) [ -z "$_soft" ] || err "configure-adv: 'soft' ganda"; _soft=1; shift ;;
+            file)
+                [ -z "$_file" ] || err "configure-adv: 'file' ganda"
+                shift; [ -n "${1:-}" ] || err "configure-adv: 'file' butuh PATH (absolut, ada, bisa dibaca)"
+                _file="$1"; shift ;;
+            timeout)
+                [ -z "$_timeout" ] || err "configure-adv: 'timeout' ganda"
+                _timeout=1; shift
+                case "${1:-}" in ''|*[!0-9]*) ;; *) _tnum="$1"; shift ;; esac ;;
+            *) err "configure-adv: argumen tidak dikenal: $1 (boleh: soft | file PATH | timeout [NUM])" ;;
+        esac
+    done
+    [ -n "$_soft" ] || [ -n "$_file" ] || [ -n "$_timeout" ] || \
+        err "configure-adv butuh minimal satu dari: soft | file PATH | timeout [NUM] (configure polos = 'configure reload')"
+    if [ -n "$_file" ]; then
+        case "$_file" in /*) ;; *) err "configure-adv: file harus path absolut: $_file" ;; esac
+        case "$_file" in *';'*|*\"*|*'`'*|*'$'*|*' '*) err "configure-adv: file tidak boleh mengandung spasi/';'/kutip/'\$': $_file" ;; esac
+        [ -f "$_file" ] || err "configure-adv: file tidak ada: $_file"
+        [ -r "$_file" ] || err "configure-adv: file tidak bisa dibaca: $_file"
+    fi
+    if [ -n "$_tnum" ]; then
+        [ "$_tnum" -ge 1 ] 2>/dev/null || err "configure-adv: timeout harus bilangan >= 1 (detik): $_tnum"
+    fi
+    _cmd="configure"
+    [ -n "$_soft" ] && _cmd="$_cmd soft"
+    [ -n "$_file" ] && _cmd="$_cmd \"$_file\""
+    if [ -n "$_timeout" ]; then _cmd="$_cmd timeout"; [ -n "$_tnum" ] && _cmd="$_cmd $_tnum"; fi
+    run_state_one "configure ${_cmd#configure }" "$_cmd"
+}
+cmd_birdc_passthrough() { # birdc-passthrough <PERINTAH> — BC1
+    # Satu string perintah BIRD, diteruskan utuh (satu argv) ke birdc.
+    # `down` dan `graceful restart` DIBLOK — keduanya mematikan daemon dan
+    # wajib lewat gerbang konfirmasi dua langkah ('down confirm' /
+    # 'graceful-restart confirm', F3.10), bukan lewat passthrough.
+    _c=$(klish_unescape "${1:-}")
+    [ -n "$_c" ] || err "birdc butuh perintah (kutip seluruhnya, mis. birdc \"show status\")"
+    case "$_c" in *';'*|*'
+'*) err "birdc: perintah tidak boleh mengandung ';' atau baris baru: $_c" ;; esac
+    _w=${_c%% *}
+    case "$_w" in
+        down) err "birdc: 'down' TIDAK boleh lewat passthrough — pakai 'down confirm' (dua langkah, ireversibel)" ;;
+        graceful) err "birdc: 'graceful restart' TIDAK boleh lewat passthrough — pakai 'graceful-restart confirm' (dua langkah, ireversibel)" ;;
+    esac
+    run_state_one "birdc $_c" "$_c"
+}
+cmd_birdc_socket() { # birdc-socket [PATH] — BC8; kosong = tampilkan, berisi = set
+    if [ -z "${1:-}" ]; then
+        _cur=$(grep '^socket ' "$BIRDC_CONF" 2>/dev/null | head -1 | cut -d' ' -f2-)
+        if [ -n "$_cur" ]; then
+            echo "birdc socket: $_cur"
+            [ -S "$_cur" ] && echo "(socket ada; panggilan birdc klish memakai -s $_cur)" || \
+                echo "(PERINGATAN: socket tidak ada — panggilan birdc akan gagal; kembalikan default: birdc socket-del)"
+        else
+            echo "birdc socket: default (bird.ctl)"
+            echo "Daemon BIRD memakai socket default /var/run/bird.ctl (rc script tanpa -s)."
+        fi
+        echo "Untuk memindah socket DAEMON: rc.conf bird_flags=\"-s <path>\" + restart bird (jendela maintenance, konsol)."
+        return 0
+    fi
+    _p="$1"
+    case "$_p" in /*) ;; *) err "birdc socket harus path absolut: $_p" ;; esac
+    case "$_p" in *' '*|*';'*|*\"*|*'`'*|*'$'*) err "birdc socket tidak boleh mengandung spasi/';'/kutip/'\$': $_p" ;; esac
+    [ -S "$_p" ] || err "birdc socket $_p bukan socket UNIX yang ada — daemon harus jalan dengan socket itu dulu (lihat catatan daemon di atas)"
+    have_birdc || err "birdc tidak ada — socket tidak bisa diverifikasi"
+    _birdc=$(birdc_bin)
+    "$_birdc" -s "$_p" show status >/dev/null 2>&1 || err "birdc socket $_p tidak menjawab (birdc -s $_p show status gagal)"
+    mkdir -p "$STATE_ROOT" 2>/dev/null || true
+    printf 'socket %s\n' "$_p" > "$BIRDC_CONF" || err "tidak bisa menulis $BIRDC_CONF"
+    echo "birdc socket diset: $_p (terverifikasi: birdc -s $_p show status OK)"
+    echo "Catatan: ini socket SISI KLIEN. Socket daemon dipindah via rc.conf bird_flags=\"-s $_p\" + restart bird (jendela maintenance)."
+}
+cmd_birdc_socket_del() { # birdc-socket-del — kembali ke default (BC8)
+    rm -f "$BIRDC_CONF" 2>/dev/null || true
+    echo "birdc socket dikembalikan ke default (bird.ctl)"
+}
+
 cmd_show_bgp_summary() {
     # KOMPOSISI klish (BUKAN perintah birdc asli — BIRD tidak punya
     # `show bgp summary`): per neighbor dari intent bgp.conf.
@@ -254,6 +406,7 @@ cmd_show_rip_neighbors() {
 }
 
 # --- operasional (mengubah state runtime; birdc wajib ada) ---
+cmd_configure() { run_state "configure" configure; }
 cmd_configure_check() { run_state "configure check" configure check; }
 cmd_configure_confirm() { run_state "configure confirm" configure confirm; }
 cmd_configure_undo() { run_state "configure undo" configure undo; }
@@ -325,6 +478,11 @@ case "${1:-}" in
     show-route-preexport) shift; cmd_show_route_preexport "$@" ;;
     show-route-noexport) shift; cmd_show_route_noexport "$@" ;;
     show-route-where) shift; cmd_show_route_where "$@" ;;
+    show-route-filter) shift; cmd_show_route_filter "$@" ;;
+    show-route-primary) shift; cmd_show_route_primary "$@" ;;
+    show-route-filtered) shift; cmd_show_route_filtered "$@" ;;
+    show-route-import-table) shift; cmd_show_route_import_table "$@" ;;
+    show-route-export-table) shift; cmd_show_route_export_table "$@" ;;
     show-bgp-summary) cmd_show_bgp_summary ;;
     show-ospf-interface) shift; cmd_show_ospf_interface "$@" ;;
     show-ospf-neighbors) shift; cmd_show_ospf_neighbors "$@" ;;
@@ -333,9 +491,14 @@ case "${1:-}" in
     show-ospf-lsadb) cmd_show_ospf_lsadb ;;
     show-rip-interfaces) shift; cmd_show_rip_interfaces "$@" ;;
     show-rip-neighbors) shift; cmd_show_rip_neighbors "$@" ;;
+    configure) cmd_configure ;;
     configure-check) cmd_configure_check ;;
     configure-confirm) cmd_configure_confirm ;;
     configure-undo) cmd_configure_undo ;;
+    configure-adv) shift; cmd_configure_adv "$@" ;;
+    birdc-passthrough) shift; cmd_birdc_passthrough "$@" ;;
+    birdc-socket) shift; cmd_birdc_socket "$@" ;;
+    birdc-socket-del) cmd_birdc_socket_del ;;
     proto-enable) shift; cmd_proto_enable "$@" ;;
     proto-disable) shift; cmd_proto_disable "$@" ;;
     proto-restart) shift; cmd_proto_restart "$@" ;;
@@ -353,5 +516,5 @@ case "${1:-}" in
     dump) shift; cmd_dump "$@" ;;
     mrt-dump-table) shift; cmd_mrt_dump_table "$@" ;;
     timeformat-session) shift; cmd_timeformat_session "$@" ;;
-    *) echo "Usage: $0 {show-status|show-protocols [NAME]|show-protocols-all [NAME]|show-symbols [KIND]|show-interfaces-bird [summary]|show-route|show-route-all|show-route-count|show-route-stats|show-route-for PREFIX|show-route-in PREFIX|show-route-table NAME|all|show-route-protocol NAME|show-route-export NAME|show-route-preexport NAME|show-route-noexport NAME|show-route-where COND|show-bgp-summary|show-ospf-interface [NAME] [IFACE]|show-ospf-neighbors [NAME] [IFACE]|show-ospf-state [all|NAME]|show-ospf-topology [all|NAME]|show-ospf-lsadb|show-rip-interfaces [NAME] [IFACE]|show-rip-neighbors [NAME] [IFACE]|configure-check|configure-confirm|configure-undo|proto-enable NAME|proto-disable NAME|proto-restart NAME|reload-both NAME|reload-all|debug PROTO SPEC|debug-all|debug-off|down|down-confirm|graceful-restart|graceful-restart-confirm|eval EXPR|echo SPEC|dump KIND FILE|mrt-dump-table TABLE FILE|timeformat-session FMT [limit FMT2]}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {show-status|show-protocols [NAME]|show-protocols-all [NAME]|show-symbols [KIND]|show-interfaces-bird [summary]|show-route|show-route-all|show-route-count|show-route-stats|show-route-for PREFIX|show-route-in PREFIX|show-route-table NAME|all|show-route-protocol NAME|show-route-export NAME|show-route-preexport NAME|show-route-noexport NAME|show-route-where COND|show-route-filter COND|show-route-primary [count]|show-route-filtered [count]|show-route-import-table PROTO.CHANNEL|show-route-export-table PROTO.CHANNEL|show-bgp-summary|show-ospf-interface [NAME] [IFACE]|show-ospf-neighbors [NAME] [IFACE]|show-ospf-state [all|NAME]|show-ospf-topology [all|NAME]|show-ospf-lsadb|show-rip-interfaces [NAME] [IFACE]|show-rip-neighbors [NAME] [IFACE]|configure|configure-check|configure-confirm|configure-undo|configure-adv [soft] [file PATH] [timeout [NUM]]|birdc-passthrough \"PERINTAH\"|birdc-socket [PATH]|birdc-socket-del|proto-enable NAME|proto-disable NAME|proto-restart NAME|reload-both NAME|reload-all|debug PROTO SPEC|debug-all|debug-off|down|down-confirm|graceful-restart|graceful-restart-confirm|eval EXPR|echo SPEC|dump KIND FILE|mrt-dump-table TABLE FILE|timeformat-session FMT [limit FMT2]}" >&2; exit 2 ;;
 esac

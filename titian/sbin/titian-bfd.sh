@@ -43,6 +43,41 @@
 #   neighbor <IP> dev <IFACE>
 #   neighbor <IP> local <IP>
 #   neighbor <IP> multihop <on|off>
+#   interface <PATTERN> authentication <ALGO>   (B18; ALGO hyphenated di
+#       intent: none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|
+#       meticulous-keyed-sha1; generate memetakan `-` -> spasi)
+#   interface <PATTERN> password <TEXT>          (B18; satu baris per kunci,
+#       boleh banyak kunci per interface — rotasi; TEXT tanpa spasi/`"`/`\`/`:`)
+#   interface <PATTERN> password <TEXT> <field> <value>  (B18; field:
+#       id|generate-from|generate-to|accept-from|accept-to|from|to — TANGGAL
+#       saja YYYY-MM-DD, BIRD 2.20.0 menolak datetime, terbukti bird -p B18)
+#   multihop authentication <ALGO>               (B18; sama, scope multihop)
+#   multihop password <TEXT> [field value]       (B18; sama, scope multihop)
+#   accept <ipv4|ipv6> <direct|multihop>   (B17, satu baris per kombinasi;
+#       tanpa baris accept = terima semua, default BIRD. Bentuk klish WAJIB
+#       lengkap dua bagian — `accept ipv4;`/`accept direct;`/`accept;`
+#       valid di BIRD tapi TIDAK diekspos klish; kombinasi yang sama dicapai
+#       dengan dua baris lengkap.)
+#   strict-bind <on|off>                   (B17)
+#   zero-udp6-checksum-rx <on|off>         (B17)
+#
+# B18 (auth/password BFD, keputusan user 17 Nov ~05:18 WIB): password
+# DIEKSPOS via klish; bentuk perintah mengikuti pola `passive` (interface
+# view + multihop view); `authentication none` eksplisit DIDUKUNG + `no
+# authentication` untuk menghapus (keduanya stabil, terbukti bird -p);
+# validasi pasangan KETAT rc=33 — auth!=none tanpa password, atau password
+# tanpa auth!=none, TIDAK BOLEH mencapai daemon (BIRD sendiri hanya warning).
+# Aturan hapus: `no authentication` MENOLAK rc=33 bila password masih ada
+# (hapus dulu `no password <TEXT>` — menjaga sinkron intent <-> dump klish);
+# `authentication none` juga menolak bila password masih ada. `password`
+# MENOLAK rc=33 bila auth belum diset / auth=none. Generate memvalidasi
+# ulang pasangan per scope (defense in depth — intent edit-tangan tetap
+# tertangkap). Password TIDAK PERNAH dicetak: `show` meredaksi nilainya.
+# CATATAN tanggal: BIRD 2.20.0 hanya terima TANGGAL (YYYY-MM-DD) di blok
+# password — datetime ("2026-01-01 00:00" maupun "2026-01-01T00:00")
+# DITOLAK bird -p rc=1 "Invalid date/time" (terbukti B18, BFD + OSPF).
+# Ini berarti emit datetime OSPF/RIP (T->spasi) adalah BUG LATEN
+# pre-existing di luar batch ini — JANGAN ditiru di BFD.
 #
 # Urutan apply (titian-commit.sh): apply_bfd WAJIB sebelum apply_bgp —
 # birdc configure gagal bila neighbor BGP pakai `bfd on;` tanpa
@@ -112,6 +147,78 @@ valid_mult() {
     case "$1" in ''|*[!0-9]*) err "multiplier harus bilangan 1..255: $1" ;; esac
     [ "$1" -ge 1 ] 2>/dev/null && [ "$1" -le 255 ] 2>/dev/null || \
         err "multiplier harus bilangan 1..255: $1"
+}
+
+# --- auth/password BFD (B18) ---
+# valid_auth <ALGO> — token hyphenated (satu token klish) yang dipetakan
+# ke frasa BIRD di generate (`keyed-md5` -> `keyed md5`).
+valid_auth() {
+    case "$1" in
+        none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1) ;;
+        *) err "authentication harus none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1: $1" ;;
+    esac
+}
+
+# auth_to_bird <ALGO> — hyphenated -> frasa BIRD (stdout).
+auth_to_bird() {
+    printf '%s' "$1" | tr '-' ' '
+}
+
+# valid_password <TEXT> — tanpa spasi, tanpa `"`, tanpa `\` (masuk string
+# BIRD ber-quote ganda), TANPA `:` (ctx password view memakai `:` sebagai
+# delimiter — lihat split_pw_ctx; OSPF tidak melarang `:` tapi BFD iya,
+# supaya parsing ctx tidak ambigu).
+valid_password() {
+    case "$1" in
+        '' ) err "password tidak boleh kosong" ;;
+        *[[:space:]]*) err "password tidak boleh mengandung spasi" ;;
+        *\"*) err 'password tidak boleh mengandung `"`' ;;
+        *\\*) err 'password tidak boleh mengandung `\`' ;;
+        *:* ) err "password tidak boleh mengandung \`:\`" ;;
+    esac
+}
+
+# valid_bfd_date <TANGGAL> — HANYA YYYY-MM-DD. BIRD 2.20.0 menolak
+# datetime di blok password (bird -p rc=1 "Invalid date/time", terbukti
+# B18 untuk BFD dan OSPF) — JANGAN terima format berjam.
+valid_bfd_date() {
+    case "$1" in
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+        *) err "$2 harus tanggal YYYY-MM-DD saja (BIRD 2.20.0 menolak tanggal+jam di password): $1" ;;
+    esac
+}
+
+# split_pw_ctx <CTX> -> _CX_SCOPE _CX_PAT _CX_TEXT
+# CTX: `interface:<PAT>:<TEXT>` atau `multihop:<TEXT>` (single-var
+# colon-encoding, preseden OSPF split_pw_ctx / route-map FRR — klish
+# 2.2.5 menelan sisa viewid bila multi-var).
+split_pw_ctx() {
+    case "$1" in
+        interface:*:*) _CX_SCOPE="interface"; _r="${1#interface:}"; _CX_PAT="${_r%%:*}"; _CX_TEXT="${_r#*:}" ;;
+        multihop:*) _CX_SCOPE="multihop"; _CX_PAT=""; _CX_TEXT="${1#multihop:}" ;;
+        *) err "ctx password BFD harus interface:<PAT>:<TEXT> atau multihop:<TEXT>: $1" ;;
+    esac
+    [ -n "$_CX_TEXT" ] || err "ctx password BFD tidak lengkap: $1"
+    [ "$_CX_SCOPE" = "multihop" ] || [ -n "$_CX_PAT" ] || err "ctx password BFD tidak lengkap: $1"
+}
+
+# scope_prefix <SCOPE> <PAT> — awalan baris intent untuk scope itu
+# (stdout): `interface <PAT>` atau `multihop`.
+scope_prefix() {
+    if [ "$1" = "interface" ]; then printf 'interface %s' "$2"; else printf 'multihop'; fi
+}
+
+# scope_has_password <SCOPE> <PAT> — exit 0 bila scope itu punya >=1
+# baris password di intent.
+scope_has_password() {
+    _sp=$(re_esc "$(scope_prefix "$1" "$2")")
+    grep -q "^$_sp password " "$CONF" 2>/dev/null
+}
+
+# scope_auth <SCOPE> <PAT> — nilai auth intent (atau kosong).
+scope_auth() {
+    _sp=$(re_esc "$(scope_prefix "$1" "$2")")
+    grep "^$_sp authentication " "$CONF" 2>/dev/null | head -1 | awk '{print $NF}'
 }
 
 cmd_bfd_touch() {
@@ -220,6 +327,174 @@ cmd_neighbor_set() {
     echo "BFD neighbor $_ip $_f = $_v"
 }
 
+# --- opsi level-protokol (B17: B2 accept, B3 strict bind, B4 zero udp6) ---
+cmd_accept_add() {
+    # accept-add <ipv4|ipv6> <direct|multihop>
+    [ $# -eq 2 ] || err "accept-add butuh FAMILY TYPE (ipv4|ipv6 + direct|multihop)"
+    _fam="$1"; _typ="$2"
+    case "$_fam" in ipv4|ipv6) ;; *) err "accept family harus ipv4|ipv6: $_fam" ;; esac
+    case "$_typ" in direct|multihop) ;; *) err "accept type harus direct|multihop: $_typ" ;; esac
+    upsert "^accept $_fam $_typ\$" "accept $_fam $_typ"
+    echo "BFD accept $_fam $_typ"
+}
+
+cmd_accept_del() {
+    # accept-del <ipv4|ipv6> <direct|multihop>
+    [ $# -eq 2 ] || err "accept-del butuh FAMILY TYPE (ipv4|ipv6 + direct|multihop)"
+    _fam="$1"; _typ="$2"
+    case "$_fam" in ipv4|ipv6) ;; *) err "accept family harus ipv4|ipv6: $_fam" ;; esac
+    case "$_typ" in direct|multihop) ;; *) err "accept type harus direct|multihop: $_typ" ;; esac
+    dellines "^accept $_fam $_typ\$"
+    echo "BFD accept $_fam $_typ dihapus"
+}
+
+cmd_proto_set() {
+    # proto-set <strict-bind|zero-udp6-checksum-rx> <on|off>
+    [ $# -eq 2 ] || err "proto-set butuh FIELD VALUE (strict-bind|zero-udp6-checksum-rx + on|off)"
+    _f="$1"; _v="$2"
+    case "$_f" in
+        strict-bind|zero-udp6-checksum-rx) ;;
+        *) err "field BFD level-protokol tidak dikenal: $_f (strict-bind|zero-udp6-checksum-rx)" ;;
+    esac
+    case "$_v" in
+        on|off) upsert "^$_f " "$_f $_v" ;;
+        *) err "$_f harus on|off: $_v" ;;
+    esac
+    echo "BFD $_f = $_v"
+}
+
+# --- auth/password (B18) ---
+# Aturan pasangan (keputusan user 17 Nov ~05:18 + brief batch 8):
+# - `authentication <algo!=none>` boleh diset dulu, password menyusul;
+#   generate menolak bila pasangan belum lengkap.
+# - `authentication none` MENOLAK rc=33 bila password masih ada.
+# - `no authentication` (auth-del) MENOLAK rc=33 bila password masih ada
+#   (hapus dulu `no password <TEXT>` — menjaga sinkron intent <-> dump).
+# - `password` MENOLAK rc=33 bila auth belum diset / auth=none.
+# - generate memvalidasi ulang per scope (defense in depth).
+cmd_interface_auth_set() {
+    # interface-auth-set <PATTERN> <ALGO>
+    _pat="$1"; _algo="$2"
+    [ -n "$_pat" ] && [ -n "$_algo" ] || err "interface-auth-set butuh PATTERN ALGO"
+    valid_auth "$_algo"
+    if [ "$_algo" = "none" ] && scope_has_password interface "$_pat"; then
+        err "interface $_pat masih punya password — hapus dulu: no password <TEXT> (baru authentication none)"
+    fi
+    _re=$(re_esc "$_pat")
+    upsert "^interface $_re authentication " "interface $_pat authentication $_algo"
+    echo "BFD interface $_pat authentication = $_algo"
+    if [ "$_algo" != "none" ] && ! scope_has_password interface "$_pat"; then
+        echo "BFD: tambahkan password (password <TEXT>) sebelum generate — pasangan auth+password wajib lengkap" >&2
+    fi
+}
+
+cmd_interface_auth_del() {
+    # interface-auth-del <PATTERN> — hapus baris auth SAJA; tolak bila
+    # password masih ada (lihat aturan di atas).
+    _pat="$1"
+    [ -n "$_pat" ] || err "interface-auth-del butuh PATTERN"
+    if scope_has_password interface "$_pat"; then
+        err "interface $_pat masih punya password — hapus dulu: no password <TEXT> (baru no authentication)"
+    fi
+    _re=$(re_esc "$_pat")
+    dellines "^interface $_re authentication "
+    echo "BFD interface $_pat authentication dihapus (kembali default none)"
+}
+
+cmd_multihop_auth_set() {
+    # multihop-auth-set <ALGO>
+    _algo="$1"
+    [ -n "$_algo" ] || err "multihop-auth-set butuh ALGO"
+    valid_auth "$_algo"
+    if [ "$_algo" = "none" ] && scope_has_password multihop ""; then
+        err "multihop masih punya password — hapus dulu: no password <TEXT> (baru authentication none)"
+    fi
+    upsert "^multihop authentication " "multihop authentication $_algo"
+    echo "BFD multihop authentication = $_algo"
+    if [ "$_algo" != "none" ] && ! scope_has_password multihop ""; then
+        echo "BFD: tambahkan password (password <TEXT>) sebelum generate — pasangan auth+password wajib lengkap" >&2
+    fi
+}
+
+cmd_multihop_auth_del() {
+    # multihop-auth-del — hapus baris auth SAJA; tolak bila password ada.
+    if scope_has_password multihop ""; then
+        err "multihop masih punya password — hapus dulu: no password <TEXT> (baru no authentication)"
+    fi
+    dellines "^multihop authentication "
+    echo "BFD multihop authentication dihapus (kembali default none)"
+}
+
+cmd_password_add() {
+    # password-add <CTX> — CTX: interface:<PAT>:<TEXT> | multihop:<TEXT>.
+    # Menolak rc=33 bila auth scope itu belum diset / auth=none.
+    split_pw_ctx "$1"
+    valid_password "$_CX_TEXT"
+    _auth=$(scope_auth "$_CX_SCOPE" "$_CX_PAT")
+    case "$_auth" in
+        none|'') err "set authentication dulu di $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} (authentication keyed-md5|keyed-sha1|...) — password tanpa auth ditolak" ;;
+    esac
+    _sp=$(scope_prefix "$_CX_SCOPE" "$_CX_PAT")
+    _spre=$(re_esc "$_sp"); _pwre=$(re_esc "$_CX_TEXT")
+    if grep -q "^$_spre password $_pwre\$" "$CONF" 2>/dev/null || \
+       grep -q "^$_spre password $_pwre " "$CONF" 2>/dev/null; then
+        echo "BFD $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} password sudah ada"
+        return 0
+    fi
+    touch_conf
+    printf '%s password %s\n' "$_sp" "$_CX_TEXT" >> "$CONF" || die "cannot write $CONF"
+    chmod 600 "$CONF" 2>/dev/null || true
+    echo "BFD $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} password ditambahkan"
+}
+
+cmd_password_del() {
+    # password-del <CTX> — hapus password + SEMUA sub-field-nya.
+    split_pw_ctx "$1"
+    _sp=$(scope_prefix "$_CX_SCOPE" "$_CX_PAT")
+    _spre=$(re_esc "$_sp"); _pwre=$(re_esc "$_CX_TEXT")
+    dellines "^$_spre password $_pwre\$"
+    dellines "^$_spre password $_pwre "
+    echo "BFD $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} password dihapus"
+}
+
+cmd_password_set() {
+    # password-set <CTX> <field> <value...> — field: id|generate-from|
+    # generate-to|accept-from|accept-to|from|to. Password harus sudah ada.
+    split_pw_ctx "$1"; _f="$2"; shift 2; _v="$*"
+    [ -n "$_f" ] && [ -n "$_v" ] || err "password-set butuh CTX FIELD VALUE"
+    valid_password "$_CX_TEXT"
+    _sp=$(scope_prefix "$_CX_SCOPE" "$_CX_PAT")
+    _spre=$(re_esc "$_sp"); _pwre=$(re_esc "$_CX_TEXT")
+    grep -q "^$_spre password $_pwre\$" "$CONF" 2>/dev/null || \
+    grep -q "^$_spre password $_pwre " "$CONF" 2>/dev/null || \
+        err "password belum ada di $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} (tambah dulu: password <TEXT>)"
+    case "$_f" in
+        id)
+            case "$_v" in ''|*[!0-9]*) err "password id harus bilangan 0..4294967295: $_v" ;; esac
+            [ "$_v" -le 4294967295 ] 2>/dev/null || err "password id harus bilangan 0..4294967295: $_v"
+            upsert "^$_spre password $_pwre id " "$_sp password $_CX_TEXT id $_v" ;;
+        generate-from|generate-to|accept-from|accept-to|from|to)
+            valid_bfd_date "$_v" "password $_f"
+            upsert "^$_spre password $_pwre $_f " "$_sp password $_CX_TEXT $_f $_v" ;;
+        *) err "field password tidak dikenal: $_f (id|generate-from|generate-to|accept-from|accept-to|from|to)" ;;
+    esac
+    echo "BFD $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} password $_f = $_v"
+}
+
+cmd_password_unset() {
+    # password-unset <CTX> <field> — hapus satu sub-field password.
+    split_pw_ctx "$1"; _f="$2"
+    [ -n "$_f" ] || err "password-unset butuh CTX FIELD"
+    _sp=$(scope_prefix "$_CX_SCOPE" "$_CX_PAT")
+    _spre=$(re_esc "$_sp"); _pwre=$(re_esc "$_CX_TEXT")
+    case "$_f" in
+        id|generate-from|generate-to|accept-from|accept-to|from|to)
+            dellines "^$_spre password $_pwre $_f " ;;
+        *) err "field password tidak dikenal: $_f" ;;
+    esac
+    echo "BFD $_CX_SCOPE${_CX_PAT:+ $_CX_PAT} password $_f dihapus"
+}
+
 # --- getters (untuk generate) ---
 get_iface_field() {
     # $1=pattern $2=field -> nilai (atau kosong)
@@ -237,9 +512,96 @@ get_nbr_field() {
     grep "^neighbor $1 $2 " "$CONF" 2>/dev/null | head -1 | awk '{print $4}'
 }
 
+get_proto_field() {
+    # $1=field level-protokol (strict-bind|zero-udp6-checksum-rx) -> on|off (atau kosong)
+    grep "^$1 " "$CONF" 2>/dev/null | head -1 | awk '{print $2}'
+}
+
+# get_pw_field <SCOPE> <PAT> <TEXT> <FIELD> -> nilai (atau kosong).
+# Baris intent: `interface <PAT> password <TEXT> <FIELD> <VALUE>` (VALUE
+# kolom 6) / `multihop password <TEXT> <FIELD> <VALUE>` (VALUE kolom 5).
+get_pw_field() {
+    _sp=$(re_esc "$(scope_prefix "$1" "$2")"); _pwre=$(re_esc "$3")
+    if [ "$1" = "interface" ]; then
+        grep "^$_sp password $_pwre $4 " "$CONF" 2>/dev/null | head -1 | awk '{print $6}'
+    else
+        grep "^$_sp password $_pwre $4 " "$CONF" 2>/dev/null | head -1 | awk '{print $5}'
+    fi
+}
+
+# emit_passwords <SCOPE> <PAT> — cetak statement `password ...;` (indent 8
+# spasi) untuk semua kunci scope itu, urut kemunculan. Cermin OSPF
+# emit_passwords (B11) TANPA `algorithm` (BFD tidak punya opsi itu —
+# algoritma dari `authentication` per scope). Kolom TEXT: interface -> $4,
+# multihop -> $3.
+emit_passwords() {
+    _sp=$(scope_prefix "$1" "$2")
+    _spre=$(re_esc "$_sp")
+    if [ "$1" = "interface" ]; then _col=4; else _col=3; fi
+    set -f
+    for _pw in $(grep "^$_spre password " "$CONF" 2>/dev/null | awk -v col="$_col" '{print $col}' | awk '!s[$0]++'); do
+        _id=$(get_pw_field "$1" "$2" "$_pw" id)
+        _gf=$(get_pw_field "$1" "$2" "$_pw" generate-from)
+        _gt=$(get_pw_field "$1" "$2" "$_pw" generate-to)
+        _af=$(get_pw_field "$1" "$2" "$_pw" accept-from)
+        _at=$(get_pw_field "$1" "$2" "$_pw" accept-to)
+        _fr=$(get_pw_field "$1" "$2" "$_pw" from)
+        _to=$(get_pw_field "$1" "$2" "$_pw" to)
+        if [ -n "$_id" ] || [ -n "$_gf" ] || [ -n "$_gt" ] || [ -n "$_af" ] || [ -n "$_at" ] || [ -n "$_fr" ] || [ -n "$_to" ]; then
+            _stmt="        password \"$_pw\" {"
+            [ -n "$_id" ] && _stmt="$_stmt id $_id;"
+            [ -n "$_gf" ] && _stmt="$_stmt generate from \"$_gf\";"
+            [ -n "$_gt" ] && _stmt="$_stmt generate to \"$_gt\";"
+            [ -n "$_af" ] && _stmt="$_stmt accept from \"$_af\";"
+            [ -n "$_at" ] && _stmt="$_stmt accept to \"$_at\";"
+            [ -n "$_fr" ] && _stmt="$_stmt from \"$_fr\";"
+            [ -n "$_to" ] && _stmt="$_stmt to \"$_to\";"
+            printf '%s };\n' "$_stmt"
+        else
+            printf '        password "%s";\n' "$_pw"
+        fi
+    done
+    set +f
+}
+
+# validate_auth_pairs — validasi pasangan auth<->password per scope
+# SEBELUM section ditulis (defense in depth; set-time sudah menolak,
+# ini menangkap intent edit-tangan). Gagal -> err rc=33.
+validate_auth_pairs() {
+    set -f
+    for _pat in $(grep '^interface ' "$CONF" 2>/dev/null | awk '{print $2}' | sort -u); do
+        _a=$(scope_auth interface "$_pat")
+        case "$_a" in
+            ''|none)
+                if scope_has_password interface "$_pat"; then
+                    err "BFD interface $_pat punya password tapi authentication none/belum diset — pasangan auth+password wajib lengkap (hapus password, atau set authentication keyed-md5|keyed-sha1|...)"
+                fi ;;
+            *)
+                if ! scope_has_password interface "$_pat"; then
+                    err "BFD interface $_pat authentication $_a tanpa password — pasangan auth+password wajib lengkap (tambah password <TEXT>)"
+                fi ;;
+        esac
+    done
+    _ma=$(scope_auth multihop "")
+    case "$_ma" in
+        ''|none)
+            if scope_has_password multihop ""; then
+                err "BFD multihop punya password tapi authentication none/belum diset — pasangan auth+password wajib lengkap"
+            fi ;;
+        *)
+            if ! scope_has_password multihop ""; then
+                err "BFD multihop authentication $_ma tanpa password — pasangan auth+password wajib lengkap (tambah password <TEXT>)"
+            fi ;;
+    esac
+    set +f
+}
+
 # --- generate: intent -> bird.d/bfd.conf (sintaks BIRD) ---
 cmd_generate() {
     touch_conf
+    # Validasi pasangan auth<->password DULU (sebelum section ditulis) —
+    # setengah-konfigurasi tidak boleh mencapai daemon.
+    validate_auth_pairs
     # Pola interface boleh mengandung `*` (mis. "ge*") — matikan glob
     # agar word-splitting hasil grep tidak mengembang ke nama file.
     set -f
@@ -249,6 +611,17 @@ cmd_generate() {
         {
             echo "# bfd.conf - generated by titian-bfd.sh, do not edit by hand"
             echo "protocol bfd {"
+            # --- opsi level-protokol (B17: B2/B3/B4, di depan blok interface;
+            # urutan bebas di BIRD, ini mengikuti urutan template docs §6.3) ---
+            for _af in $(grep '^accept ' "$CONF" 2>/dev/null | awk '{print $2}' | sort -u); do
+                for _at in $(grep "^accept $_af " "$CONF" 2>/dev/null | awk '{print $3}' | sort -u); do
+                    echo "    accept $_af $_at;"
+                done
+            done
+            _sb=$(get_proto_field strict-bind)
+            [ "$_sb" = "on" ] && echo "    strict bind;"
+            _zc=$(get_proto_field zero-udp6-checksum-rx)
+            [ "$_zc" = "on" ] && echo "    zero udp6 checksum rx;"
             # --- interface blocks (urut, unik) ---
             for _pat in $(grep '^interface ' "$CONF" 2>/dev/null | awk '{print $2}' | sort -u); do
                 _iv=$(get_iface_field "$_pat" interval)
@@ -257,6 +630,7 @@ cmd_generate() {
                 _idle=$(get_iface_field "$_pat" idle-tx)
                 _mult=$(get_iface_field "$_pat" multiplier)
                 _pas=$(get_iface_field "$_pat" passive)
+                _auth=$(scope_auth interface "$_pat")
                 echo "    interface \"$_pat\" {"
                 [ -n "$_iv" ] && echo "        interval $_iv ms;"
                 [ -n "$_rx" ] && echo "        min rx interval $_rx ms;"
@@ -264,6 +638,8 @@ cmd_generate() {
                 [ -n "$_idle" ] && echo "        idle tx interval $_idle ms;"
                 [ -n "$_mult" ] && echo "        multiplier $_mult;"
                 [ "$_pas" = "on" ] && echo "        passive;"
+                [ -n "$_auth" ] && echo "        authentication $(auth_to_bird "$_auth");"
+                scope_has_password interface "$_pat" && emit_passwords interface "$_pat"
                 echo "    };"
             done
             # --- multihop block ---
@@ -273,7 +649,8 @@ cmd_generate() {
             _midle=$(get_mh_field idle-tx)
             _mmult=$(get_mh_field multiplier)
             _mpas=$(get_mh_field passive)
-            if [ -n "$_miv" ] || [ -n "$_mrx" ] || [ -n "$_mtx" ] || [ -n "$_midle" ] || [ -n "$_mmult" ] || [ "$_mpas" = "on" ]; then
+            _mauth=$(scope_auth multihop "")
+            if [ -n "$_miv" ] || [ -n "$_mrx" ] || [ -n "$_mtx" ] || [ -n "$_midle" ] || [ -n "$_mmult" ] || [ "$_mpas" = "on" ] || [ -n "$_mauth" ] || scope_has_password multihop ""; then
                 echo "    multihop {"
                 [ -n "$_miv" ] && echo "        interval $_miv ms;"
                 [ -n "$_mrx" ] && echo "        min rx interval $_mrx ms;"
@@ -281,6 +658,8 @@ cmd_generate() {
                 [ -n "$_midle" ] && echo "        idle tx interval $_midle ms;"
                 [ -n "$_mmult" ] && echo "        multiplier $_mmult;"
                 [ "$_mpas" = "on" ] && echo "        passive;"
+                [ -n "$_mauth" ] && echo "        authentication $(auth_to_bird "$_mauth");"
+                scope_has_password multihop "" && emit_passwords multihop ""
                 echo "    };"
             fi
             # --- explicit neighbors (urut, unik) ---
@@ -326,16 +705,26 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
     echo "--- bfd.conf (intent) ---"
-    cat "$CONF"
+    # Nilai password TIDAK PERNAH dicetak (B18): redaksi nilai sesudah
+    # kata `password` (bentuk intent tanpa kutip).
+    sed -e 's/^\(.* password \)[^ ]*/\1<redacted>/' "$CONF"
     echo "--- bird.d/bfd.conf (section, bila ada) ---"
-    [ -f "$SECTION" ] && cat "$SECTION" || echo "(belum di-generate)"
+    if [ -f "$SECTION" ]; then sed -e 's/\(password \)"[^"]*"/\1"<redacted>"/' "$SECTION"; else echo "(belum di-generate)"; fi
     echo "--- birdc show bfd sessions ---"
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" show bfd sessions 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) show bfd sessions 2>&1); then
         echo "$_out" | grep -v '^BIRD'
     else
         echo "(BFD tidak jalan / bird tidak jalan — birdc show bfd sessions gagal)"
@@ -344,7 +733,7 @@ cmd_show() {
 
 cmd_show_sessions() {
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" show bfd sessions 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) show bfd sessions 2>&1); then
         echo "$_out" | grep -v '^BIRD'
     else
         echo "(BFD tidak jalan / bird tidak jalan — birdc show bfd sessions gagal)"
@@ -362,8 +751,19 @@ case "$1" in
     neighbor-add) shift; cmd_neighbor_add "$@" ;;
     neighbor-del) shift; cmd_neighbor_del "$@" ;;
     neighbor-set) shift; cmd_neighbor_set "$@" ;;
+    accept-add) shift; cmd_accept_add "$@" ;;
+    accept-del) shift; cmd_accept_del "$@" ;;
+    proto-set) shift; cmd_proto_set "$@" ;;
+    interface-auth-set) shift; cmd_interface_auth_set "$@" ;;
+    interface-auth-del) shift; cmd_interface_auth_del "$@" ;;
+    multihop-auth-set) shift; cmd_multihop_auth_set "$@" ;;
+    multihop-auth-del) cmd_multihop_auth_del ;;
+    password-add) shift; cmd_password_add "$@" ;;
+    password-del) shift; cmd_password_del "$@" ;;
+    password-set) shift; cmd_password_set "$@" ;;
+    password-unset) shift; cmd_password_unset "$@" ;;
     generate) cmd_generate ;;
     show) cmd_show ;;
     show-sessions) cmd_show_sessions ;;
-    *) echo "Usage: $0 {bfd-touch|has-facts|interface-add PATTERN|interface-del PATTERN|interface-set PATTERN FIELD VALUE|multihop-touch|multihop-set FIELD VALUE|neighbor-add IP|neighbor-del IP|neighbor-set IP FIELD VALUE|generate|show|show-sessions}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {bfd-touch|has-facts|interface-add PATTERN|interface-del PATTERN|interface-set PATTERN FIELD VALUE|interface-auth-set PATTERN ALGO|interface-auth-del PATTERN|multihop-touch|multihop-set FIELD VALUE|multihop-auth-set ALGO|multihop-auth-del|neighbor-add IP|neighbor-del IP|neighbor-set IP FIELD VALUE|accept-add FAMILY TYPE|accept-del FAMILY TYPE|proto-set FIELD VALUE|password-add CTX|password-del CTX|password-set CTX FIELD VALUE|password-unset CTX FIELD|generate|show|show-sessions}" >&2; exit 2 ;;
 esac

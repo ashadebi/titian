@@ -103,6 +103,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 bird_conf_path() {
     if [ "$OS" = "FreeBSD" ]; then echo "/usr/local/etc/bird.conf"; else echo "/etc/bird/bird.conf"; fi
 }
@@ -566,7 +574,7 @@ cmd_rollback() {
     # ulang cermin titian saat restart service — apply eksplisit)
     "$SBIN/titian-sysctl.sh" apply 2>/dev/null || true
     if [ -f "$d/bird.conf" ]; then
-        out=$("$(birdc_bin)" configure 2>&1); rc=$?
+        out=$("$(birdc_bin)" $(birdc_sock) configure 2>&1); rc=$?
         echo "$out" | grep -v '^BIRD' || true
         [ "$rc" -ne 0 ] && warn "birdc configure gagal (bird.conf sudah dipulihkan + parse lolos; periksa birdc)"
     fi

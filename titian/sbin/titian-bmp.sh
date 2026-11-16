@@ -234,6 +234,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
@@ -243,7 +251,7 @@ cmd_show() {
     [ -f "$SECTION" ] && cat "$SECTION" || echo "(belum di-generate)"
     echo "--- birdc show protocol (bmp; TIDAK ADA show bmp khusus — via show protocols) ---"
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" show protocol bmp 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) show protocol bmp 2>&1); then
         echo "$_out" | grep -v '^BIRD'
     else
         echo "(BIRD tidak jalan / protocol bmp belum ada — birdc show protocol bmp gagal)"

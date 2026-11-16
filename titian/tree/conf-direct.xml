@@ -116,6 +116,39 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="disabled"
+        help="Nonaktifkan protokol direct (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh disabled-set on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali protokol direct (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh disabled-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Ambil opsi dari template direct (template-add direct &lt;NAMA&gt; dulu di router bird)">
+        <PARAM name="Name"
+            help="Nama template direct"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh from-set "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Lepas template direct (opsi ditulis eksplisit)">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh from-del
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="channel"
         help="Channel direct (ipv4 / ipv6 / ipv6-sadr)"/>
 
@@ -136,6 +169,114 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="channel ipv4 preference"
+        help="Preference channel IPv4 direct (0..65535, default BIRD 100 bila tak diset)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv4 preference"
+        help="Hapus preference channel IPv4 (default BIRD)">
+        <CONFIG operation="unset" pattern="^channel ipv4 preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv4 preference
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv4 import"
+        help="Import policy channel IPv4 direct (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv4 import all"
+        help="Channel IPv4: import semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 import none"
+        help="Channel IPv4: jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 import filter"
+        help="Channel IPv4: import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 import where"
+        help="Channel IPv4: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 import where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv4 import"
+        help="Hapus import channel IPv4 (default BIRD: import all)">
+        <CONFIG operation="unset" pattern="^channel ipv4 import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv4 import
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv4 export"
+        help="Export policy channel IPv4 direct (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv4 export all"
+        help="Channel IPv4: export semua route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 export none"
+        help="Channel IPv4: jangan export route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 export filter"
+        help="Channel IPv4: export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 export where"
+        help="Channel IPv4: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv4 export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv4 export"
+        help="Hapus export channel IPv4 (default BIRD: export none)">
+        <CONFIG operation="unset" pattern="^channel ipv4 export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv4 export
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="channel ipv6"
         help="Buatkan device route IPv6">
         <CONFIG/>
@@ -151,6 +292,114 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="channel ipv6 preference"
+        help="Preference channel IPv6 direct (0..65535, default BIRD 100 bila tak diset)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6 preference"
+        help="Hapus preference channel IPv6 (default BIRD)">
+        <CONFIG operation="unset" pattern="^channel ipv6 preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv6 preference
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6 import"
+        help="Import policy channel IPv6 direct (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv6 import all"
+        help="Channel IPv6: import semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 import none"
+        help="Channel IPv6: jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 import filter"
+        help="Channel IPv6: import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 import where"
+        help="Channel IPv6: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 import where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6 import"
+        help="Hapus import channel IPv6 (default BIRD: import all)">
+        <CONFIG operation="unset" pattern="^channel ipv6 import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv6 import
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6 export"
+        help="Export policy channel IPv6 direct (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv6 export all"
+        help="Channel IPv6: export semua route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 export none"
+        help="Channel IPv6: jangan export route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 export filter"
+        help="Channel IPv6: export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 export where"
+        help="Channel IPv6: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6 export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6 export"
+        help="Hapus export channel IPv6 (default BIRD: export none)">
+        <CONFIG operation="unset" pattern="^channel ipv6 export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv6 export
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="channel ipv6-sadr"
         help="Buatkan device route IPv6 SADR (pengganti IPv6 reguler, untuk Babel)">
         <CONFIG/>
@@ -163,6 +412,114 @@
         <CONFIG operation="unset" pattern="^channel ipv6-sadr"/>
         <ACTION>
             ${RT_SBIN}/titian-direct.sh channel-del ipv6-sadr
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6-sadr preference"
+        help="Preference channel IPv6-SADR direct (0..65535, default BIRD 100 bila tak diset)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6-sadr preference"
+        help="Hapus preference channel IPv6-SADR (default BIRD)">
+        <CONFIG operation="unset" pattern="^channel ipv6-sadr preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv6-sadr preference
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6-sadr import"
+        help="Import policy channel IPv6-SADR direct (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv6-sadr import all"
+        help="Channel IPv6-SADR: import semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6-sadr import none"
+        help="Channel IPv6-SADR: jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6-sadr import filter"
+        help="Channel IPv6-SADR: import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6-sadr import where"
+        help="Channel IPv6-SADR: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr import where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6-sadr import"
+        help="Hapus import channel IPv6-SADR (default BIRD: import all)">
+        <CONFIG operation="unset" pattern="^channel ipv6-sadr import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv6-sadr import
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6-sadr export"
+        help="Export policy channel IPv6-SADR direct (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv6-sadr export all"
+        help="Channel IPv6-SADR: export semua route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6-sadr export none"
+        help="Channel IPv6-SADR: jangan export route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6-sadr export filter"
+        help="Channel IPv6-SADR: export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6-sadr export where"
+        help="Channel IPv6-SADR: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-set ipv6-sadr export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6-sadr export"
+        help="Hapus export channel IPv6-SADR (default BIRD: export none)">
+        <CONFIG operation="unset" pattern="^channel ipv6-sadr export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-direct.sh channel-unset ipv6-sadr export
         </ACTION>
     </COMMAND>
 </VIEW>

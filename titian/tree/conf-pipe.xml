@@ -143,8 +143,41 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="disabled"
+        help="Nonaktifkan pipe ini (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" disabled on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali pipe ini (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" disabled
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Ambil opsi dari template pipe (template-add pipe &lt;NAMA&gt; dulu di router bird)">
+        <PARAM name="Name"
+            help="Nama template pipe"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" from "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Lepas template pipe (opsi ditulis eksplisit)">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" from
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="import"
-        help="Filter secondary -&gt; primary (all / none / filter NAME)"/>
+        help="Filter secondary -&gt; primary (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="import all"
         help="Import semua route dari peer table">
@@ -170,9 +203,26 @@
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import filter "${Name}"
         </ACTION>
     </COMMAND>
+    <COMMAND name="import where"
+        help="Import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no import"
+        help="Hapus import pipe (default BIRD: import all)">
+        <CONFIG operation="unset" pattern="^import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" import
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="export"
-        help="Filter primary -&gt; secondary (all / none / filter NAME)"/>
+        help="Filter primary -&gt; secondary (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="export all"
         help="Export semua route ke peer table">
@@ -196,6 +246,23 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export where"
+        help="Export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no export"
+        help="Hapus export pipe (default BIRD: export none)">
+        <CONFIG operation="unset" pattern="^export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" export
         </ACTION>
     </COMMAND>
 </VIEW>

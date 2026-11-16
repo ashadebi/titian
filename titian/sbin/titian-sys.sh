@@ -5,6 +5,14 @@ OS=$(uname -s)
 BIN=${TITIAN_BIN:-/opt/titian/bin}
 err() { echo "Error: $*" >&2; exit 33; }
 
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish (birdc.conf di state root), kosong
+# bila default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "${TITIAN_STATE_ROOT:-/etc/titian}/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 # Portable in-place sed: BSD sed -i wajib arg backup, GNU sed tidak.
 sys_sed_i() {
     # $1=file $2=script
@@ -259,7 +267,7 @@ case "${1:-}" in
         df -h / 2>/dev/null | awk 'NR==2{printf "Disk (/)......: %s terpakai / %s total (%s)\n", $3, $2, $5}'
         printf "Titian CLI....: klish %s (tree /opt/titian/etc/clish-en)\n" "$("$BIN/clish" -v 2>/dev/null | head -1)"
         if command -v birdc >/dev/null 2>&1; then
-            printf "BIRD..........: %s\n" "$(birdc show status 2>/dev/null | head -1 | sed 's/^BIRD //;s/ ready\.$//')"
+            printf "BIRD..........: %s\n" "$(birdc $(birdc_sock) show status 2>/dev/null | head -1 | sed 's/^BIRD //;s/ ready\.$//')"
         fi
         printf "\n"
         ;;

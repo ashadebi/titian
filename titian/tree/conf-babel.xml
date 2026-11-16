@@ -819,7 +819,7 @@
             help="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512"
+            help="hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>

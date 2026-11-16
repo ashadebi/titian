@@ -92,10 +92,10 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="import"
-        help="Channel import (all|none|filter NAME)"/>
+        help="Channel import (all|none|filter NAME|where COND)"/>
 
     <COMMAND name="export"
-        help="Channel export (all|none|filter NAME)"/>
+        help="Channel export (all|none|filter NAME|where COND)"/>
 
     <COMMAND name="rfc1583compat"
         help="Kompatibilitas kalkulasi routing table RFC 1583 (default BIRD no)">
@@ -415,6 +415,57 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="router-id"
+        help="Router id khusus protokol ini (default: router id global BIRD)">
+        <PARAM name="IP"
+            help="Alamat IPv4 router id"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh router-id-set "${ospf_inst}" "${IP}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no router-id"
+        help="Hapus router id protokol (kembali ke router id global BIRD)">
+        <CONFIG operation="unset" pattern="^router-id"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh router-id-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="description"
+        help="Label/deskripsi protokol ini">
+        <PARAM name="Text"
+            help="Teks deskripsi"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh description-set "${ospf_inst}" "${Text}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no description"
+        help="Hapus deskripsi protokol">
+        <CONFIG operation="unset" pattern="^description"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh description-del "${ospf_inst}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disabled"
+        help="Nonaktifkan protokol ini (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-set "${ospf_inst}" disabled on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali protokol ini (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh switch-del "${ospf_inst}" disabled
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="import all"
         help="Channel: import semua route (default)">
         <CONFIG/>
@@ -437,6 +488,16 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import where"
+        help="Channel: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" import where "${Cond}"
         </ACTION>
     </COMMAND>
 
@@ -462,6 +523,16 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export where"
+        help="Channel: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-ospf.sh chan-set "${ospf_inst}" export where "${Cond}"
         </ACTION>
     </COMMAND>
 
@@ -1733,7 +1804,7 @@
     <COMMAND name="algorithm"
         help="Algoritma kunci ini (default OSPFv2 keyed-MD5, OSPFv3 HMAC-SHA-256)">
         <PARAM name="Value"
-            help="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512"
+            help="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>

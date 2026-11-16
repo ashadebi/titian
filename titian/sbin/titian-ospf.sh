@@ -64,7 +64,8 @@
 #                   generate to "<date>"; accept from "<date>";
 #                   accept to "<date>"; from "<date>"; to "<date>";
 #                   algorithm (keyed md5|keyed sha1|hmac sha1|
-#                   hmac sha256|hmac sha384|hmac sha512); };
+#                   hmac sha256|hmac sha384|hmac sha512|blake2s128|
+#                   blake2s256|blake2b256|blake2b512); };
 #               neighbors { <ip>; <ip> eligible; };
 #           };
 #           virtual link <router-id> [instance <num>] {
@@ -384,11 +385,12 @@ cmd_ospf_touch() {
 # --- opsi level instance ---
 cmd_switch_set() {
     # switch-set <inst> <field> <on|off> — field protokol boolean.
+    # disabled (Bab 3.4-1): protokol tidak di-start saat configure.
     _i="$1"; _f="$2"; _v="$3"
     valid_inst "$_i"
     valid_onoff "$_v" "$_f"
     case "$_f" in
-        rfc1583compat|rfc5838|stub-router|merge-external) ;;
+        rfc1583compat|rfc5838|stub-router|merge-external|disabled) ;;
         *) err "field switch protokol tidak dikenal: $_f" ;;
     esac
     upsert "^instance $_i $_f " "instance $_i $_f $_v"
@@ -400,11 +402,42 @@ cmd_switch_del() {
     _i="$1"; _f="$2"
     valid_inst "$_i"
     case "$_f" in
-        rfc1583compat|rfc5838|stub-router|merge-external) ;;
+        rfc1583compat|rfc5838|stub-router|merge-external|disabled) ;;
         *) err "field switch protokol tidak dikenal: $_f" ;;
     esac
     dellines "^instance $_i $_f "
     echo "OSPF $_i $_f dihapus (default BIRD)"
+}
+
+cmd_router_id_set() { # router-id-set INST IP (Bab 3.4-4; router id per-protocol)
+    _i="$1"; _v="$2"
+    valid_inst "$_i"
+    [ -n "$_v" ] || err "router-id butuh alamat IP"
+    valid_ip4 "$_v" "router-id"
+    upsert "^instance $_i router-id " "instance $_i router-id $_v"
+    echo "OSPF $_i router-id = $_v"
+}
+
+cmd_router_id_del() { # router-id-del INST (kembali ke router id global)
+    _i="$1"
+    valid_inst "$_i"
+    dellines "^instance $_i router-id "
+    echo "OSPF $_i router-id dihapus (router id global BIRD)"
+}
+
+cmd_description_set() { # description-set INST TEKS... (Bab 3.4-5; label protokol)
+    _i="$1"; shift
+    valid_inst "$_i"
+    [ -n "$*" ] || err "description butuh teks"
+    upsert "^instance $_i description " "instance $_i description $*"
+    echo "OSPF $_i description = $*"
+}
+
+cmd_description_del() { # description-del INST
+    _i="$1"
+    valid_inst "$_i"
+    dellines "^instance $_i description "
+    echo "OSPF $_i description dihapus"
 }
 
 cmd_instance_id_set() {
@@ -509,6 +542,10 @@ cmd_gr_time_del() {
 cmd_channel_set() {
     # channel-set <inst> <ipv4|ipv6> — v2 (ospf) HANYA ipv4; v3
     # (ospf6) ipv6, atau ipv4 via RFC 5838 (O66).
+    # B14 (Bab 2.3-3): SATU channel per instance — BIRD 2.20 menolak
+    # channel kedua ("Different channel type" / "Multiple ipv4 channels").
+    # Setter nilai-tunggal ini menjaga invarian itu: ganti channel hanya
+    # sesudah `no channel` (hapus dulu), bukan diam-diam menimpa.
     _i="$1"; _v="$2"
     valid_inst "$_i"
     case "$_v" in
@@ -520,6 +557,10 @@ cmd_channel_set() {
             ;;
         *) err "channel harus ipv4|ipv6: $_v" ;;
     esac
+    _old=$(grep "^instance $_i channel " "$CONF" 2>/dev/null | head -1 | awk '{print $4}')
+    if [ -n "$_old" ] && [ "$_old" != "$_v" ]; then
+        err "OSPF $_i sudah punya channel $_old — satu instance satu channel (BIRD 2.20 menolak channel kedua); hapus dulu dengan 'no channel' sebelum ganti ke $_v"
+    fi
     upsert "^instance $_i channel " "instance $_i channel $_v"
     echo "OSPF $_i channel = $_v"
 }
@@ -532,7 +573,9 @@ cmd_channel_del() {
 }
 
 cmd_chan_set() {
-    # chan-set <inst> <import|export> <all|none|filter NAME>
+    # chan-set <inst> <import|export> <all|none|filter NAME|where COND>
+    # (Bab 3.5-4/5; where = filter inline bentuk ringkas, mis.
+    # net~10.0.0.0/8 — diterjemahkan ke BIRD saat generate.)
     _i="$1"; _d="$2"; _v="$3"; _n="$4"
     valid_inst "$_i"
     case "$_d" in import|export) ;; *) err "channel harus import|export: $_d" ;; esac
@@ -542,7 +585,11 @@ cmd_chan_set() {
             [ -n "$_n" ] || err "$_d filter butuh NAMA filter"
             valid_name "$_n" "nama filter"
             upsert "^instance $_i $_d " "instance $_i $_d filter $_n" ;;
-        *) err "$_d harus all|none|filter NAME: $_v" ;;
+        where)
+            [ -n "$_n" ] || err "$_d where butuh ekspresi filter bentuk ringkas (mis. where net~10.0.0.0/8)"
+            cond_validate "$_n" || exit 33
+            upsert "^instance $_i $_d " "instance $_i $_d where $_n" ;;
+        *) err "$_d harus all|none|filter NAME|where COND: $_v" ;;
     esac
     echo "OSPF $_i $_d = $_v${_n:+ $_n}"
 }
@@ -1218,9 +1265,9 @@ cmd_password_set() {
             upsert "^instance $_i area $_are $_sc $_pare password $_pwre $_f " "instance $_i area $_a $_sc $_par password $_pw $_f $_v" ;;
         algorithm)
             case "$_v" in
-                keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512)
+                keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512)
                     upsert "^instance $_i area $_are $_sc $_pare password $_pwre algorithm " "instance $_i area $_a $_sc $_par password $_pw algorithm $_v" ;;
-                *) err "algorithm harus keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512: $_v" ;;
+                *) err "algorithm harus keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512: $_v" ;;
             esac ;;
         *) err "field password tidak dikenal: $_f (id|generate-from|generate-to|accept-from|accept-to|from|to|algorithm)" ;;
     esac
@@ -1250,8 +1297,32 @@ get_inst_field() {
 }
 
 get_chan() {
-    # $1=inst $2=import|export -> "all"|"none"|"filter NAME"
+    # $1=inst $2=import|export -> "all" | "none" | "filter NAME" | "where COND"
+    # (juga dipakai untuk nilai multi-kata lain, mis. description).
     grep "^instance $1 $2 " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}'
+}
+
+cond_validate() {
+    # cond_validate <COND> — validasi ekspresi filter bentuk ringkas
+    # (mis. net~10.0.0.0/8) via titian-bgp.sh cond-to-bird. Bila script
+    # itu tidak ada (deploy parsial), fallback validasi ringan.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" >/dev/null
+    else
+        case "$1" in *[\;\{\}]* ) err "where: ekspresi mengandung karakter terlarang (; { })" ;; esac
+    fi
+}
+
+cond_translate() {
+    # cond_translate <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai di generate untuk bentuk `import/export where <COND>`.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" || exit 33
+    else
+        err "penerjemah kondisi tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
 }
 
 get_area_field() {
@@ -1551,6 +1622,9 @@ emit_instance() {
     _m1=$(get_inst_field "$_i" export-ospf-metric1)
     _m2=$(get_inst_field "$_i" export-ospf-metric2)
     _tag=$(get_inst_field "$_i" export-ospf-tag)
+    _dis=$(get_inst_field "$_i" disabled)
+    _rid=$(get_inst_field "$_i" router-id)
+    _desc=$(get_chan "$_i" description)
     [ -n "$_import" ] || _import="all"
     [ -n "$_export" ] || _export="all"
     if [ -n "$_m1" ] || [ -n "$_m2" ] || [ -n "$_tag" ]; then
@@ -1611,6 +1685,9 @@ emit_instance() {
         echo "protocol ospf v3 ospf6 {"
         _chan="${_chan:-ipv6}"
     fi
+    case "$_dis" in on) echo "    disabled;" ;; esac
+    [ -n "$_rid" ] && echo "    router id $_rid;"
+    [ -n "$_desc" ] && echo "    description \"$_desc\";"
     case "$_rfc1583" in on) echo "    rfc1583compat yes;" ;; off) echo "    rfc1583compat no;" ;; esac
     case "$_rfc5838" in on) echo "    rfc5838 yes;" ;; off) echo "    rfc5838 no;" ;; esac
     [ -n "$_iid" ] && echo "    instance id $_iid;"
@@ -1637,7 +1714,10 @@ emit_instance() {
     fi
     echo "    $_chan {"
     [ -n "$_pref" ] && echo "        preference $_pref;"
-    echo "        import $_import;"
+    case "$_import" in
+        where\ *) _wcond=${_import#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        import where $_wbird;" ;;
+        *) echo "        import $_import;" ;;
+    esac
     case "$_ikf" in on) echo "        import keep filtered on;" ;; off) echo "        import keep filtered off;" ;; esac
     emit_limit "$_i" import
     emit_limit "$_i" receive
@@ -1649,7 +1729,10 @@ emit_instance() {
         echo "            accept;"
         echo "        };"
     else
-        echo "        export $_export;"
+        case "$_export" in
+            where\ *) _wcond=${_export#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        export where $_wbird;" ;;
+            *) echo "        export $_export;" ;;
+        esac
     fi
     emit_limit "$_i" export
     echo "    };"
@@ -1739,6 +1822,14 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 
 cmd_show() {
     touch_conf
@@ -1751,7 +1842,7 @@ cmd_show() {
     _done=0
     for _inst in ospf4 ospf6; do
         if grep -q "protocol ospf.*$_inst" "$SECTION" 2>/dev/null; then
-            if _out=$("$_birdc" show protocol "$_inst" 2>&1); then
+            if _out=$("$_birdc" $(birdc_sock) show protocol "$_inst" 2>&1); then
                 echo "$_out" | grep -v '^BIRD'
                 _done=1
             fi
@@ -1759,7 +1850,7 @@ cmd_show() {
     done
     [ "$_done" = "0" ] && echo "(BIRD tidak jalan / belum ada instance OSPF — birdc show protocol gagal)"
     echo "--- birdc show ospf neighbors ---"
-    if _out=$("$_birdc" show ospf neighbors 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) show ospf neighbors 2>&1); then
         echo "$_out" | grep -v '^BIRD'
     else
         echo "(BIRD tidak jalan / belum ada neighbor OSPF — birdc show ospf neighbors gagal)"
@@ -1770,7 +1861,7 @@ cmd_show() {
 
 cmd_show_neighbors() {
     _birdc=$(birdc_bin)
-    if _out=$("$_birdc" show ospf neighbors 2>&1); then
+    if _out=$("$_birdc" $(birdc_sock) show ospf neighbors 2>&1); then
         echo "$_out" | grep -v '^BIRD'
     else
         echo "(BIRD tidak jalan / belum ada neighbor OSPF — birdc show ospf neighbors gagal)"
@@ -1828,6 +1919,10 @@ case "$1" in
     has-facts) has_facts ;;
     switch-set) shift; cmd_switch_set "$@" ;;
     switch-del) shift; cmd_switch_del "$@" ;;
+    router-id-set) shift; cmd_router_id_set "$@" ;;
+    router-id-del) shift; cmd_router_id_del "$@" ;;
+    description-set) shift; cmd_description_set "$@" ;;
+    description-del) shift; cmd_description_del "$@" ;;
     instance-id-set) shift; cmd_instance_id_set "$@" ;;
     instance-id-del) shift; cmd_instance_id_del "$@" ;;
     tick-set) shift; cmd_tick_set "$@" ;;
@@ -1887,5 +1982,5 @@ case "$1" in
     generate) cmd_generate ;;
     show) cmd_show ;;
     show-neighbors) cmd_show_neighbors ;;
-    *) echo "Usage: $0 {ospf-touch INST|has-facts|switch-set INST FIELD on|off|switch-del INST FIELD|instance-id-set INST N|instance-id-del INST|tick-set INST N|tick-del INST|ecmp-set INST on|off|ecmp-del INST|ecmp-limit-set INST N|ecmp-limit-del INST|gr-set INST off|aware|on|gr-del INST|gr-time-set INST N|gr-time-del INST|channel-set INST ipv4|ipv6|channel-del INST|chan-set INST import|export all|none|filter NAME|preference-set INST N|preference-del INST|import-keep-filtered-set INST on|off|import-keep-filtered-del INST|limit-set INST import|receive|export N|off [ACTION]|limit-action-set INST import|receive|export warn|block|restart|disable|limit-del INST import|receive|export|debug-set INST SPEC|debug-del INST|mrtdump-set INST SPEC|mrtdump-del INST|export-attr-set INST metric1|metric2|tag N|export-attr-del INST metric1|metric2|tag|area-add INST AREA|area-del INST AREA|area-flag-set CTX-AREA stub|nssa|area-flag-del CTX-AREA stub|nssa|area-set CTX-AREA FIELD VALUE|area-unset CTX-AREA FIELD|network-add CTX-AREA PREFIX [hidden]|network-del CTX-AREA PREFIX|external-add CTX-AREA PREFIX [hidden] [tag N]|external-del CTX-AREA PREFIX|stubnet-add CTX-AREA PREFIX|stubnet-del CTX-AREA PREFIX|stubnet-set CTX-AREA PREFIX FIELD VALUE|stubnet-unset CTX-AREA PREFIX FIELD|interface-add CTX-AREA PATTERN|interface-del CTX-AREA PATTERN|interface-set CTX-IFACE FIELD VALUE|interface-unset CTX-IFACE FIELD|neighbor-add CTX-IFACE IP [eligible]|neighbor-del CTX-IFACE IP|vlink-add CTX-AREA ROUTER-ID|vlink-del CTX-AREA ROUTER-ID|vlink-set CTX-VLINK FIELD VALUE|vlink-unset CTX-VLINK FIELD|password-add CTX-PW|password-del CTX-PW|password-set CTX-PW FIELD VALUE|password-unset CTX-PW FIELD|generate|show|show-neighbors}" >&2; exit 2 ;;
+    *) echo "Usage: $0 {ospf-touch INST|has-facts|switch-set INST FIELD on|off|switch-del INST FIELD|router-id-set INST IP|router-id-del INST|description-set INST TEKS|description-del INST|instance-id-set INST N|instance-id-del INST|tick-set INST N|tick-del INST|ecmp-set INST on|off|ecmp-del INST|ecmp-limit-set INST N|ecmp-limit-del INST|gr-set INST off|aware|on|gr-del INST|gr-time-set INST N|gr-time-del INST|channel-set INST ipv4|ipv6|channel-del INST|chan-set INST import|export all|none|filter NAME|where COND|preference-set INST N|preference-del INST|import-keep-filtered-set INST on|off|import-keep-filtered-del INST|limit-set INST import|receive|export N|off [ACTION]|limit-action-set INST import|receive|export warn|block|restart|disable|limit-del INST import|receive|export|debug-set INST SPEC|debug-del INST|mrtdump-set INST SPEC|mrtdump-del INST|export-attr-set INST metric1|metric2|tag N|export-attr-del INST metric1|metric2|tag|area-add INST AREA|area-del INST AREA|area-flag-set CTX-AREA stub|nssa|area-flag-del CTX-AREA stub|nssa|area-set CTX-AREA FIELD VALUE|area-unset CTX-AREA FIELD|network-add CTX-AREA PREFIX [hidden]|network-del CTX-AREA PREFIX|external-add CTX-AREA PREFIX [hidden] [tag N]|external-del CTX-AREA PREFIX|stubnet-add CTX-AREA PREFIX|stubnet-del CTX-AREA PREFIX|stubnet-set CTX-AREA PREFIX FIELD VALUE|stubnet-unset CTX-AREA PREFIX FIELD|interface-add CTX-AREA PATTERN|interface-del CTX-AREA PATTERN|interface-set CTX-IFACE FIELD VALUE|interface-unset CTX-IFACE FIELD|neighbor-add CTX-IFACE IP [eligible]|neighbor-del CTX-IFACE IP|vlink-add CTX-AREA ROUTER-ID|vlink-del CTX-AREA ROUTER-ID|vlink-set CTX-VLINK FIELD VALUE|vlink-unset CTX-VLINK FIELD|password-add CTX-PW|password-del CTX-PW|password-set CTX-PW FIELD VALUE|password-unset CTX-PW FIELD|generate|show|show-neighbors}" >&2; exit 2 ;;
 esac

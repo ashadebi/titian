@@ -119,6 +119,273 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="disabled"
+        help="Nonaktifkan protokol static (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh disabled-set on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali protokol static (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh disabled-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="from"
+        help="Ambil opsi dari template static (template-add static &lt;NAMA&gt; dulu di router bird)">
+        <PARAM name="Name"
+            help="Nama template static"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh from-set "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no from"
+        help="Lepas template static (opsi ditulis eksplisit)">
+        <CONFIG operation="unset" pattern="^from"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh from-del
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel"
+        help="Channel static (ipv4 / ipv6)"/>
+
+    <COMMAND name="channel ipv4"
+        help="Channel IPv4 static (preference / import / export)"/>
+
+    <COMMAND name="channel ipv6"
+        help="Channel IPv6 static (preference / import / export)"/>
+
+    <COMMAND name="no channel"
+        help="Negate a channel command"/>
+
+    <COMMAND name="no channel ipv4"
+        help="Negate a channel IPv4 command"/>
+
+    <COMMAND name="no channel ipv6"
+        help="Negate a channel IPv6 command"/>
+
+    <COMMAND name="channel ipv4 preference"
+        help="Preference channel IPv4 static (0..65535, default BIRD 100 bila tak diset)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv4 preference"
+        help="Hapus preference channel IPv4 (default BIRD)">
+        <CONFIG operation="unset" pattern="^channel ipv4 preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-del ipv4 preference
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv4 import"
+        help="Import policy channel IPv4 static (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv4 import all"
+        help="Channel IPv4: import semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 import none"
+        help="Channel IPv4: jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 import filter"
+        help="Channel IPv4: import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 import where"
+        help="Channel IPv4: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 import where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv4 import"
+        help="Hapus import channel IPv4 (default BIRD: import all)">
+        <CONFIG operation="unset" pattern="^channel ipv4 import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-del ipv4 import
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv4 export"
+        help="Export policy channel IPv4 static (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv4 export all"
+        help="Channel IPv4: export semua route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 export none"
+        help="Channel IPv4: jangan export route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 export filter"
+        help="Channel IPv4: export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv4 export where"
+        help="Channel IPv4: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv4 export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv4 export"
+        help="Hapus export channel IPv4 (default BIRD: export none)">
+        <CONFIG operation="unset" pattern="^channel ipv4 export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-del ipv4 export
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6 preference"
+        help="Preference channel IPv6 static (0..65535, default BIRD 100 bila tak diset)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6 preference"
+        help="Hapus preference channel IPv6 (default BIRD)">
+        <CONFIG operation="unset" pattern="^channel ipv6 preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-del ipv6 preference
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6 import"
+        help="Import policy channel IPv6 static (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv6 import all"
+        help="Channel IPv6: import semua route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 import all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 import none"
+        help="Channel IPv6: jangan import route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 import none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 import filter"
+        help="Channel IPv6: import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 import where"
+        help="Channel IPv6: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 import where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6 import"
+        help="Hapus import channel IPv6 (default BIRD: import all)">
+        <CONFIG operation="unset" pattern="^channel ipv6 import"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-del ipv6 import
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="channel ipv6 export"
+        help="Export policy channel IPv6 static (all / none / filter NAME / where COND)"/>
+
+    <COMMAND name="channel ipv6 export all"
+        help="Channel IPv6: export semua route">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 export all
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 export none"
+        help="Channel IPv6: jangan export route (default)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 export filter"
+        help="Channel IPv6: export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="channel ipv6 export where"
+        help="Channel IPv6: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-set ipv6 export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no channel ipv6 export"
+        help="Hapus export channel IPv6 (default BIRD: export none)">
+        <CONFIG operation="unset" pattern="^channel ipv6 export"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh channel-del ipv6 export
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="roa-route"
         help="Route ROA statis (S8; instance static-roa4/roa6 terpisah, butuh tabel roa — param Table opsional, bila kosong pakai tabel roa PERTAMA dari global)">
         <PARAM name="Prefix"
@@ -275,6 +542,23 @@
             ${RT_SBIN}/titian-static.sh flow-table-del "${Family}"
         </ACTION>
     </COMMAND>
+    <COMMAND name="mpls-table"
+        help="Tabel MPLS untuk channel mpls (wajib bila ada route berlabel MPLS; Bab 2.5-4)">
+        <PARAM name="Name"
+            help="Nama tabel mpls (dari global -> table-add mpls + mpls-domain-add)"
+            ptype="STRING"/>
+        <CONFIG pattern="^mpls-table ${Name}$"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh mpls-table-set "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls-table"
+        help="Hapus tabel MPLS (channel mpls ikut hilang)">
+        <CONFIG operation="unset" pattern="^mpls-table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh mpls-table-del
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="flow-route"
         help="Aturan Flowspec RFC 5575 (masuk ke flow view)"
@@ -385,6 +669,42 @@
         <CONFIG operation="unset" pattern="^recursive"/>
         <ACTION>
             ${RT_SBIN}/titian-static.sh route-recursive-del "${static_route}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mpls"
+        help="Label MPLS statis untuk route ini (0..1048575; Bab 2.5-4)">
+        <PARAM name="Label"
+            help="Label MPLS (bilangan 0..1048575)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-mpls-set "${static_route}" "${Label}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mpls"
+        help="Hapus label MPLS route ini">
+        <CONFIG operation="unset" pattern="^mpls"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-mpls-del "${static_route}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="recursive-mpls"
+        help="Stack label MPLS untuk nexthop rekursif (label dipisah /, maks 8)">
+        <PARAM name="Stack"
+            help="Stack label, mis. 100/200 (maks 8 label)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-recursive-mpls-set "${static_route}" "${Stack}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no recursive-mpls"
+        help="Hapus stack MPLS recursive route ini">
+        <CONFIG operation="unset" pattern="^recursive-mpls"/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-recursive-mpls-del "${static_route}"
         </ACTION>
     </COMMAND>
 
@@ -556,6 +876,49 @@
         <CONFIG operation="unset" pattern="^ra-lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-static.sh route-attr-del "${static_route}" ra-lifetime
+        </ACTION>
+    </COMMAND>
+
+    <!-- Filter per-route umum (S30, B13) — statement filter apa pun di blok
+         route; dieksekusi urut SEQ. Bentuk ringkas satu token (tanpa spasi):
+         set:ATTR=NILAI | unset:ATTR | method:OBJ.METHOD(args) | accept |
+         reject. route-attr-set di atas tetap sebagai jalan pintas 7 field. -->
+    <COMMAND name="filter-add"
+        help="Tambah statement filter ke route ini (satu token, mis. set:ospf_metric1=20 atau method:bgp_community.add((65535,65281)))">
+        <PARAM name="stmt"
+            help="Statement filter satu token (tanpa spasi)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-filter-add "${static_route}" "${stmt}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="filter-if"
+        help="Tambah cabang kondisional ke route ini: if COND then STMT [else STMT] (COND + STMT satu token, mis. filter-if ospf_metric1&gt;50 set:bgp_med=50 reject)">
+        <PARAM name="cond"
+            help="Kondisi filter satu token (mis. net~10.0.0.0/8, ospf_metric1&gt;50)"
+            ptype="STRING"/>
+        <PARAM name="then_stmt"
+            help="Statement bila kondisi benar (satu token)"
+            ptype="STRING"/>
+        <PARAM name="else_stmt"
+            help="Statement bila kondisi salah (satu token); kosong = tanpa else"
+            optional="true"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-filter-if "${static_route}" "${cond}" "${then_stmt}" "${else_stmt}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="filter-del"
+        help="Hapus statement filter route ini (tanpa SEQ = hapus semua statement filter route ini)">
+        <PARAM name="seq"
+            help="Nomor urutan statement (SEQ); kosong = semua"
+            optional="true"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-static.sh route-filter-del "${static_route}" "${seq}"
         </ACTION>
     </COMMAND>
 </VIEW>

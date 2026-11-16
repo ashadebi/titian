@@ -145,6 +145,57 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="debug"
+        help="Debug protokol kernel (all|off|states,routes,filters,interfaces,events,packets)">
+        <PARAM name="Value"
+            help="Kelas debug (all|off|daftar koma)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-set debug "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no debug"
+        help="Matikan debug kernel (default BIRD off)">
+        <CONFIG operation="unset" pattern="^debug"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-del debug
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="mrtdump"
+        help="Dump MRT protokol kernel (all|off|states|messages)">
+        <PARAM name="Value"
+            help="Kelas mrtdump (all|off|states|messages)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-set mrtdump "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no mrtdump"
+        help="Matikan mrtdump kernel (default BIRD off)">
+        <CONFIG operation="unset" pattern="^mrtdump"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-del mrtdump
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="disabled"
+        help="Nonaktifkan protokol kernel (tidak di-start saat configure)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-set disabled on
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no disabled"
+        help="Aktifkan kembali protokol kernel (default BIRD)">
+        <CONFIG operation="unset" pattern="^disabled"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-del disabled
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="ipv4"
         help="Channel kernel IPv4 (masuk ke channel view: import / export)"
         view="configure-bird-kernel-channel-view"
@@ -187,7 +238,7 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="import"
-        help="Import policy channel ini (all / none)"/>
+        help="Import policy channel ini (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="import all"
         help="Import semua route kernel ke tabel BIRD">
@@ -203,9 +254,29 @@
             ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" import none
         </ACTION>
     </COMMAND>
+    <COMMAND name="import filter"
+        help="Import via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" import filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="import where"
+        help="Import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" import where "${Cond}"
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="export"
-        help="Export policy channel ini (all / none)"/>
+        help="Export policy channel ini (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="export all"
         help="Export semua route BIRD ke tabel kernel">
@@ -219,6 +290,61 @@
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" export none
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export filter"
+        help="Export via filter bernama">
+        <PARAM name="Name"
+            help="Nama filter BIRD"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" export filter "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="export where"
+        help="Export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        <PARAM name="Cond"
+            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" export where "${Cond}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="preference"
+        help="Preference channel ini (0..65535, default BIRD 100 bila tak diset)">
+        <PARAM name="Value"
+            help="Preference (0..65535)"
+            ptype="UINT"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" preference "${Value}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no preference"
+        help="Hapus preference channel (default BIRD)">
+        <CONFIG operation="unset" pattern="^preference"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-del "${kchan}" preference
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="table"
+        help="Tabel BIRD yang disinkronkan channel ini ke kernel FIB (default master4/master6; Bab 2.1-2)">
+        <PARAM name="Name"
+            help="Nama tabel BIRD (master4/master6 atau tabel dari table-add)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-set "${kchan}" table "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no table"
+        help="Hapus tabel channel (kembali ke master4/master6)">
+        <CONFIG operation="unset" pattern="^table"/>
+        <ACTION>
+            ${RT_SBIN}/titian-protocol.sh kernel-channel-del "${kchan}" table
         </ACTION>
     </COMMAND>
 </VIEW>
