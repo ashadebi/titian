@@ -137,6 +137,27 @@ zebra_pid() { proc_pid zebra; }
 bird_running() { [ -n "$(bird_pid)" ]; }
 frr_running() { [ -n "$(zebra_pid)" ]; }
 
+bird_label() {
+    # Label tampilan BIRD — jangan "BIRD unknown" (tes 14, T3):
+    # "BIRD 2.20.0" bila versi terbaca, "BIRD bird2" bila hanya varian
+    # diketahui, "BIRD (belum jalan)" bila tidak ada jejak bird.
+    _v=$(bird_version)
+    [ -n "$_v" ] && [ "$_v" != "unknown" ] && { echo "BIRD $_v"; return 0; }
+    _var=$(bird_variant)
+    [ -n "$_var" ] && [ "$_var" != "none" ] && { echo "BIRD $_var"; return 0; }
+    echo "BIRD (belum jalan)"
+}
+
+is_bird_running() {
+    # Return 0 bila daemon bird jalan ATAU socket kontrol ada.
+    # Dipakai do_generate: `birdc configure` sesudah bird berhenti
+    # hanya mencetak peringatan "Unable to connect to server control
+    # socket" (tes 14, T3) — lewati saja.
+    bird_running && return 0
+    [ -S /var/run/bird/bird.ctl ] && return 0
+    return 1
+}
+
 frr_version() {
     local v=""
     if command -v vtysh >/dev/null 2>&1; then
@@ -187,7 +208,7 @@ check_exclusion() {
                 if [ "$variant" = "none" ]; then
                     warn_bird "BIRD is enabled/running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))"
                 else
-                    warn_bird "BIRD $bver is enabled/running (bird${variant}, bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO)${bpid:+, pid $bpid})"
+                    warn_bird "$(bird_label) is enabled/running (bird${variant}, bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO)${bpid:+, pid $bpid})"
                 fi
                 echo "% Bird and FRR cannot run at the same time." >&2
                 exit 33
@@ -205,7 +226,7 @@ check_exclusion() {
                 if [ "$variant" = "none" ]; then
                     echo "% Error: commit blocked — BIRD is running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))." >&2
                 else
-                    echo "% Error: commit blocked — BIRD $bver is running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))." >&2
+                    echo "% Error: commit blocked — $(bird_label) is running (bird_enable=$(sysrc_val bird_enable 2>/dev/null || echo NO))." >&2
                 fi
                 echo "% Disable BIRD first:" >&2
                 echo "%   no router bird enable" >&2
@@ -342,12 +363,21 @@ do_generate() {
     echo "backup: $bakdir/bird.conf.$ts"
     echo "parse OK: section $section"
     birdc=$(birdc_bin)
-    echo "--- birdc configure ---"
-    out=$("$birdc" configure 2>&1); rc=$?
-    echo "$out" | grep -v '^BIRD'
-    if [ "$rc" -ne 0 ]; then
-        echo "Warning: birdc configure failed (config already tertulis; backup: $bakdir/bird.conf.$ts)" >&2
-        exit 33
+    # `birdc configure` hanya bila bird JALAN — sesudah bird berhenti
+    # (mis. commit `no router bird enable` saat switch ke FRR) birdc
+    # hanya mencetak peringatan "Unable to connect to server control
+    # socket" (tes 14, T3). Config sudah tertulis + ter-parse di atas;
+    # bird akan membaca file ini saat start berikutnya.
+    if is_bird_running; then
+        echo "--- birdc configure ---"
+        out=$("$birdc" configure 2>&1); rc=$?
+        echo "$out" | grep -v '^BIRD'
+        if [ "$rc" -ne 0 ]; then
+            echo "Warning: birdc configure failed (config already tertulis; backup: $bakdir/bird.conf.$ts)" >&2
+            exit 33
+        fi
+    else
+        echo "bird tidak jalan — lewati birdc configure (config tertulis + ter-parse; bird membacanya saat start berikutnya)"
     fi
 }
 
@@ -424,7 +454,7 @@ do_show_routing() {
     if [ "$variant" = "none" ]; then
         echo "Routing daemon: BIRD not installed (build with BIRD_VERSION=2 or 3)"
     else
-        echo "Routing daemon: BIRD $bver (bird${variant}, $ben, $brn)"
+        echo "Routing daemon: $(bird_label) (bird${variant}, $ben, $brn)"
     fi
     fver=$(frr_version); fen=no; frn="not running"
     frr_enabled && fen="enabled"
@@ -452,7 +482,7 @@ do_show_version() {
     if [ "$variant" = "none" ]; then
         echo "$bsdrp$build, bird_version=none (BIRD not installed), FRR $fver ($frn)"
     else
-        echo "$bsdrp$build, bird_version=$variant (BIRD $bver), FRR $fver ($frn)"
+        echo "$bsdrp$build, bird_version=$variant ($(bird_label)), FRR $fver ($frn)"
     fi
 }
 

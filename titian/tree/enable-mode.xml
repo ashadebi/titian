@@ -58,9 +58,17 @@
             # bird.conf + bird.d + netstate + sysctl ikut dipotret,
             # karena `save` sendiri tidak memotretnya). Best-effort:
             # gagal memotret TIDAK PERNAH menggagalkan save.
+            # CATATAN: snapshot ini diambil SEBELUM dump klish mendarat
+            # (race yang sama seperti persist — lihat bawah), jadi
+            # isinya bisa satu versi tertinggal; pekerja latar
+            # `titian-cfg.sh save-wait` menyegarkannya sesudah dump
+            # mendarat.
             ${RT_SBIN}/titian-checkpoint.sh snapshot-last-save 2>/dev/null || echo "peringatan: snapshot .last-save gagal (save tetap berhasil)"
             # Persist ke partisi cfg (/cfg/titian) — /etc adalah tmpfs
             # (hilang saat reboot); tanpa ini save hilang sesudah reboot.
+            # Persist DIJADWALKAN (proses latar di titian-cfg.sh): dump
+            # klish baru mendarat sesudah ACTION ini selesai, jadi
+            # salinan sinkron selalu tertinggal satu versi (tes 16).
             ${RT_SBIN}/titian-cfg.sh save 2>/dev/null || echo "peringatan: persist ke /cfg gagal (save tetap berhasil di sesi ini, tapi HILANG sesudah reboot)"
       </ACTION>
   </COMMAND>

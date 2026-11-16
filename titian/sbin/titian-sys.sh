@@ -147,6 +147,40 @@ case "${1:-}" in
             fi
         fi
         ;;
+    service-ssh)
+        # show service ssh — state SSH service (tes 16, butir 6).
+        # Nilai diambil dari /etc/ssh/sshd_config (baris uncommented
+        # terakhir menang, sesuai aturan OpenSSH) + status proses.
+        _cfg=/etc/ssh/sshd_config
+        _val() {
+            # $1 = key, $2 = default OpenSSH bila tidak ada di config.
+            _v=$(grep -v '^[[:space:]]*#' "$_cfg" 2>/dev/null | grep -i "^[[:space:]]*$1[[:space:]]" | tail -1 | awk '{print $2}')
+            [ -n "$_v" ] && echo "$_v" || echo "$2"
+        }
+        _port=$(_val Port 22)
+        echo "SSH service:"
+        if command -v pgrep >/dev/null 2>&1; then
+            _pid=$(pgrep -x sshd 2>/dev/null | head -1)
+        else
+            _pid=$(ps -ax 2>/dev/null | awk '$5=="sshd" || $NF=="sshd" {print $1; exit}')
+        fi
+        if [ -n "$_pid" ]; then echo "  sshd: running (pid $_pid)"; else echo "  sshd: not running"; fi
+        echo "  Port: $_port"
+        echo "  PermitRootLogin: $(_val PermitRootLogin prohibit-password)"
+        echo "  UseDNS: $(_val UseDNS no)"
+        if [ "$OS" = "FreeBSD" ]; then
+            if command -v sockstat >/dev/null 2>&1; then
+                _ls=$(sockstat -l 2>/dev/null | awk -v p=":$_port" '$1=="sshd" && $6 ~ p"$" {print $6}' | sort -u | tr '\n' ' ')
+                [ -n "$_ls" ] && echo "  Listen: $_ls"
+            fi
+        else
+            if command -v ss >/dev/null 2>&1; then
+                _ls=$(ss -ltn 2>/dev/null | awk -v p=":$_port " '$4 ~ p"$" {print $4}' | sort -u | tr '\n' ' ')
+                [ -n "$_ls" ] && echo "  Listen: $_ls"
+            fi
+        fi
+        exit 0
+        ;;
     process)
         if [ "$OS" = "FreeBSD" ]; then
             ps aux | grep -v -E 'cli|klish|ps aux|agetty'
@@ -309,5 +343,5 @@ case "${1:-}" in
             sys_sed_del_blank /etc/resolv.conf
         fi
         ;;
-    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|port-in-use|services|service-status|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|port-in-use|services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
 esac

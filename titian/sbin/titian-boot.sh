@@ -60,6 +60,39 @@ if [ "$(uname -s)" = "FreeBSD" ]; then
     kldload if_vxlan 2>/dev/null || true
 fi
 
+# Default route: replay menerapkan ulang IP interface (mis. ge0) dan
+# default route yang didapat via dhclient di rc.local (boot saja)
+# ikut terhapus (tes 15: hilang 2/2 sesudah `service titian restart`,
+# BGP jatuh, ping VXLAN 100% loss). Tangkap gateway + interface
+# SEBELUM replay, kembalikan sesudah replay bila hilang. Gateway
+# TIDAK di-hardcode — diambil dari tabel route yang sedang jalan.
+# Saat boot murni belum ada default route (dhclient jalan belakangan
+# di rc.local) — capture kosong, restore no-op.
+capture_default_route() {
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -rn 2>/dev/null | awk '$1=="default" {print $2, $6; exit}'
+    else
+        ip route show default 2>/dev/null | awk '{print $3, $5; exit}'
+    fi
+}
+
+restore_default_route() {
+    # $1 = "<gateway> <iface>" hasil capture_default_route.
+    [ -n "$1" ] || return 0
+    set -- $1
+    _gw="$1"; _if="$2"
+    [ -n "$_gw" ] || return 0
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -rn 2>/dev/null | grep -q '^default ' && return 0
+        route add default "$_gw" 2>/dev/null || route add -net default "$_gw" 2>/dev/null || true
+    else
+        ip route show default 2>/dev/null | grep -q '^default' && return 0
+        if [ -n "$_if" ]; then ip route add default via "$_gw" dev "$_if" 2>/dev/null || true
+        else ip route add default via "$_gw" 2>/dev/null || true; fi
+    fi
+    echo "default route dikembalikan: $_gw (via ${_if:-?})"
+}
+
 # replay startup-config (bila ada) — idempotent (replace semantics)
 # Perbaikan replay (12 Nov 2026, reboot ke-2/ke-4):
 #  `!` pemisah seksi keluar dari sub-mode KECUALI bridge — sub-mode
@@ -72,7 +105,9 @@ fi
 #  command", running-config kosong). Replay DUA pass: pass 1 membuat
 #  semua interface, pass 2 menempelkan member/atribut yang gagal di
 #  pass 1 (dependensi sudah ada).
+_defroute=""
 if [ -f "$STATE_ROOT/startup-config" ]; then
+    _defroute=$(capture_default_route)
     _replay_tmp="/tmp/titian-replay-prep.conf"
     awk '
         /^interface / {
@@ -86,6 +121,8 @@ if [ -f "$STATE_ROOT/startup-config" ]; then
     "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee /var/log/titian-replay.log
     "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee -a /var/log/titian-replay.log
     rm -f "$_replay_tmp" 2>/dev/null || true
+    # Replay selesai — kembalikan default route bila ikut terhapus.
+    restore_default_route "$_defroute"
 fi
 
 # jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat
@@ -131,4 +168,8 @@ fi
 if [ -x "$ROOT/sbin/titian-commit.sh" ]; then
     "$ROOT/sbin/titian-commit.sh" apply-all 2>/dev/null || true
 fi
+# Jaring pengaman terakhir: langkah sesudah replay (tuning/bond/
+# vxlan/firewall/apply-all) juga bisa mengganggu route — pastikan
+# default route yang ditangkap sebelum replay tetap ada.
+restore_default_route "$_defroute"
 exit 0

@@ -13,9 +13,11 @@
 # `enable`/perubahan peer hanya mencatat niat + dirty; interface
 # dibuat + peer dipasang saat `commit` (apply-all di sini) atau boot
 # (titian-boot.sh -> apply-all).
-# Sintaks ifconfig wg (wgkey/wgport/wgpeer/wgaip/wgendpoint/wgpka)
-# ditulis dari dokumentasi FreeBSD if_wg/ifconfig — verifikasi live
-# di guest wajib sebelum produksi.
+# MEKANISME APPLY (diperbaiki 2026-11-15, tes 13): subcommand ifconfig
+# wg* (wgkey/wgport) terbukti "bad value" di image ini — apply memakai
+# `wg` tool (`wg set ... private-key/listen-port/peer`, lalu
+# `ifconfig inet` + `ifconfig up`). `wg set` terbukti jalan live
+# (handshake 3 detik, ping 0% loss dua arah).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
@@ -192,10 +194,12 @@ cmd_peer_set() {
         endpoint)
             case "$_val" in *:* ) ;; *) die "endpoint harus host:port: $_val" ;; esac
             _ep="$_val" ;;
-        keepalive)
+        keepalive|persistent-keepalive)
+            # XML memakai nama perintah `persistent-keepalive`, state
+            # memakai `keepalive` — terima keduanya (tes 13, B5).
             case "$_val" in ''|*[!0-9]*) die "keepalive harus detik (angka): $_val" ;; esac
             _ka="$_val" ;;
-        *) die "field tidak dikenal: $_field (allowed-ips|endpoint|keepalive)" ;;
+        *) die "field tidak dikenal: $_field (allowed-ips|endpoint|keepalive|persistent-keepalive)" ;;
     esac
     upsert "$_if" "^peer $_pub " "peer $_pub allowed-ips $_aip endpoint $_ep keepalive $_ka"
     echo "wireguard $_if peer $_pub: $_field = $_val"
@@ -213,7 +217,7 @@ cmd_peer_del_field() {
     case "$_field" in
         allowed-ips) _aip="-" ;;
         endpoint) _ep="-" ;;
-        keepalive) _ka="0" ;;
+        keepalive|persistent-keepalive) _ka="0" ;;
         *) die "field tidak dikenal: $_field" ;;
     esac
     upsert "$_if" "^peer $_pub " "peer $_pub allowed-ips $_aip endpoint $_ep keepalive $_ka"
@@ -235,8 +239,12 @@ cmd_del_iface() {
 # --- apply ---
 apply_one() {
     # $1 = nama iface; buat + konfigurasi dari state. Idempotent.
+    # Mekanisme: `wg` tool — subcommand ifconfig wg* (wgkey/wgport)
+    # terbukti "bad value" di image ini (tes 13, B1/B2), dan apply
+    # lama tidak pernah `up` (B3). `wg set` terbukti jalan live.
     _n="$1"; _f=$(state_file "$_n")
     [ -f "$_f" ] || return 0
+    command -v wg >/dev/null 2>&1 || die "wg tidak ditemukan (WireGuard belum terpasang?)"
     _en=$(sed -n 's/^enable //p' "$_f" | head -1)
     if [ "$_en" != "yes" ]; then
         ifconfig "$_n" >/dev/null 2>&1 && ifconfig "$_n" destroy 2>/dev/null || true
@@ -247,21 +255,23 @@ apply_one() {
     _port=$(sed -n 's/^listen-port //p' "$_f" | head -1)
     _keyf="$KEY_DIR/$_n.key"
     [ -f "$_keyf" ] || die "wireguard $_n enable tapi belum punya key (generate-key dulu)"
-    _priv=$(cat "$_keyf")
     if ! ifconfig "$_n" >/dev/null 2>&1; then
         ifconfig "$_n" create || die "ifconfig $_n create gagal"
     fi
-    ifconfig "$_n" wgkey "$_priv" || die "ifconfig $_n wgkey gagal"
-    if [ -n "$_port" ]; then ifconfig "$_n" wgport "$_port" || die "ifconfig $_n wgport gagal"; fi
-    if [ -n "$_addr" ]; then ifconfig "$_n" inet "$_addr" alias || die "ifconfig $_n inet gagal"; fi
+    wg set "$_n" private-key "$_keyf" || die "wg set $_n private-key gagal"
+    if [ -n "$_port" ]; then wg set "$_n" listen-port "$_port" || die "wg set $_n listen-port gagal"; fi
     grep '^peer ' "$_f" 2>/dev/null | while read -r _p _pub _a _aip _e _ep _k _ka; do
-        _args="wgpeer $_pub"
-        [ "$_aip" != "-" ] && _args="$_args wgaip $_aip"
-        [ "$_ep" != "-" ] && _args="$_args wgendpoint $_ep"
-        [ "$_ka" != "0" ] && [ -n "$_ka" ] && _args="$_args wgpka $_ka"
+        _args="peer $_pub"
+        [ "$_aip" != "-" ] && [ -n "$_aip" ] && _args="$_args allowed-ips $_aip"
+        [ "$_ep" != "-" ] && [ -n "$_ep" ] && _args="$_args endpoint $_ep"
+        [ "$_ka" != "0" ] && [ -n "$_ka" ] && _args="$_args persistent-keepalive $_ka"
         # shellcheck disable=SC2086 (word-splitting disengaja)
-        ifconfig "$_n" $_args || echo "wireguard $_n: peer $_pub gagal dipasang" >&2
+        wg set "$_n" $_args || echo "wireguard $_n: peer $_pub gagal dipasang" >&2
     done
+    if [ -n "$_addr" ]; then ifconfig "$_n" inet "$_addr" alias || die "ifconfig $_n inet gagal"; fi
+    # B3: interface HARUS up — apply lama tidak pernah `up` (flags
+    # 8080 DOWN, tanpa socket UDP). Naikkan sesudah semua set.
+    ifconfig "$_n" up || die "ifconfig $_n up gagal"
     echo "wireguard $_n: applied (addr ${_addr:-unset}, port ${_port:-51820})"
     return 0
 }

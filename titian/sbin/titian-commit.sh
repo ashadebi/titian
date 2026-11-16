@@ -43,11 +43,21 @@ apply_routing() {
             echo "commit: bird enabled + started"
         fi
     elif [ "$_bird" = "no" ]; then
-        # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
-        # walau bird_enable sudah NO. `onestop` gagal di Linux -> fallback `stop`.
-        if command -v service >/dev/null 2>&1; then service bird onestop 2>/dev/null || service bird stop 2>/dev/null || true; fi
-        if command -v sysrc >/dev/null 2>&1; then sysrc bird_enable="NO" >/dev/null || err "sysrc bird_enable gagal"; fi
-        echo "commit: bird disabled + stopped"
+        # Hanya stop + cetak bila BIRD benar-benar jalan/enabled.
+        # Niat `bird no` bisa tertinggal dari commit sebelumnya (mis.
+        # langkah 1 switch BIRD->FRR) — mencetak "disabled + stopped"
+        # lagi di commit FRR enable menyesatkan (tes 14, T3).
+        if [ -n "$(pgrep -x bird 2>/dev/null | head -1)" ] || [ "$(sysrc -n bird_enable 2>/dev/null)" = "YES" ]; then
+            # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
+            # walau bird_enable sudah NO. `onestop` gagal di Linux -> fallback `stop`.
+            if command -v service >/dev/null 2>&1; then service bird onestop 2>/dev/null || service bird stop 2>/dev/null || true; fi
+            if command -v sysrc >/dev/null 2>&1; then sysrc bird_enable="NO" >/dev/null || err "sysrc bird_enable gagal"; fi
+            echo "commit: bird disabled + stopped"
+        else
+            # Sudah berhenti di commit sebelumnya — pastikan rc NO saja,
+            # tanpa pesan yang menyesatkan.
+            if command -v sysrc >/dev/null 2>&1; then sysrc bird_enable="NO" >/dev/null || err "sysrc bird_enable gagal"; fi
+        fi
     fi
     if [ "$_frr" = "yes" ] || [ "$_frr" = "no" ]; then
         sh "$FRR_SH" frr-apply || exit 33

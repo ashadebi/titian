@@ -8,17 +8,31 @@
 # Partisi cfg (/dev/gpt/cfg, mount /cfg, rw) adalah tempat persisten
 # BSDRP (rc.conf dll. di-restore dari sana saat boot).
 #
-# Usage: titian-cfg.sh save | restore
-#   save    — mount /cfg, salin /etc/titian/startup-config + netstate
-#             ke /cfg/titian/ (persisten).
-#   restore — mount /cfg, bila /cfg/titian/startup-config ada, salin
-#             balik ke /etc/titian/ (dipanggil titian-boot.sh sebelum
-#             replay, agar replay menemukan config).
+# Usage: titian-cfg.sh save | save-now | save-wait <sig> | restore
+#   save      — JADWALKAN persist ke /cfg/titian (proses latar).
+#               Dipanggil ACTION `save` di enable-mode.xml.
+#   save-now  — salin sinkron SEGERA (tanpa menunggu dump). HANYA
+#               untuk pemakaian manual sesudah dump sudah mendarat
+#               (mis. dari shell); JANGAN dipakai di ACTION `save`.
+#   save-wait — pekerja latar save: tunggu dump mendarat lalu salin.
+#   restore   — mount /cfg, bila /cfg/titian/startup-config ada, salin
+#               balik ke /etc/titian/ (dipanggil titian-boot.sh sebelum
+#               replay, agar replay menemukan config).
+#
+# KENAPA save DITUNDA (bug tes 16, pola konsisten 3x): klish menulis
+# dump startup-config BARU sesudah ACTION `save` selesai — jadi
+# salinan sinkron di dalam ACTION selalu menyalin file LAMA
+# (/cfg tertinggal satu versi; baru sinkron sesudah `save` kedua).
+# Solusinya: ACTION hanya melepas proses latar (setsid bila ada)
+# yang menunggu sidik isi startup-config berubah (dump mendarat)
+# baru menyalin ke /cfg. Bila dump tidak mendarat dalam 10 detik,
+# salin apa adanya (best-effort) + catat peringatan.
 #
 # POSIX sh. Best-effort: gagal mount/salin = warning, bukan fatal
 # (live session tetap jalan dari /etc/titian).
 #
-# BSDRP_klish, dibuat 2026-11-12 (fix persistensi cfg).
+# BSDRP_klish, dibuat 2026-11-12 (fix persistensi cfg);
+# diperbaiki 2026-11-15 (save tertinggal satu versi -> persist latar).
 
 PROG="titian-cfg"
 CFG_MNT="/cfg"
@@ -34,38 +48,113 @@ mount_cfg() {
     return 1
 }
 
-cmd_save() {
-    mount_cfg || return 0
-    mkdir -p "$CFG_DIR" 2>/dev/null || {
-        echo "Warning: $PROG: failed mkdir $CFG_DIR" >&2; return 0
-    }
-    # Tunggu startup-config ditulis oleh CONFIG dump (save memanggil
-    # script ini dari ACTION yang bisa jalan SEBELUM dump selesai).
-    _i=0
-    while [ ! -f "$STATE_DIR/startup-config" ] && [ "$_i" -lt 10 ]; do
-        sleep 0.5
-        _i=$((_i + 1))
-    done
-    if [ -f "$STATE_DIR/startup-config" ]; then
-        cp -f "$STATE_DIR/startup-config" "$CFG_DIR/startup-config" 2>/dev/null || {
-            echo "Warning: $PROG: failed salin startup-config to $CFG_DIR" >&2; return 0
-        }
-    else
-        echo "Warning: $PROG: $STATE_DIR/startup-config no  (not yet save?)" >&2
-        return 0
+ROOT=${TITIAN_ROOT:-/opt/titian}
+SBIN_DIR=$(dirname "$0")
+
+file_sig() {
+    # $1 = file -> cetak sidik isi (hash) atau kosong bila file tak ada.
+    # Portable: md5 FreeBSD (`md5 -q`), GNU (`md5sum`), fallback cksum.
+    _f="$1"
+    [ -f "$_f" ] || { echo ""; return 0; }
+    if command -v md5 >/dev/null 2>&1; then
+        md5 -q "$_f" 2>/dev/null && return 0
     fi
+    if command -v md5sum >/dev/null 2>&1; then
+        md5sum "$_f" 2>/dev/null | awk '{print $1}' && return 0
+    fi
+    cksum "$_f" 2>/dev/null | awk '{print $1"-"$2}' || echo ""
+}
+
+copy_all() {
+    # Salin startup-config + netstate + aux dari /etc ke /cfg.
+    # Dipakai save-now (sinkron) dan save-wait (sesudah dump mendarat).
+    [ -f "$STATE_DIR/startup-config" ] || {
+        echo "Warning: $PROG: $STATE_DIR/startup-config tidak ada (belum save?)" >&2
+        return 1
+    }
+    cp -f "$STATE_DIR/startup-config" "$CFG_DIR/startup-config" 2>/dev/null || {
+        echo "Warning: $PROG: gagal salin startup-config ke $CFG_DIR" >&2; return 1
+    }
     # netstate ikut dipersistenkan (alamat/intent/managed) agar commit
     # sesudah reboot konsisten dengan startup-config.
     if [ -d "$STATE_DIR/netstate" ]; then
         mkdir -p "$CFG_DIR/netstate" 2>/dev/null
         cp -f "$STATE_DIR/netstate/"* "$CFG_DIR/netstate/" 2>/dev/null || true
     fi
-    # terminal-length (pager) + ipoe.conf (IPoE server intent) ikut
-    # dipersistenkan — keduanya di /etc (tmpfs) dan hilang saat reboot.
+    # terminal-length (pager) + ipoe.conf (IPoE server intent) + bgp.conf
+    # ikut dipersistenkan — ketiganya di /etc (tmpfs) dan hilang saat reboot.
     for _f in terminal-length ipoe.conf bgp.conf; do
         [ -f "$STATE_DIR/$_f" ] && cp -f "$STATE_DIR/$_f" "$CFG_DIR/$_f" 2>/dev/null || true
     done
-    echo "titian config dipersistenkan to $CFG_DIR (survive reboot)"
+    return 0
+}
+
+cmd_save() {
+    mount_cfg || return 0
+    mkdir -p "$CFG_DIR" 2>/dev/null || {
+        echo "Warning: $PROG: gagal mkdir $CFG_DIR" >&2; return 0
+    }
+    # JANGAN salin sinkron di sini (lihat header: dump mendarat
+    # sesudah ACTION selesai). Lepas proses latar yang menunggu dump
+    # baru menyalin. setsid = lepas dari grup proses konfd agar
+    # selamat saat ACTION selesai; fallback: background biasa.
+    _sig=$(file_sig "$STATE_DIR/startup-config")
+    _self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+    if command -v setsid >/dev/null 2>&1; then
+        setsid sh "$_self" save-wait "$_sig" >/dev/null 2>&1 </dev/null &
+    else
+        ( sh "$_self" save-wait "$_sig" >/dev/null 2>&1 </dev/null & )
+    fi
+    echo "titian config persist dijadwalkan (menunggu dump startup-config selesai, lalu salin ke $CFG_DIR)"
+    return 0
+}
+
+cmd_save_now() {
+    # Salin sinkron SEGERA — hanya untuk pemakaian manual sesudah dump
+    # sudah mendarat (bukan dari ACTION `save`).
+    mount_cfg || return 0
+    mkdir -p "$CFG_DIR" 2>/dev/null || {
+        echo "Warning: $PROG: gagal mkdir $CFG_DIR" >&2; return 0
+    }
+    if copy_all; then
+        echo "titian config dipersistenkan ke $CFG_DIR (survive reboot)"
+    fi
+    return 0
+}
+
+cmd_save_wait() {
+    # $1 = sidik isi startup-config saat `save` dipanggil. Tunggu dump
+    # klish mendarat (sidik berubah, atau file muncul bila belum ada),
+    # lalu salin ke /cfg. Timeout 10 detik; bila tidak ada perubahan,
+    # salin apa adanya (best-effort — isi sama, tidak merusak) + catat.
+    _before="${1:-}"
+    mount_cfg || return 0
+    mkdir -p "$CFG_DIR" 2>/dev/null || return 0
+    _i=0
+    while [ "$_i" -lt 50 ]; do
+        _now=$(file_sig "$STATE_DIR/startup-config")
+        if [ -n "$_now" ] && [ "$_now" != "$_before" ]; then
+            break
+        fi
+        sleep 0.2 2>/dev/null || sleep 1
+        _i=$((_i + 1))
+    done
+    if [ "$_i" -ge 50 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') $PROG: dump startup-config tidak teramati dalam 10 detik, salin apa adanya" >> /var/log/titian-cfg.log 2>/dev/null || true
+    fi
+    if copy_all; then
+        echo "titian config dipersistenkan ke $CFG_DIR (survive reboot)"
+    else
+        echo "$(date '+%Y-%m-%d %H:%M:%S') $PROG: persist gagal" >> /var/log/titian-cfg.log 2>/dev/null || true
+    fi
+    # Segarkan snapshot .last-save agar rollback memakai isi save ini,
+    # bukan versi sebelumnya (snapshot di ACTION punya race yang sama:
+    # dump belum mendarat saat snapshot diambil).
+    if [ -x "$ROOT/sbin/titian-checkpoint.sh" ]; then
+        "$ROOT/sbin/titian-checkpoint.sh" snapshot-last-save 2>/dev/null || true
+    elif [ -x "$SBIN_DIR/titian-checkpoint.sh" ]; then
+        "$SBIN_DIR/titian-checkpoint.sh" snapshot-last-save 2>/dev/null || true
+    fi
     return 0
 }
 
@@ -90,8 +179,10 @@ cmd_restore() {
 }
 
 case "$1" in
-    save)    cmd_save ;;
-    restore) cmd_restore ;;
-    *) echo "usage: $PROG <save|restore>" >&2; exit 2 ;;
+    save)      cmd_save ;;
+    save-now)  cmd_save_now ;;
+    save-wait) cmd_save_wait "${2:-}" ;;
+    restore)   cmd_restore ;;
+    *) echo "usage: $PROG <save|save-now|save-wait <sig>|restore>" >&2; exit 2 ;;
 esac
 exit 0

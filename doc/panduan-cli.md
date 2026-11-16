@@ -1302,6 +1302,12 @@ Masuk ke vtysh lewat perintah `cli` di Titian, lalu konfigurasi
 BGP seperti biasa di FRR (contoh eBGP ke RB3011, AS 65001 — padanan
 persis konfigurasi BIRD §9b.1):
 
+> **Route-map WAJIB:** FRR 10.x menolak eBGP tanpa route-map in DAN
+> out (log: `EBGP outbound policy not properly setup`; tanpa
+> route-map, `show ip bgp summary` menampilkan PfxRcd/PfxSnt = 0,
+> summary di RB3011 menampilkan `(Policy)`). Terbukti di tes 14 —
+> session Established tapi 0 prefix sampai route-map dipasang.
+
 ```
 ! di vtysh (lewat `cli`)
 configure terminal
@@ -1331,6 +1337,14 @@ route-map EXPORT-OUT permit 10
 end
 write memory
 ```
+
+BGP FRR **sengaja vtysh-only by design**: klish FRR hanya mengatur
+enable/disable + router-id + log + write-memory. Menambah perintah
+route-map/policy penuh di klish tidak masuk akal — BGP FRR sendiri
+sudah vtysh-only (lihat §9c.2) dan route-map adalah konfigurasi
+sekali-pakai per-neighbor, bukan state yang perlu di-replay klish.
+Pola kerja: niat enable di klish → `commit` → daemon naik →
+konfigurasi BGP (neighbor + route-map) di vtysh → `write memory`.
 
 Padanan atribut BIRD → FRR: `local-pref` = `set
 local-preference` (atau `bgp default local-preference`),
@@ -1377,19 +1391,37 @@ diperbaiki, tapi saat uji FRR nanti **wajib verifikasi `show ip
 route` memuat route kernel** (default/static), bukan cuma route
 BGP.
 
-### 9c.5 Status uji (jujur)
+### 9c.5 Status uji (jujur) — diperbarui 15 Nov 2026
+
+FRR **SUDAH jalan live** di mesin test (tes 14, 15 Nov 2026):
+daemon naik via klish (`router frr enable` + `commit`), sub-command
+router-id/log/write-memory LOLOS, mutual exclusion dua arah LOLOS,
+BGP eBGP via FRR ke RB3011 **Established + tukar route dua arah**
+(PfxRcd/PfxSnt = 2/2) sesudah route-map vtysh (§9c.4), lalu kembali
+ke BIRD bersih + BGP re-Established. Detail: `~/workspace/titian-live-test-20261113/HASIL.md` (tes 14).
 
 - CLI FRR (enable, router-id, log, write-memory, show) **ada** dan
   mutual exclusion vs BIRD **sudah diuji** (gagal rc=33 dua arah).
 - Paket `frr10-10.7.1_1` ter-install di image, rc script `frr` ada.
-- **FRR sebagai routing daemon BELUM pernah jalan live** (13 Nov
-  2026): tidak ada proses `zebra`/`bgpd`/`ospfd`, tidak ada
-  `frr.conf`, `frr_enable` tidak ada di rc.conf. Uji BGP E2E ke
-  RB3011 selama ini semuanya pakai BIRD, bukan FRR.
-- Uji FRR live yang masih terbuka: enable FRR (BIRD mati dulu,
-  §9c.1) → BGP via vtysh ke RB3011 (§9c.4) → verifikasi session
-  Established + route exchange + atribut (seperti uji BIRD §9b) +
-  verifikasi `show ip route` memuat route kernel (quirk §9c.4).
+
+**Temuan tes 14 yang sudah diperbaiki di repo (push ini):**
+- `service frr stop` hanya mematikan watchfrr — kini stop path
+  mematikan SEMUA daemon (watchfrr, zebra, bgpd, ospfd, ripd,
+  staticd, mgmtd) dengan grace period lalu paksa bila perlu.
+- Pesan commit menyesatkan diperbaiki (tidak lagi mencetak
+  "bird disabled + stopped" saat enable FRR; `birdc configure`
+  dilewati bila bird tidak jalan; label "BIRD unknown" diganti
+  label versi yang benar).
+
+**Batasan yang masih berlaku:**
+- BGP/OSPF FRR = vtysh-only (lihat §9c.4 — route-map in+out wajib).
+- Belum ada perintah `show frr bgp summary` di klish — pakai
+  `vtysh -c "show ip bgp summary"`.
+- Quirk FreeBSD (§9c.4): `show ip route` FRR 9.x–10.1.1 tidak
+  menampilkan default gateway & static route kernel (issue
+  #17113) — di 10.7.1 kemungkinan sudah diperbaiki, **wajib
+  verifikasi `show ip route` memuat route kernel** saat uji FRR
+  berikutnya, bukan cuma route BGP.
 
 **Referensi:**
 - FreeBSD port `net/frr10`, rc script resmi: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in

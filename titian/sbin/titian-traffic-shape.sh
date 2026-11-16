@@ -556,6 +556,9 @@ cmd_apply() {
     if [ "${1:-}" = "--flush" ]; then
         kldstat -q -m dummynet 2>/dev/null || exit 0
         flush_all
+        # Keep ipfw filtering off here too (see above): flushing pipes
+        # must never leave a default-deny filter behind.
+        ipfw disable firewall 2>/dev/null || sysctl net.inet.ip.fw.enable=0 >/dev/null 2>&1 || true
         exit 0
     fi
     [ -n "${1:-}" ] && CONF="$1"
@@ -564,6 +567,12 @@ cmd_apply() {
         || die "cannot load dummynet module"
     kldstat -q -m ipfw 2>/dev/null || kldload ipfw \
         || die "cannot load ipfw module"
+    # ipfw is only the dummynet pipe host here; the firewall is pf
+    # (traffic-shape divert rules live in the pf anchor, pass 3 below).
+    # Loading ipfw.ko enables ipfw filtering with default-deny and no
+    # rules, which blocks ALL traffic (SSH, ping, BGP) on every boot
+    # with traffic-shape enabled (lockout 2026-11-16). Keep it off.
+    ipfw disable firewall 2>/dev/null || sysctl net.inet.ip.fw.enable=0 >/dev/null 2>&1 || true
 
     # --- no config yet = nothing to do --------------------------------------
     [ -f "$CONF" ] || { flush_all; exit 0; }

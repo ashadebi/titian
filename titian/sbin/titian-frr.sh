@@ -59,6 +59,40 @@ svc() {
     fi
 }
 
+stop_frr_daemons() {
+    # Matikan SEMUA daemon FRR (watchfrr + zebra/bgpd/ospfd/ripd/
+    # staticd/mgmtd). `service frr stop` hanya mematikan watchfrr;
+    # keenam daemon lain tertinggal yatim (tes 14) dan zebra yatim
+    # bisa berebut tabel route dengan BIRD. Beri waktu berhenti
+    # bersih, paksa (-9) bila masih ada sesudah 5 detik.
+    _daemons="watchfrr zebra bgpd ospfd ripd staticd mgmtd"
+    _i=0
+    while [ "$_i" -lt 10 ]; do
+        _left=""
+        for _d in $_daemons; do
+            if command -v pgrep >/dev/null 2>&1; then
+                pgrep -x "$_d" >/dev/null 2>&1 && _left="$_left $_d"
+            fi
+        done
+        [ -z "$_left" ] && return 0
+        if [ "$_i" = "0" ]; then
+            for _d in $_daemons; do
+                if command -v pkill >/dev/null 2>&1; then
+                    pkill -x "$_d" 2>/dev/null || true
+                fi
+            done
+        fi
+        sleep 0.5 2>/dev/null || sleep 1
+        _i=$((_i + 1))
+    done
+    # Masih ada yang bandel — paksa.
+    if command -v pkill >/dev/null 2>&1; then
+        for _d in $_daemons; do pkill -9 -x "$_d" 2>/dev/null || true; done
+        sleep 0.5 2>/dev/null || sleep 1
+    fi
+    return 0
+}
+
 do_check() {
     have_vtysh || err "FRR tidak terpasang (vtysh tidak ditemukan)"
     exit 0
@@ -95,8 +129,11 @@ do_apply() {
     else
         # Berhenti DULU — pakai `onestop` (FreeBSD) agar tetap berhenti
         # walau frr_enable sudah NO (dari commit sebelumnya yang gagal).
-        # `onestop` gagal di Linux -> fallback ke `stop`.
+        # `onestop` gagal di Linux -> fallback ke `stop`. Lalu matikan
+        # SEMUA daemon (stop_frr_daemons) — `service frr stop` hanya
+        # mematikan watchfrr (tes 14: 6 daemon yatim tertinggal).
         svc frr onestop 2>/dev/null || svc frr stop 2>/dev/null || true
+        stop_frr_daemons
         if command -v sysrc >/dev/null 2>&1; then sysrc frr_enable="NO" >/dev/null || err "sysrc frr_enable gagal"; fi
         echo "frr: disabled + stopped"
     fi

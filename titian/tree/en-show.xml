@@ -190,6 +190,14 @@
             ${RT_SBIN}/titian-sys.sh service-status "${service}"
         </ACTION>
     </COMMAND>
+    <COMMAND name="show service ssh"
+            help="SSH service state (PermitRootLogin, UseDNS, port, sshd)"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh service-ssh
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="show pwd"
             help="Current dir"

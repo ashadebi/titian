@@ -14,9 +14,12 @@
          peer dipasang saat `commit` (atau boot via titian-boot.sh
          apply-all). `generate-key` + perubahan peer berlaku saat
          commit berikutnya.
-         Sintaks ifconfig wg (wgkey/wgport/wgpeer/wgaip/wgendpoint/
-         wgpka) ditulis dari dokumentasi FreeBSD if_wg/ifconfig —
-         verifikasi live di guest wajib sebelum produksi. -->
+         Perbaikan 2026-11-15 (tes 13): apply memakai `wg` tool
+         (subcommand ifconfig wg* terbukti "bad value" di image
+         ini); peer view membawa `wg=${wg}` di viewid — tanpa itu
+         ${wg} kosong di peer view (B4) dan semua peer-set gagal.
+         Field keepalive: perintah klish `persistent-keepalive`,
+         state/script `keepalive` (alias diterima script). -->
 
     <PTYPE name="WG_IFACE"
         pattern="wg[0-9]+$"
@@ -130,7 +133,7 @@
     <COMMAND name="peer"
             help="Peer WireGuard (public key)"
             view="configure-wg-peer-view"
-            viewid="wg_peer=${Pubkey}"
+            viewid="wg=${wg} wg_peer=${Pubkey}"
             ptype="SUBCOMMAND"
             mode="subcommand">
         <PARAM name="Pubkey"
