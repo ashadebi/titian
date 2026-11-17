@@ -351,7 +351,12 @@ cmd_show_bgp_summary() {
     _ips=$(grep '^neighbor ' "$BGP_CONF" 2>/dev/null | awk '{print $2}' | sort -u)
     [ -n "$_ips" ] || { echo "(belum ada neighbor BGP di bgp.conf — show bgp summary kosong)"; return 0; }
     for _ip in $_ips; do
-        _proto="bgp_$(printf '%s' "$_ip" | tr -c 'A-Za-z0-9_' '_')"
+        _pn=$(grep "^neighbor $_ip protocol-name " "$BGP_CONF" 2>/dev/null | head -1 | awk '{print $4}')
+        if [ -n "$_pn" ]; then
+            _proto=$(printf '%s' "$_pn" | tr -c 'A-Za-z0-9_' '_')
+        else
+            _proto="bgp_$(printf '%s' "$_ip" | tr -c 'A-Za-z0-9_' '_')"
+        fi
         echo "=== BGP neighbor $_ip (protocol $_proto) ==="
         run_ro "show protocols all $_proto" show protocols all "$_proto"
         run_ro "show route protocol $_proto count" show route protocol "$_proto" count

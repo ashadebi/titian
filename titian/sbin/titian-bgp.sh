@@ -306,6 +306,43 @@ valid_name() { # valid_name <nilai> <label> — simbol BIRD [A-Za-z0-9_]
 valid_symbol() { # valid_symbol <nilai> <label> — simbol BIRD boleh '-' (filter/tabel/fungsi; bird_ident ubah '-' -> '_' saat generate)
     case "$1" in ''|*[!A-Za-z0-9_-]*) err "$2 harus nama BIRD [A-Za-z0-9_-]: $1" ;; esac
 }
+filter_exists() { # filter_exists <nama> — rc 0 bila ada baris ^filter <nama> di intent (filter didefinisikan lewat `filter <NAMA>` + minimal satu aturan)
+    awk -v n="$1" '$1 == "filter" && $2 == n { f = 1; exit } END { exit !f }' "$CONF" 2>/dev/null
+}
+valid_protocol_name() { # valid_protocol_name <nilai> <label> — nama protocol BIRD: huruf/angka/_, TIDAK diawali angka (lebih ketat dari valid_symbol — protocol tidak boleh '-' atau diawali digit)
+    case "$1" in ''|[0-9]*|*[!A-Za-z0-9_]*) err "$2 harus nama protocol BIRD [A-Za-z_][A-Za-z0-9_]*: $1" ;; esac
+}
+bgp_effective_proto_name() { # <IP> — nama protocol efektif neighbor (custom protocol-name bila diset, default bgp_<IP>)
+    local _pn
+    _pn=$(get_field "$1" protocol-name)
+    if [ -n "$_pn" ]; then bird_ident "$_pn"; else bird_ident "bgp_$1"; fi
+}
+protocol_name_in_use() { # <nama> <IP-kecuali> — rc 0 bila nama dipakai protocol/template lain (bukan neighbor itu sendiri)
+    local _n _x _ip _gf _sf
+    _n=$(bird_ident "$1"); _x="$2"
+    # (a) neighbor BGP lain — nama efektif (custom/default) DAN nama
+    #     default bgp_<IP> mereka (dicadangkan meski neighbor itu kini
+    #     memakai nama custom: bila custom-nya dihapus, default-nya
+    #     hidup lagi dan akan bentrok).
+    for _ip in $(grep '^neighbor ' "$CONF" 2>/dev/null | awk '{print $2}' | sort -u); do
+        [ "$_ip" = "$_x" ] && continue
+        [ "$(bgp_effective_proto_name "$_ip")" = "$_n" ] && return 0
+        [ "$(bird_ident "bgp_$_ip")" = "$_n" ] && return 0
+    done
+    # (b) template bgp_dyn + template bgp di bird-global.conf
+    [ "$_n" = "bgp_dyn" ] && return 0
+    _gf="$STATE_ROOT/bird-global.conf"
+    [ -f "$_gf" ] && grep -q "^template bgp $_n\( \|$\)" "$_gf" 2>/dev/null && return 0
+    # (c) protocol lain di section yang sudah ter-generate — section BGP
+    #     sendiri dikecualikan (namanya otoritatif dari intent, cek (a)).
+    for _sf in "$SECTION_DIR"/*.conf; do
+        [ -f "$_sf" ] || continue
+        [ "$_sf" = "$SECTION" ] && continue
+        awk -v n="$_n" '$1 == "protocol" && $3 == n { f = 1; exit } END { exit !f }' "$_sf" 2>/dev/null || continue
+        return 0
+    done
+    return 1
+}
 re_escape() { # re_escape <TEKS> — escape karakter spesial BRE agar pola upsert cocok persis (bukan regex)
     printf '%s' "$1" | sed 's/[][\\.^$*]/\\&/g'
 }
@@ -1647,6 +1684,7 @@ _chan_set() { # _chan_set <IP> <KEY> <FIELD> [VALUE...] — validasi + upsert fi
                 all|none) upsert "^neighbor $_cip $_ck-$_cf " "neighbor $_cip $_ck-$_cf $1" ;;
                 filter) [ -n "$2" ] || err "$_ck-$_cf filter butuh nama filter"
                     valid_symbol "$2" "$_ck-$_cf filter"
+                    filter_exists "$2" || err "$_ck-$_cf filter: filter $2 belum didefinisikan (buat dulu: filter $2, lalu isi aturannya)"
                     upsert "^neighbor $_cip $_ck-$_cf " "neighbor $_cip $_ck-$_cf filter $2" ;;
                 where)
                     shift
@@ -1826,6 +1864,7 @@ cmd_neighbor_set() {
             case "$1" in
                 all|none) upsert "^neighbor $_ip $_f " "neighbor $_ip $_f $1" ;;
                 filter) [ -n "$2" ] || err "import/export filter butuh nama filter"
+                    filter_exists "$2" || err "$_f filter: filter $2 belum didefinisikan (buat dulu: filter $2, lalu isi aturannya)"
                     upsert "^neighbor $_ip $_f " "neighbor $_ip $_f filter $2" ;;
                 where)
                     shift
@@ -1992,6 +2031,11 @@ cmd_neighbor_set() {
         from)
             [ -n "$1" ] || err "from butuh nama template bgp"
             valid_symbol "$1" "from"
+            upsert "^neighbor $_ip $_f " "neighbor $_ip $_f $1" ;;
+        protocol-name)
+            [ -n "$1" ] || err "protocol-name butuh nama protocol BIRD"
+            valid_protocol_name "$1" "protocol-name"
+            protocol_name_in_use "$1" "$_ip" && err "protocol-name $1 bentrok dengan nama protocol/template lain"
             upsert "^neighbor $_ip $_f " "neighbor $_ip $_f $1" ;;
         protocol-router-id)
             [ -n "$1" ] || err "protocol-router-id butuh alamat IPv4"
@@ -2301,7 +2345,8 @@ cmd_filter_add() {
             upsert "^filter $_b5_n $_b5_a-match $(re_escape "$_b5_x")\$" "filter $_b5_n $_b5_a-match $_b5_x"
             ;;
         *)
-            valid_prefix_pattern "$_b5_v" "filter prefix"
+            _b5_v=$(klish_unescape "$_b5_v")
+            valid_prefix_pattern_any "$_b5_v" "filter prefix"
             upsert "^filter $_b5_n $_b5_a $_b5_v\$" "filter $_b5_n $_b5_a $_b5_v"
             ;;
     esac
@@ -2668,6 +2713,12 @@ cmd_generate() {
         [ -f "$_gf" ] && grep -q "^template bgp $_ff\( \|$\)" "$_gf" 2>/dev/null || \
             err "neighbor $_fn: from template bgp $_ff tidak ada di bird-global.conf (template-add bgp $_ff dulu)"
     done
+    # ITEM 1: import/export filter wajib merujuk filter yang ada di intent
+    # (pertahanan untuk intent yang diedit tangan; ACTION sudah menolak
+    # duluan di neighbor-set/_chan_set — generate tidak boleh lolos diam).
+    for _fr in $(grep -E '^neighbor [^ ]+ ([a-z0-9]+-)?(import|export) filter ' "$CONF" 2>/dev/null | awk '{print $NF}' | sort -u); do
+        filter_exists "$_fr" || err "import/export filter: filter $_fr belum didefinisikan (buat dulu: filter $_fr, lalu isi aturannya)"
+    done
     # BFD: bila ada neighbor dengan bfd on/graceful, section BFD harus
     # sudah ter-generate SEBELUM section BGP di-render — birdc
     # configure gagal bila `bfd on;` ada tanpa `protocol bfd`.
@@ -2723,7 +2774,7 @@ cmd_generate() {
                 esac
                 case "$_La" in
                     accept|reject)
-                        valid_prefix_pattern "$_Lv" "filter $_Lfn prefix"
+                        valid_prefix_pattern_any "$_Lv" "filter $_Lfn prefix"
                         case "$_Lv" in *+|*-|*{*}) _Lpat="$_Lv" ;; *) _Lpat="$_Lv+" ;; esac
                         printf '%sif net ~ [ %s ] then %s;\n' "$_Lpad" "$_Lpat" "$_Lact"
                         ;;
@@ -3000,9 +3051,18 @@ cmd_generate() {
             _cdel=$(get_field "$_nip" community-del)
             _edel=$(get_field "$_nip" ext-community-del)
             _ldel=$(get_field "$_nip" large-community-del)
-            # nama protocol harus valid BIRD (huruf/angka/_), dari IP
-            # (bird_ident: '.' IPv4 dan ':' IPv6 jadi '_')
-            _pname=$(bird_ident "bgp_$_nip")
+            # nama protocol: custom protocol-name bila diset, default
+            # bgp_<IP> (bird_ident: '.' IPv4 dan ':' IPv6 jadi '_').
+            # Validasi + cek bentrok di sini juga (pertahanan untuk
+            # intent yang diedit tangan — ACTION sudah menolak duluan).
+            _pn=$(get_field "$_nip" protocol-name)
+            if [ -n "$_pn" ]; then
+                valid_protocol_name "$_pn" "neighbor $_nip protocol-name"
+                protocol_name_in_use "$_pn" "$_nip" && err "neighbor $_nip: protocol-name $_pn bentrok dengan nama protocol/template lain"
+                _pname=$(bird_ident "$_pn")
+            else
+                _pname=$(bird_ident "bgp_$_nip")
+            fi
             _from=$(get_field "$_nip" from)
             if [ -n "$_from" ]; then
                 echo "protocol bgp $_pname from $(bird_ident "$_from") {"

@@ -1070,6 +1070,17 @@ Commands inside the `neighbor` view (prompt
 | `med <N>` | MED sent to this neighbor |
 | `prepend <N>` | Number of AS-path prepends on export (calls `bgp_path.prepend()` N times) |
 | `community <AS:NN>` | Community added on export |
+| `protocol-name <NAME>` | Custom BIRD protocol name (default `bgp_<IP>`; example `protocol-name bgp_AS1194`) |
+
+Filter names in `import filter` / `export filter` are completed
+automatically with TAB (source: filters already created; type `import
+filter <TAB>` to list them). Referring to a filter that does not exist
+fails with a clear message when the command runs — create the filter
+first. `protocol-name` must be a BIRD identifier
+(`[A-Za-z_][A-Za-z0-9_]*`, not starting with a digit) and must not
+collide with another protocol name (another neighbor — including their
+default `bgp_<IP>` names, a template, or another protocol);
+`no protocol-name` returns to the default `bgp_<IP>`.
 
 ### 9b.2 Filter
 
@@ -1093,14 +1104,21 @@ Commands inside the `filter` view (prompt
 
 | Command | Meaning |
 |---|---|
-| `accept <prefix>` | Accept this prefix |
-| `reject <prefix>` | Reject this prefix |
+| `accept <prefix>` | Accept this prefix — a `{low,high}` pattern is allowed, e.g. `accept 103.50.128.0/22{22,24}` |
+| `reject <prefix>` | Reject this prefix — a `{low,high}` pattern is allowed |
 | `accept community <AS:NN>` | Accept routes with this community |
 | `reject community <AS:NN>` | Reject routes with this community |
 
 A filter always ends with `reject;` (default-deny). A filter name may
 contain `-` in the CLI, but it is generated as `_` in bird.conf
 (BIRD rejects `-` in identifier names).
+
+A `{low,high}` pattern limits the prefix lengths that match (e.g.
+`103.50.128.0/22{22,24}` = /22 to /24 prefixes inside
+103.50.128.0/22). The `+` suffix (this prefix and more specific ones)
+and `-` (only this prefix) are also supported. `accept prefix-pattern
+<pattern>` is an older alias for the same form. Filter names in this
+view are also completed automatically with TAB (`filter <TAB>`).
 
 ### 9b.3 Advertised networks
 

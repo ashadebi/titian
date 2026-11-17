@@ -1062,6 +1062,16 @@ Perintah di dalam view `neighbor` (prompt
 | `med <N>` | MED yang dikirim ke neighbor ini |
 | `prepend <N>` | Jumlah AS-path prepend saat export (panggil `bgp_path.prepend()` N kali) |
 | `community <AS:NN>` | Community yang ditambahkan saat export |
+| `protocol-name <NAMA>` | Nama protocol BIRD custom (default `bgp_<IP>`; contoh `protocol-name bgp_AS1194`) |
+
+Nama filter di `import filter` / `export filter` dilengkapi otomatis
+dengan TAB (sumber: filter yang sudah dibuat; ketik `import filter
+<TAB>` untuk melihat daftar). Merujuk filter yang belum ada gagal
+dengan pesan jelas saat perintah dijalankan — buat dulu filternya.
+`protocol-name` harus identifier BIRD (`[A-Za-z_][A-Za-z0-9_]*`,
+tidak diawali angka) dan tidak boleh bentrok dengan nama protocol lain
+(neighbor lain — termasuk nama default `bgp_<IP>` mereka, template,
+atau protocol lain); `no protocol-name` kembali ke default `bgp_<IP>`.
 
 ### 9b.2 Filter
 
@@ -1085,14 +1095,21 @@ Perintah di dalam view `filter` (prompt
 
 | Perintah | Arti |
 |---|---|
-| `accept <prefix>` | Terima prefix ini |
-| `reject <prefix>` | Tolak prefix ini |
+| `accept <prefix>` | Terima prefix ini — boleh pola `{low,high}`, mis. `accept 103.50.128.0/22{22,24}` |
+| `reject <prefix>` | Tolak prefix ini — boleh pola `{low,high}` |
 | `accept community <AS:NN>` | Terima route dengan community ini |
 | `reject community <AS:NN>` | Tolak route dengan community ini |
 
 Filter selalu diakhiri `reject;` (default-deny). Nama filter boleh
 mengandung `-` di CLI, tapi di-generate menjadi `_` di bird.conf
 (BIRD menolak `-` di nama identifier).
+
+Pola `{low,high}` membatasi panjang prefix yang cocok (mis.
+`103.50.128.0/22{22,24}` = prefix /22 sampai /24 di dalam
+103.50.128.0/22). Suffix `+` (prefix ini dan yang lebih spesifik) dan
+`-` (hanya prefix ini) juga didukung. `accept prefix-pattern <pola>`
+adalah alias lama untuk bentuk yang sama. Nama filter di view ini juga
+dilengkapi otomatis dengan TAB (`filter <TAB>`).
 
 ### 9b.3 Network yang diiklankan
 

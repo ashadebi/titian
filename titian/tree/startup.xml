@@ -84,6 +84,13 @@ HOTKEYS
 	</ACTION>
 </VAR>
 
+<!--Get BGP filter names (untuk completion import/export filter) -->
+<VAR name="Get_bgp_filters" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-bgp-filters.sh
+	</ACTION>
+</VAR>
+
 <!--// 
 	var var an.
 //-->

@@ -103,6 +103,7 @@
         help="Import route hasil merge lewat filter bernama">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -128,6 +129,7 @@
         help="Export route ke agregasi lewat filter bernama">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>

@@ -215,6 +215,7 @@
         mode="subcommand">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG priority="0x1530" pattern="^${__line}$"/>
         <ACTION>
@@ -225,6 +226,7 @@
         help="Delete BGP filter">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^filter ${Name}"/>
         <ACTION>
@@ -629,6 +631,7 @@
         help="Import hanya route yang lolos filter">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -667,6 +670,7 @@
         help="Export hanya route yang lolos filter">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -780,6 +784,24 @@
         <CONFIG operation="unset" pattern="^from"/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" from
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="protocol-name"
+        help="Nama protocol BIRD custom untuk neighbor ini (default: bgp_&lt;IP&gt;)">
+        <PARAM name="Name"
+            help="Nama protocol BIRD [A-Za-z_][A-Za-z0-9_]* (mis. bgp_AS1194)"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-set "${bgp_neighbor}" protocol-name "${Name}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no protocol-name"
+        help="Kembali ke nama protocol default (bgp_&lt;IP&gt;)">
+        <CONFIG operation="unset" pattern="^protocol-name"/>
+        <ACTION>
+            ${RT_SBIN}/titian-bgp.sh neighbor-unset "${bgp_neighbor}" protocol-name
         </ACTION>
     </COMMAND>
 
@@ -2671,8 +2693,8 @@
     <COMMAND name="accept"
         help="Terima prefix ini">
         <PARAM name="Prefix"
-            help="Prefix CIDR (mis. 10.0.0.0/8)"
-            ptype="IP_ADDR_MASK"/>
+            help="Prefix CIDR atau pola {low,high} (mis. 10.0.0.0/8{16,24})"
+            ptype="PREFIX_PATTERN"/>
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" accept "${Prefix}"
@@ -2681,8 +2703,8 @@
     <COMMAND name="reject"
         help="Tolak prefix ini">
         <PARAM name="Prefix"
-            help="Prefix CIDR"
-            ptype="IP_ADDR_MASK"/>
+            help="Prefix CIDR atau pola {low,high} (mis. 10.0.0.0/8{16,24})"
+            ptype="PREFIX_PATTERN"/>
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bgp.sh filter-add "${bgp_filter}" reject "${Prefix}"
@@ -3771,6 +3793,7 @@
         help="Import hanya route yang lolos filter">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -3809,6 +3832,7 @@
         help="Export hanya route yang lolos filter">
         <PARAM name="Name"
             help="Nama filter"
+            completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
