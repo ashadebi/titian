@@ -712,8 +712,12 @@ Special note on FreeBSD BGP: a BGP session over a PtP `/32` address that
 is not directly-connected in the BIRD device protocol needs `multihop` +
 a static peer route to become Established — that is BIRD behavior, not a
 Titian bug. BFD-over-BGP single-hop over the management interface has
-not been tested yet; BFD direct (OSPF) and multihop-BGP have been verified
-in the lab.
+not been tested yet; BFD-over-BGP over the data path is PROVEN to fail
+(the RB3011 never creates a BFD session — BGP↔BFD deadlock, F3.4).
+BFD-over-OSPF was VERIFIED live on 17 Nov 2026 (B26): session Up in both
+directions (300 ms × 3, hold 900 ms); the RB3011 side needs `use-bfd=yes`
+on the OSPF interface-template (default empty = BFD stays silent).
+Multihop BGP has been verified in the lab.
 
 ---
 
@@ -1172,6 +1176,190 @@ save
 
 ---
 
+### 9b.7 TCP MD5 authentication (RFC 2385) — lab testing only
+
+> **CLOSED BY B25 (17 Nov 2026) — BGP MD5 PROVEN NON-FUNCTIONAL on this platform.**
+> All four live test variants (password only; explicit `authentication md5;`;
+> `setkey on`; `setkey off`) FAILED with `connect()` ENOENT — see §9b.8.
+> The procedure below is kept as a REPRODUCTION ARCHIVE (how to install
+> + remove MD5 + how to verify the digest), NOT for enabling MD5 in the
+> lab. DO NOT enable MD5 on this lab BGP session.
+
+> **Note:** the BGP MD5 password here is ONLY for lab testing.
+> Not a production credential. The test password used in the lab
+> is recorded in `HASIL.md` (FASE 3 follow-up) — not in this
+> guide — because this guide is a general procedure, while the
+> password is specific to each test session.
+
+TCP MD5 signs every TCP segment of the BGP session with a shared
+secret. Both sides MUST use the EXACT same password — a single
+character difference = the session FAILS completely (no fallback
+to no-MD5).
+
+**Absolute requirement:** IDENTICAL password on BSDRP and on RB3011.
+If MD5 is installed on only one side, the session NEVER becomes
+Established — the side without MD5 rejects MD5-signed SYNs, the
+side with MD5 rejects unsigned SYNs. Symptoms in
+`show protocol`: the session sticks at `Active` / `Connect` with
+`Socket: Connection closed` or `Connection refused`, and in
+`tcpdump` you see repeated SYNs (retransmits) without SYN-ACK.
+That is NOT a link problem — that is MD5 mismatch / one-sided.
+
+**1. Generate a password (host-side, on the BSDRP machine)**
+
+A strong random password, 20 alphanumeric characters (no spaces —
+klish rejects spaces). Generate it on the machine, DO NOT write it
+in chat:
+
+```
+PW=$(LC_ALL=C tr -dc "A-Za-z0-9" < /dev/urandom | head -c 20)
+echo "$PW" > /tmp/bgpmd5-test-pw.txt; chmod 600 /tmp/bgpmd5-test-pw.txt
+```
+
+(`LC_ALL=C` is mandatory — FreeBSD `tr` without it fails with
+`Illegal byte sequence` on random bytes. Check the length = 20
+before using it.)
+
+**2. BSDRP side (klish) — install the password on the neighbor**
+
+The klish command lives in the `neighbor` view (`password <text>`),
+or via the backend `titian-bgp.sh`:
+
+```
+configure terminal
+router bird
+neighbor 10.99.40.2
+password <PASSWORD-TEST>
+exit
+end
+configure terminal
+commit
+save
+```
+
+Or via the backend (same result — the intent written is identical):
+
+```
+/opt/titian/sbin/titian-bgp.sh neighbor-set 10.99.40.2 password <PASSWORD-TEST>
+/opt/titian/sbin/titian-bgp.sh generate
+```
+
+Result in bird.conf (section `bgp_10_99_40_2`):
+
+```
+protocol bgp bgp_10_99_40_2 {
+    ...
+    neighbor 10.99.40.2 as 65001;
+    password "<PASSWORD-TEST>";
+    ...
+}
+```
+
+**3. RB3011 side (RouterOS 7) — install the SAME key**
+
+Read the password from the file on the BSDRP machine (do not retype
+it manually — one typo character = failed session):
+
+```
+PW=$(cat /tmp/bgpmd5-test-pw.txt)
+ssh -i /root/.ssh/rb3011_key agoes@192.168.91.32 \
+  "/routing/bgp/connection/set [find name=bgp-bsdRP] tcp-md5-key=$PW"
+```
+
+Or directly in the RB3011 terminal:
+
+```
+/routing/bgp/connection/set [find name=bgp-bsdRP] tcp-md5-key=<PASSWORD-TEST>
+```
+
+RouterOS 7.25.1 gotchas:
+
+- `tcp-md5-key` is a **connection** property, NOT a template one.
+  Setting it on a template is REJECTED: `bad parameter tcp-md5-key`.
+- `print` (including `print detail`) does NOT display
+  `tcp-md5-key` — RouterOS hides the key value.
+  Not showing in print does NOT mean it is not installed.
+  A `set` that succeeds (exit 0, no error) = installed.
+  Real verification = session Established + valid MD5 digest
+  (see the verification section below).
+
+**4. Verification — session back to Established with MD5 active**
+
+The session will drop when MD5 is installed on one side, then
+re-Establish once both sides match. Wait until
+`show protocol` shows `Established` (on a lossy link this can take
+a few minutes — TCP retransmits need a low-loss window; that is a
+link problem, not MD5):
+
+```
+show protocol bgp           # must be Established
+birdc show route protocol bgp_10_99_40_2
+```
+
+Proof MD5 is active (from the BSDRP machine) — capture SYNs on
+port 179, check the MD5 option on the packets:
+
+```
+tcpdump -n -v -i bridge0 "tcp port 179 and tcp[tcpflags] & tcp-syn != 0"
+```
+
+A SYN from a peer using MD5 shows
+`options [..., md5 ..., mss ...]`. To verify the digest matches
+the password in use, give the password to tcpdump via `-M`:
+
+```
+PW=$(cat /tmp/bgpmd5-test-pw.txt)
+tcpdump -n -v -M "$PW" -i bridge0 "tcp port 179 and tcp[tcpflags] & tcp-syn != 0"
+```
+
+Correct result: `options [nop,nop,md5 valid,mss ...]`.
+`md5 valid` = digest matches = both sides use the same password.
+If the digest is wrong, tcpdump reports MD5 failure —
+meaning the two sides' passwords do NOT match; sync them again.
+
+**5. Removing MD5 (back to no password)**
+
+```
+configure terminal
+router bird
+neighbor 10.99.40.2
+no password
+exit
+end
+configure terminal
+commit
+save
+```
+
+And on the RB3011:
+
+```
+/routing/bgp/connection/set [find name=bgp-bsdRP] tcp-md5-key=""
+```
+
+Remove on BOTH sides — if only one side is removed, the session
+fails with the same symptoms as above (one side with MD5, one
+without).
+
+---
+
+### 9b.8 WARNING — TCP MD5 breaks BIRD connect() on this platform (found 16 Nov 2026; PROVEN BY B25, 17 Nov 2026)
+
+On BIRD 2.20.0 + FreeBSD 16.0-CURRENT, enabling TCP MD5 on a BGP session breaks `connect()` with `Socket error: connect: No such file or directory` (ENOENT) — the session sticks at `Active`, never Established, and restarting the daemon does NOT fix it. This is NOT a password mismatch: `tcpdump -M` proves the digest matches on both sides, and MD5 SYNs from the RB3011 are silently discarded without SYN-ACK/RST (the BIRD listen socket does not apply the MD5 key).
+
+**B25 results (17 Nov 2026, report `BIRD-B25-REPORT.md`):** all four live test variants FAILED with ENOENT deterministically, using the same single-use test key on both sides (`tcpdump -M` digest = "md5 valid"):
+
+1. **Password only** (current Titian emit) — Active + ENOENT (reproduction of the 16 Nov incident).
+2. **Explicit `authentication md5;` + password** — Active + ENOENT, even after `birdc restart` of the protocol (fresh socket). The "missing explicit auth option" hypothesis is PROVEN FALSE.
+3. **Password + `setkey on`** (kernel SADB path) — Active + ENOENT. The `tcp-md5` SA WAS installed in the SADB (`setkey -D`, state=mature) — the path works, the connection still fails.
+4. **Password + `setkey off`** (setsockopt `TCP_MD5SIG` path) — Active + ENOENT. SADB empty; `setsockopt TCP_MD5SIG` accepted by the kernel — the path works, the connection still fails.
+
+Control: MD5 OFF on both sides → Established in under 1 minute, stable. The kernel supports `TCP_MD5SIG` (setsockopt OK) and has MD5 code (`tcpmd5`); what is broken is BIRD 2.20.0's MD5 socket handling on this platform (BIRD never sends a SYN while MD5 is active; `connect()` fails before any packet leaves).
+
+**Status:** MD5 **DISABLED** in the lab (both sides), BGP runs without MD5 on this private lab link. **DO NOT enable MD5 again on this lab BGP session.** If MD5 is ever needed in the future, the paths are: a BIRD upgrade (hypothesis, UNTESTED — no newer BIRD exists in this image) or a different platform — that is a separate design decision, not a Titian emit fix (no emit variant fixes it).
+
+---
+
 ## 9c. FRR — alternative routing suite (not BIRD)
 
 FRR (`net/frr10`, version 10.7.1 in the image) is an alternative
@@ -1309,6 +1497,12 @@ Enter vtysh via the `cli` command in Titian, then configure
 BGP as usual in FRR (eBGP example to RB3011, AS 65001 — exact
 equivalent of the BIRD configuration in §9b.1):
 
+> **Route-map MANDATORY:** FRR 10.x rejects eBGP without an in AND
+> out route-map (log: `EBGP outbound policy not properly setup`; without
+> a route-map, `show ip bgp summary` shows PfxRcd/PfxSnt = 0,
+> and the summary on the RB3011 shows `(Policy)`). Proven in test 14 —
+> session Established but 0 prefixes until the route-map was installed.
+
 ```
 ! in vtysh (via `cli`)
 configure terminal
@@ -1338,6 +1532,15 @@ route-map EXPORT-OUT permit 10
 end
 write memory
 ```
+
+BGP FRR is **deliberately vtysh-only by design**: the FRR klish only
+manages enable/disable + router-id + log + write-memory. Adding full
+route-map/policy commands to klish makes no sense — FRR BGP itself is
+already vtysh-only (see §9c.2), and a route-map is a one-off
+per-neighbor configuration, not state that needs klish replay.
+Working pattern: express the enable intent in klish → `commit` →
+daemon comes up → configure BGP (neighbor + route-map) in vtysh →
+`write memory`.
 
 BIRD → FRR attribute equivalents: `local-pref` = `set
 local-preference` (or `bgp default local-preference`),
@@ -1384,19 +1587,38 @@ already fixed, but during the FRR test you **must verify `show ip
 route` contains kernel routes** (default/static), not only BGP
 routes.
 
-### 9c.5 Test status (honest)
+### 9c.5 Test status (honest) — updated 15 Nov 2026
 
-- FRR CLI (enable, router-id, log, write-memory, show) **exists** and
+FRR has **run live** on the test machine (test 14, 15 Nov 2026):
+daemon up via klish (`router frr enable` + `commit`), router-id/log/
+write-memory sub-commands PASSED, two-way mutual exclusion PASSED,
+BGP eBGP via FRR to the RB3011 **Established + two-way route exchange**
+(PfxRcd/PfxSnt = 2/2) after the vtysh route-map (§9c.4), then back to
+clean BIRD + BGP re-Established. Details:
+`~/workspace/titian-live-test-20261113/HASIL.md` (test 14).
+
+- The FRR CLI (enable, router-id, log, write-memory, show) **exists** and
   mutual exclusion vs BIRD **has been tested** (fails rc=33 both ways).
 - Package `frr10-10.7.1_1` is installed in the image, the `frr` rc script exists.
-- **FRR as a routing daemon has NEVER run live** (13 Nov
-  2026): no `zebra`/`bgpd`/`ospfd` processes, no
-  `frr.conf`, `frr_enable` not in rc.conf. All E2E BGP tests to
-  RB3011 so far used BIRD, not FRR.
-- Open FRR live tests: enable FRR (BIRD off first,
-  §9c.1) → BGP via vtysh to RB3011 (§9c.4) → verify session
-  Established + route exchange + attributes (like the BIRD test §9b) +
-  verify `show ip route` contains kernel routes (quirk §9c.4).
+
+**Test 14 findings already fixed in the repo (this push):**
+- `service frr stop` only killed watchfrr — now the stop path kills
+  ALL daemons (watchfrr, zebra, bgpd, ospfd, ripd, staticd, mgmtd)
+  with a grace period, then forcefully if needed.
+- A misleading commit message was fixed (it no longer prints
+  "bird disabled + stopped" when enabling FRR; `birdc configure`
+  is skipped when bird is not running; the "BIRD unknown" label was
+  replaced with the correct version label).
+
+**Limitations that still apply:**
+- FRR BGP/OSPF = vtysh-only (see §9c.4 — in+out route-map mandatory).
+- There is no `show frr bgp summary` command in klish yet — use
+  `vtysh -c "show ip bgp summary"`.
+- FreeBSD quirk (§9c.4): `show ip route` in FRR 9.x–10.1.1 does not
+  show the default gateway & kernel static routes (issue #17113) —
+  in 10.7.1 it is probably already fixed, **must verify `show ip
+  route` contains kernel routes** at the next FRR test, not only BGP
+  routes.
 
 **References:**
 - FreeBSD port `net/frr10`, official rc script: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in

@@ -105,17 +105,29 @@ restore_default_route() {
 #  command", running-config kosong). Replay DUA pass: pass 1 membuat
 #  semua interface, pass 2 menempelkan member/atribut yang gagal di
 #  pass 1 (dependensi sudah ada).
+# Perbaikan replay (B19, 17 Nov 2026): aturan yang sama diperluas ke
+#  RAdv — `exit` sebelum saudara indent-3 (prefix/rdnss/dnssl/
+#  max-ra-interval/...) sesudah child view di bawah `interface`
+#  (replay tidak pernah pop view saat indent berkurang; tanpa exit,
+#  `prefix` resolve global dan `max-ra-interval` "Unknown command").
+#  Preprocessing tinggal di sbin/titian-replay-prep.sh (aturan bridge
+#  dipertahankan verbatim di sana); di sini hanya dipanggil. Fallback
+#  awk inline dipertahankan bila helper hilang (perilaku lama).
 _defroute=""
 if [ -f "$STATE_ROOT/startup-config" ]; then
     _defroute=$(capture_default_route)
     _replay_tmp="/tmp/titian-replay-prep.conf"
-    awk '
-        /^interface / {
-            if (last_iface == "bridge") print "exit"
-            if (/^interface bridge/) { last_iface = "bridge" } else { last_iface = "other" }
-        }
-        { print }
-    ' "$STATE_ROOT/startup-config" > "$_replay_tmp" 2>/dev/null
+    if [ -x "$ROOT/sbin/titian-replay-prep.sh" ]; then
+        "$ROOT/sbin/titian-replay-prep.sh" "$STATE_ROOT/startup-config" > "$_replay_tmp" 2>/dev/null || cp -f "$STATE_ROOT/startup-config" "$_replay_tmp"
+    else
+        awk '
+            /^interface / {
+                if (last_iface == "bridge") print "exit"
+                if (/^interface bridge/) { last_iface = "bridge" } else { last_iface = "other" }
+            }
+            { print }
+        ' "$STATE_ROOT/startup-config" > "$_replay_tmp" 2>/dev/null
+    fi
     _replay_src="$STATE_ROOT/startup-config"
     [ -s "$_replay_tmp" ] && _replay_src="$_replay_tmp"
     "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee /var/log/titian-replay.log

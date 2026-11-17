@@ -705,7 +705,12 @@ Catatan khusus BGP FreeBSD: sesi BGP di atas alamat PtP `/32` yang tidak
 directly-connected di device protocol BIRD membutuhkan `multihop` +
 static peer route agar Established — itu perilaku BIRD, bukan bug Titian.
 BFD-over-BGP single-hop di atas interface management belum pernah diuji;
-BFD direct (OSPF) dan multihop-BGP sudah diverifikasi di lab.
+BFD-over-BGP di atas jalur data TERBUKTI gagal
+(RB3011 tidak pernah membuat sesi BFD — deadlock BGP↔BFD, F3.4).
+BFD-over-OSPF TERVERIFIKASI live 17 Nov 2026 (B26): sesi Up dua arah
+(300 ms × 3, hold 900 ms); sisi RB3011 perlu `use-bfd=yes`
+di interface-template OSPF (default kosong = BFD diam).
+Multihop-BGP sudah diverifikasi di lab.
 
 ---
 
@@ -1164,6 +1169,13 @@ save
 
 ### 9b.7 TCP MD5 authentication (RFC 2385) — hanya untuk testing lab
 
+> **DITUTUP B25 (17 Nov 2026) — MD5 BGP TERBUKTI TIDAK BERFUNGSI di platform ini.**
+> Keempat varian uji live (password saja; `authentication md5;` eksplisit;
+> `setkey on`; `setkey off`) SEMUA gagal `connect()` ENOENT — lihat §9b.8.
+> Prosedur di bawah ini dipertahankan sebagai ARSIP REPRODUKSI (cara memasang
+> + mencabut MD5 + cara memverifikasi digest), BUKAN untuk mengaktifkan MD5
+> di lab. JANGAN pasang MD5 di sesi BGP lab ini.
+
 > **Catatan:** password BGP MD5 di sini HANYA untuk testing lab.
 > Bukan kredensial produksi. Password test yang dipakai di lab
 > dicatat di `HASIL.md` (tindak lanjut FASE 3) — bukan di panduan
@@ -1322,9 +1334,20 @@ ber-MD5, satu tidak).
 
 ---
 
-### 9b.8 PERINGATAN — TCP MD5 memecahkan connect() BIRD di platform ini (ditemukan 16 Nov 2026)
+### 9b.8 PERINGATAN — TCP MD5 memecahkan connect() BIRD di platform ini (ditemukan 16 Nov 2026; TERBUKTI B25, 17 Nov 2026)
 
-Pada BIRD 2.20.0 + FreeBSD 16.0-CURRENT, mengaktifkan TCP MD5 pada sesi BGP memecahkan `connect()` dengan `Socket error: connect: No such file or directory` (ENOENT) — sesi mentok `Active`, tidak pernah Established, dan restart daemon TIDAK memperbaiki. Ini BUKAN password tidak cocok: `tcpdump -M` membuktikan digest cocok di kedua sisi, dan SYN ber-MD5 dari RB3011 dibuang diam-diam tanpa SYN-ACK/RST (diduga socket listen BIRD tidak menerapkan kunci MD5). Status 16 Nov 2026: MD5 **DIMATIKAN** di lab (kedua sisi), BGP jalan tanpa MD5 di link lab privat ini. Bila MD5 dibutuhkan lagi, itu keputusan desain tersendiri (hipotesis: opsi eksplisit `authentication md5;` di blok BGP, atau upgrade BIRD).
+Pada BIRD 2.20.0 + FreeBSD 16.0-CURRENT, mengaktifkan TCP MD5 pada sesi BGP memecahkan `connect()` dengan `Socket error: connect: No such file or directory` (ENOENT) — sesi mentok `Active`, tidak pernah Established, dan restart daemon TIDAK memperbaiki. Ini BUKAN password tidak cocok: `tcpdump -M` membuktikan digest cocok di kedua sisi, dan SYN ber-MD5 dari RB3011 dibuang diam-diam tanpa SYN-ACK/RST (socket listen BIRD tidak menerapkan kunci MD5).
+
+**Hasil B25 (17 Nov 2026, laporan `BIRD-B25-REPORT.md`):** keempat varian uji live SEMUA gagal ENOENT secara deterministik, dengan kunci uji sekali pakai yang sama di kedua sisi (digest `tcpdump -M` = "md5 valid"):
+
+1. **Password saja** (emit Titian hari ini) — Active + ENOENT (reproduksi insiden 16 Nov).
+2. **`authentication md5;` eksplisit + password** — Active + ENOENT, bahkan sesudah `birdc restart` protokol (socket baru). Hipotesis "opsi auth eksplisit yang kurang" TERBUKTI SALAH.
+3. **Password + `setkey on`** (jalur SADB kernel) — Active + ENOENT. SA `tcp-md5` TERPASANG di SADB (`setkey -D`, state=mature) — jalurnya jalan, koneksinya tetap gagal.
+4. **Password + `setkey off`** (jalur setsockopt `TCP_MD5SIG`) — Active + ENOENT. SADB kosong; `setsockopt TCP_MD5SIG` diterima kernel — jalurnya jalan, koneksinya tetap gagal.
+
+Kontrol: MD5 OFF di kedua sisi → Established <1 menit, stabil. Kernel mendukung `TCP_MD5SIG` (setsockopt OK) dan punya kode MD5 (`tcpmd5`); yang rusak adalah penanganan soket MD5 BIRD 2.20.0 di platform ini (BIRD tidak pernah mengirim SYN saat MD5 aktif; `connect()` gagal sebelum paket keluar).
+
+**Status:** MD5 **DIMATIKAN** di lab (kedua sisi), BGP jalan tanpa MD5 di link lab privat ini. **JANGAN pasang MD5 lagi di sesi BGP lab ini.** Bila MD5 dibutuhkan di masa depan, jalurnya: upgrade BIRD (hipotesis, BELUM teruji — tidak ada BIRD lebih baru di image ini) atau platform lain — itu keputusan desain tersendiri, bukan perbaikan emit Titian (tidak ada varian emit yang memperbaiki).
 
 ---
 

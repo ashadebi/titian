@@ -3567,6 +3567,34 @@
         </ACTION>
     </COMMAND>
 
+    <COMMAND name="var-set"
+        help="Deklarasi variabel SET fungsi (mis. var-set pair-set cs [(65000,100)])">
+        <PARAM name="Type"
+            help="Tipe set: int-set|pair-set|quad-set|ip-set|prefix-set|ec-set|lc-set|rd-set (enum-set TIDAK ada di BIRD 2.20)"
+            ptype="STRING"/>
+        <PARAM name="Var"
+            help="Nama variabel [A-Za-z0-9_]"
+            ptype="STRING"/>
+        <PARAM name="Literal"
+            help="Literal set satu token tanpa spasi (mis. [1,2,3] atau [(65000,100),(65001,200)])"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-var-set "${bird_function}" "${Type}" "${Var}" "${Literal}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="method"
+        help="Panggil method list/atribut (mis. method bgp_community.delete(65000:100))">
+        <PARAM name="Call"
+            help="Pemanggilan method satu token: OBJ.METHOD(args) — OBJ bgp_community|bgp_ext_community|bgp_large_community|bgp_cluster_list|bgp_path; METHOD add|delete|filter|prepend|empty"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-function.sh function-method "${bird_function}" "${Call}"
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="print"
         help="Cetak debug ke log BIRD (syslog daemon.log): print ARGS — ARGS satu token dipisah koma (s:TEKS, atribut, variabel, bilangan, accessor .asn/.data)">
         <PARAM name="Args"

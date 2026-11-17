@@ -945,7 +945,7 @@ valid_attr_value() { # valid_attr_value <ATTR> <NILAI> <label> [VARLIST] — B12
         rd) valid_rd "$2" "$3" ;;
         ec) valid_ec "$2" "$3" ;;
         lc) valid_lc "$2" "$3" ;;
-        enum:NETTYPE) case "$2" in NET_IP4|NET_IP6|NET_IP6_SADR|NET_VPN4|NET_VPN6|NET_ROA4|NET_ROA6|NET_FLOW4|NET_FLOW6|NET_MPLS) ;; *) err "$3 harus NET_IP4|NET_IP6|NET_IP6_SADR|NET_VPN4|NET_VPN6|NET_ROA4|NET_ROA6|NET_FLOW4|NET_FLOW6|NET_MPLS: $2" ;; esac ;;
+        enum:NETTYPE) case "$2" in NET_IP4|NET_IP6|NET_IP6_SADR|NET_VPN4|NET_VPN6|NET_ROA4|NET_ROA6|NET_FLOW4|NET_FLOW6|NET_MPLS|NET_ASPA|NET_EVPN) ;; *) err "$3 harus NET_IP4|NET_IP6|NET_IP6_SADR|NET_VPN4|NET_VPN6|NET_ROA4|NET_ROA6|NET_FLOW4|NET_FLOW6|NET_MPLS|NET_ASPA|NET_EVPN: $2" ;; esac ;;
         enum:RAPREF) case "$2" in RA_PREF_LOW|RA_PREF_MEDIUM|RA_PREF_HIGH) ;; *) err "$3 harus RA_PREF_LOW|RA_PREF_MEDIUM|RA_PREF_HIGH: $2" ;; esac ;;
         enum:MPLSPOLICY) case "$2" in MPLS_POLICY_NONE|MPLS_POLICY_STATIC|MPLS_POLICY_PREFIX|MPLS_POLICY_AGGREGATE|MPLS_POLICY_VRF) ;; *) err "$3 harus MPLS_POLICY_NONE|STATIC|PREFIX|AGGREGATE|VRF: $2" ;; esac ;;
         *) err "$3 atribut tidak dikenal / nilainya tidak bisa divalidasi: $1" ;;
@@ -1100,11 +1100,11 @@ atom_to_bird() {
             [ "$(attr_kind "$_a")" != "unknown" ] || custom_attr_exists "$_a" || err "defined() atribut tidak dikenal: $_a"
             printf '! defined(%s)' "$_a"; return 0 ;;
         'net~'*) _p=${_at#net~}
-            valid_prefix_pattern "$_p" "kondisi net~"
+            valid_prefix_pattern_any "$_p" "kondisi net~"
             case "$_p" in *+|*-|*{*}) printf 'net ~ [ %s ]' "$_p" ;; *) printf 'net ~ [ %s+ ]' "$_p" ;; esac
             return 0 ;;
         'net!~'*) _p=${_at#net!~}  # B16/5-95
-            valid_prefix_pattern "$_p" "kondisi net!~"
+            valid_prefix_pattern_any "$_p" "kondisi net!~"
             case "$_p" in *+|*-|*{*}) printf 'net !~ [ %s ]' "$_p" ;; *) printf 'net !~ [ %s+ ]' "$_p" ;; esac
             return 0 ;;
         'path~'*) _m=${_at#path~}
@@ -2339,7 +2339,7 @@ cmd_filter_var() { # filter-var <NAME> <TIPE> <VAR>
     echo "BGP filter $_n var $_t $_v"
 }
 cmd_filter_var_set() { # filter-var-set <NAME> <TYPESET> <VAR> <LITERAL>
-    _n="$1"; _t="$2"; _v="$3"; _lit="$4"
+    _n="$1"; _t="$2"; _v="$3"; _lit=$(klish_unescape "$4") # B23: klish escape \( \) di PARAM — tanpa ini var-set gagal live (uji live 17 Nov 01:40 UTC)
     [ -n "$_n" ] && [ -n "$_t" ] && [ -n "$_v" ] && [ -n "$_lit" ] || err "filter-var-set butuh NAMA TYPESET VAR LITERAL"
     valid_symbol "$_n" "filter"
     valid_set_typeset "$_t" "filter-var-set"
@@ -2352,7 +2352,7 @@ cmd_filter_var_set() { # filter-var-set <NAME> <TYPESET> <VAR> <LITERAL>
     echo "BGP filter $_n var-set $_t $_v = $_lit"
 }
 cmd_filter_method() { # filter-method <NAME> <CALL>
-    _n="$1"; _c="$2"
+    _n="$1"; _c=$(klish_unescape "$2") # B23: klish escape \( \) di PARAM — tanpa ini method gagal live (uji live 17 Nov 01:40 UTC)
     [ -n "$_n" ] && [ -n "$_c" ] || err "filter-method butuh NAMA CALL"
     valid_symbol "$_n" "filter"
     method_to_bird "$_c" "$(filter_vars "$_n")" >/dev/null || exit 33

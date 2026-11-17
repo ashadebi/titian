@@ -69,7 +69,7 @@
 #     field password: id|generate-from|generate-to|accept-from|
 #       accept-to|from|to|algorithm (algorithm ditulis hmac-sha256
 #       dst, diubah jadi `hmac sha256` saat generate; tanggal
-#       YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS], `T` jadi spasi)
+#       YYYY-MM-DD saja — B24, BIRD menolak tanggal+jam di password)
 
 STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
 CONF="$STATE_ROOT/babel.conf"
@@ -342,8 +342,11 @@ cmd_password_set() { # password-set <PAT> <TEXT> <FIELD> <VALUE>
     case "$_f" in
         id) valid_num "$_v" 0 255 "password id" ;;
         generate-from|generate-to|accept-from|accept-to|from|to)
-            case "$_v" in *' '*|*\;*|*\"*) err "tanggal $_f tanpa spasi/;/kutip (YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]): $_v" ;; esac
-            case "$_v" in ????-??-??* ) ;; *) err "tanggal $_f harus YYYY-MM-DD[THH:MM[:SS]]: $_v" ;; esac ;;
+            # B24 (17 Nov 2026): BIRD 2.20.0 password dates = TANGGAL SAJA —
+            # datetime (T maupun spasi) DITOLAK bird -p "Invalid date/time"
+            # (B24 t8/t9). Cermin valid_bfd_date titian-bfd.sh.
+            case "$_v" in *' '*|*\;*|*\"*) err "tanggal $_f tanpa spasi/;/kutip (YYYY-MM-DD saja): $_v" ;; esac
+            case "$_v" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) err "password $_f harus tanggal YYYY-MM-DD saja (BIRD 2.20.0 menolak tanggal+jam di password): $_v" ;; esac ;;
         algorithm) case "$_v" in hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512) ;; *) err "algorithm harus hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512 (blake2s/blake2b TIDAK ada di BIRD 2.20 — ditolak bird -p; keyed md5/sha1 TIDAK ada di Babel): $_v" ;; esac ;;
         *) err "field password harus id|generate-from|generate-to|accept-from|accept-to|from|to|algorithm: $_f" ;;
     esac
@@ -384,6 +387,13 @@ get_chan() { # <ipv4|ipv6>-<FIELD> -> nilai (kolom 2, atau kolom 3 bila filter)
 bird_time() {
     case "$1" in *ms|*us|*s|*m|*h|*d) printf '%s' "$1" ;; *) printf '%ss' "$1" ;; esac
 }
+
+# date_to_bird <nilai> — pertahanan intent lama: tanggal+jam yang tersimpan
+# sebelum B24 dipangkas ke tanggal saja saat emit (BIRD menolak datetime
+# apa pun di password — B24 t8/t9). Cermin titian-ospf.sh/titian-rip.sh.
+date_to_bird() {
+    _d="${1%%T*}"; _d="${_d%% *}"; printf '%s' "$_d"
+}
 emit_iface_field() { # <PAT> <FIELD> <BIRD-NAME> [transform]
     _pat="$1"; _f="$2"; _bn="$3"
     _v=$(get_field "$_pat" "$_f")
@@ -415,6 +425,16 @@ emit_iface() {
     case "$_auth" in
         mac|mac-permissive)
             [ -n "$_pw" ] || err "interface $_pat authentication $_auth tanpa password — tambah dulu password" ;;
+    esac
+    # B24 (17 Nov 2026, temuan live): BIRD 2.20.0 menolak password tanpa
+    # authentication mac — "Authentication and password options should be
+    # used together" (bird -p t13: auth none + password rc=1; uji live
+    # vlan99: password tanpa auth -> commit gagal di section babel).
+    # Simetris dengan guard di atas (auth tanpa password): gagal LOUD di
+    # generate dengan pesan jelas, bukan error BIRD saat commit.
+    case "$_auth" in
+        ""|none)
+            [ -z "$_pw" ] || err "interface $_pat password tanpa authentication mac — set dulu authentication mac (BIRD 2.20.0 menolak password tanpa authentication)" ;;
     esac
     if grep -q "^interface $(re_esc "$_pat") pw-" "$CONF" 2>/dev/null && [ -z "$_pw" ]; then
         err "interface $_pat punya sub-opsi password tanpa password — tambah dulu password"
@@ -449,12 +469,12 @@ emit_iface() {
                 _pv=${_pl#* }
                 case "$_pf" in
                     id) echo "            id $_pv;" ;;
-                    generate-from) echo "            generate from \"$(echo "$_pv" | sed 's/T/ /')\";" ;;
-                    generate-to) echo "            generate to \"$(echo "$_pv" | sed 's/T/ /')\";" ;;
-                    accept-from) echo "            accept from \"$(echo "$_pv" | sed 's/T/ /')\";" ;;
-                    accept-to) echo "            accept to \"$(echo "$_pv" | sed 's/T/ /')\";" ;;
-                    from) echo "            from \"$(echo "$_pv" | sed 's/T/ /')\";" ;;
-                    to) echo "            to \"$(echo "$_pv" | sed 's/T/ /')\";" ;;
+                    generate-from) echo "            generate from \"$(date_to_bird "$_pv")\";" ;;
+                    generate-to) echo "            generate to \"$(date_to_bird "$_pv")\";" ;;
+                    accept-from) echo "            accept from \"$(date_to_bird "$_pv")\";" ;;
+                    accept-to) echo "            accept to \"$(date_to_bird "$_pv")\";" ;;
+                    from) echo "            from \"$(date_to_bird "$_pv")\";" ;;
+                    to) echo "            to \"$(date_to_bird "$_pv")\";" ;;
                     algorithm) case "$_pv" in
                         hmac-sha1) _alg="hmac sha1" ;; hmac-sha256) _alg="hmac sha256" ;;
                         hmac-sha384) _alg="hmac sha384" ;; hmac-sha512) _alg="hmac sha512" ;;

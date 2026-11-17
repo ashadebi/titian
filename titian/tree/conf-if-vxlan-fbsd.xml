@@ -53,9 +53,6 @@
     depth="1">
     <PTYPE name="iface" pattern="${iface_vxlan}"/>
     <NAMESPACE ref="configure-view">
-        <COMMAND name="exit"
-            help="back to configure-view"
-            view="configure-view"/>
         <COMMAND name="end"
             help="back to enable-view"
             view="enable-view"/>
@@ -303,6 +300,12 @@
             ${RT_SBIN}/titian-vxlan.sh unset "${iface}" learn
         </ACTION>
     </COMMAND>
+
+    <COMMAND name="exit"
+        help="Exit from mode konfigurasi vxlan">
+        <ACTION builtin="clish_nested_up"/>
+    </COMMAND>
+
 </VIEW>
 
 </CLISH_MODULE>

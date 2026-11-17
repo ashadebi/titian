@@ -18,6 +18,10 @@
 # memeriksa ulang mutual exclusion di sana. Alasan: commit = tulis
 # file + service langsung naik (feature-list §1-§2); enable di tengah
 # sesi tanpa commit tidak boleh mengubah service yang jalan.
+# B22 (17 Nov 2026): generate/check/set-threads HORMATI
+# TITIAN_STATE_ROOT — bila di-set ke lokasi bukan default, target
+# adalah $TITIAN_STATE_ROOT/bird.conf (scratch); birdc configure
+# dilewati di mode scratch. Lihat conf_path().
 # POSIX sh.
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
@@ -33,11 +37,32 @@ warn_bird() {
     else echo "% Warning: $*" >&2; fi
 }
 
-conf_path() {
+# B22 (17 Nov 2026): conf_path() HORMATI TITIAN_STATE_ROOT.
+# Akar (B16, insiden FASE 3): conf_path() hardcode bird.conf live
+# sementara section source memakai $STATE_ROOT — generate dengan state
+# scratch MENULIS section scratch KE bird.conf live + birdc configure
+# (FUNCTION marker terisi builtin + b16fnlive, bird.conf bddd7341…).
+# Aturan baru: bila TITIAN_STATE_ROOT di-set ke lokasi BUKAN default
+# (/etc/titian), target generate/check/set-threads adalah
+# $TITIAN_STATE_ROOT/bird.conf dan bird.conf live TIDAK PERNAH
+# disentuh (termasuk birdc configure — dilewati di mode scratch).
+# Bila tidak di-set — atau di-set eksplisit ke default — perilaku lama
+# (live) tetap. Produksi TIDAK PERNAH men-set variabel ini (grep mesin
+# 17 Nov: tidak ada export di /opt/titian/etc, rc.conf, rc.d), jadi
+# jalur commit/boot/klish tidak berubah.
+live_conf_path() {
     if [ "$OS" = "FreeBSD" ]; then
         echo "/usr/local/etc/bird.conf"
     else
         echo "/etc/bird/bird.conf"
+    fi
+}
+
+conf_path() {
+    if [ -n "${TITIAN_STATE_ROOT:-}" ] && [ "$TITIAN_STATE_ROOT" != "/etc/titian" ]; then
+        echo "$TITIAN_STATE_ROOT/bird.conf"
+    else
+        live_conf_path
     fi
 }
 
@@ -380,12 +405,18 @@ do_generate() {
     echo "backup: $bakdir/bird.conf.$ts"
     echo "parse OK: section $section"
     birdc=$(birdc_bin)
+    # B22: `birdc configure` HANYA bila target adalah bird.conf live.
+    # Mode scratch (TITIAN_STATE_ROOT di-set ke lokasi lain): config
+    # tertulis di scratch, daemon live TIDAK BOLEH dikonfigurasi ulang
+    # dari file itu — itu persis yang merusak bird.conf live di B16.
+    if [ "$conf" != "$(live_conf_path)" ]; then
+        echo "scratch mode — lewati birdc configure (config tertulis di $conf, bukan bird.conf live)"
     # `birdc configure` hanya bila bird JALAN — sesudah bird berhenti
     # (mis. commit `no router bird enable` saat switch ke FRR) birdc
     # hanya mencetak peringatan "Unable to connect to server control
     # socket" (tes 14, T3). Config sudah tertulis + ter-parse di atas;
     # bird akan membaca file ini saat start berikutnya.
-    if is_bird_running; then
+    elif is_bird_running; then
         echo "--- birdc configure ---"
         out=$("$birdc" $(birdc_sock) configure 2>&1); rc=$?
         echo "$out" | grep -v '^BIRD'
@@ -442,6 +473,12 @@ do_set_threads() {
     cat "$_tmp" > "$conf" || { rm -f "$_tmp"; err "gagal tulis $conf"; }
     rm -f "$_tmp"
     echo "threads $n ditulis to $conf"
+    # B22: sama seperti generate — birdc configure HANYA bila target
+    # adalah bird.conf live; mode scratch lewati.
+    if [ "$conf" != "$(live_conf_path)" ]; then
+        echo "scratch mode — lewati birdc configure (threads $n tertulis di $conf, bukan bird.conf live)"
+        return 0
+    fi
     out=$("$(birdc_bin)" $(birdc_sock) configure 2>&1); rc=$?
     echo "$out" | grep -v '^BIRD'
     [ "$rc" -ne 0 ] && err "birdc configure gagal sesudah threads $n"

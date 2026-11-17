@@ -102,9 +102,10 @@
 #     field password: id|generate-from|generate-to|accept-from|
 #       accept-to|from|to|algorithm
 #     (TEXT tanpa spasi, tanpa `"` dan tanpa `\`; tanggal ditulis
-#     `YYYY-MM-DD` atau `YYYY-MM-DDTHH:MM[:SS]` — `T` diubah jadi
-#     spasi saat generate; algorithm ditulis `hmac-sha256` dst dan
-#     diubah jadi `hmac sha256` saat generate.)
+#     `YYYY-MM-DD` saja (BIRD 2.20.0 menolak tanggal+jam di password —
+#     B24; tanggal+jam lama di intent dipangkas ke tanggal saat generate);
+#     algorithm ditulis `hmac-sha256` dst dan diubah jadi `hmac sha256`
+#     saat generate.)
 #
 # Urutan apply (titian-commit.sh): apply_rip sesudah apply_static,
 # sebelum apply_bgp. RIP tidak bergantung pada BFD.
@@ -237,14 +238,23 @@ valid_password() {
     esac
 }
 
+# B24 (17 Nov 2026): BIRD 2.20.0 password dates = TANGGAL SAJA — datetime
+# (bentuk T maupun spasi) DITOLAK bird -p "Invalid date/time" (B18 t7/t8/o1;
+# B24 t2/t3/t5/t6/t8/t9). Cermin valid_bfd_date titian-bfd.sh.
 valid_date() {
-    # $1=tanggal $2=konteks: YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS].
+    # $1=tanggal $2=konteks: YYYY-MM-DD saja.
     case "$1" in
         [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]) ;;
-        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]) ;;
-        *) err "$2 harus tanggal YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]: $1" ;;
+        *) err "$2 harus tanggal YYYY-MM-DD saja (BIRD 2.20.0 menolak tanggal+jam di password): $1" ;;
     esac
+}
+
+# date_to_bird <nilai> — pertahanan intent lama: tanggal+jam yang tersimpan
+# sebelum B24 (validator lama menerima datetime) dipangkas ke tanggal saja
+# saat emit, karena BIRD menolak datetime apa pun di password. Arah aman:
+# kunci berlaku sejak 00:00 tanggal itu (lebih awal), bukan config ditolak.
+date_to_bird() {
+    _d="${1%%T*}"; _d="${_d%% *}"; printf '%s' "$_d"
 }
 
 # inst_has <rip|ripng>: exit 0 bila ada >=1 fakta instance itu.
@@ -811,12 +821,12 @@ emit_passwords() {
         if [ -n "$_id" ] || [ -n "$_gf" ] || [ -n "$_gt" ] || [ -n "$_af" ] || [ -n "$_at" ] || [ -n "$_fr" ] || [ -n "$_to" ] || [ -n "$_al" ]; then
             _stmt="        password \"$_pw\" {"
             [ -n "$_id" ] && _stmt="$_stmt id $_id;"
-            [ -n "$_gf" ] && _stmt="$_stmt generate from \"$(printf '%s' "$_gf" | tr 'T' ' ')\";"
-            [ -n "$_gt" ] && _stmt="$_stmt generate to \"$(printf '%s' "$_gt" | tr 'T' ' ')\";"
-            [ -n "$_af" ] && _stmt="$_stmt accept from \"$(printf '%s' "$_af" | tr 'T' ' ')\";"
-            [ -n "$_at" ] && _stmt="$_stmt accept to \"$(printf '%s' "$_at" | tr 'T' ' ')\";"
-            [ -n "$_fr" ] && _stmt="$_stmt from \"$(printf '%s' "$_fr" | tr 'T' ' ')\";"
-            [ -n "$_to" ] && _stmt="$_stmt to \"$(printf '%s' "$_to" | tr 'T' ' ')\";"
+            [ -n "$_gf" ] && _stmt="$_stmt generate from \"$(date_to_bird "$_gf")\";"
+            [ -n "$_gt" ] && _stmt="$_stmt generate to \"$(date_to_bird "$_gt")\";"
+            [ -n "$_af" ] && _stmt="$_stmt accept from \"$(date_to_bird "$_af")\";"
+            [ -n "$_at" ] && _stmt="$_stmt accept to \"$(date_to_bird "$_at")\";"
+            [ -n "$_fr" ] && _stmt="$_stmt from \"$(date_to_bird "$_fr")\";"
+            [ -n "$_to" ] && _stmt="$_stmt to \"$(date_to_bird "$_to")\";"
             [ -n "$_al" ] && _stmt="$_stmt algorithm $(printf '%s' "$_al" | tr '-' ' ');"
             printf '%s };\n' "$_stmt"
         else

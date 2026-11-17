@@ -688,7 +688,7 @@
     </COMMAND>
 
     <COMMAND name="password-generate-from"
-        help="Awal masa berlaku pembangkitan password (YYYY-MM-DD[THH:MM[:SS]])">
+        help="Awal masa berlaku pembangkitan password (YYYY-MM-DD saja)">
         <PARAM name="Password"
             help="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>

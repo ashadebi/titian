@@ -915,7 +915,7 @@
     <COMMAND name="generate-from"
         help="Kunci mulai di-generate pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -933,7 +933,7 @@
     <COMMAND name="generate-to"
         help="Kunci berhenti di-generate pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -951,7 +951,7 @@
     <COMMAND name="accept-from"
         help="Kunci mulai diterima pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -969,7 +969,7 @@
     <COMMAND name="accept-to"
         help="Kunci berhenti diterima pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -987,7 +987,7 @@
     <COMMAND name="from"
         help="Kunci berlaku mulai tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -1005,7 +1005,7 @@
     <COMMAND name="to"
         help="Kunci berlaku sampai tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD atau YYYY-MM-DDTHH:MM[:SS]"
+            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
