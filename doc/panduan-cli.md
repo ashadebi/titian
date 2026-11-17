@@ -369,6 +369,12 @@ exit                        # kembali ke mode configure
 `ip address` langsung live saat dieksekusi; `save` (dari exec) hanya
 menentukan apakah setelan bertahan melewati reboot.
 
+`ip address` bersifat additive: satu interface boleh memegang banyak alamat
+IPv4 sekaligus, tanpa batas jumlah — tiap perintah menambah satu alamat
+(alias), tidak menggantikan yang sudah ada. Hapus satu per satu dengan
+`no ip address <alamat-CIDR>`; interface-nya sendiri dihapus dengan
+`no interface <tipe> <nama>`.
+
 ### 3.2 Alamat point-to-point (PtP)
 
 Titian mendukung PtP gaya MikroTik/PPP: alamat lokal dan peer boleh
@@ -540,6 +546,25 @@ remote 192.0.2.10
 ip address 198.51.100.2/24
 exit
 ```
+
+### Multi-VXLAN (10 segmen, terbukti 17 Nov 2026)
+
+Pola di atas diskalakan ke 10 VXLAN sekaligus: `vxlan101`–`vxlan110`
+(VNI 101–110) + `vlan101`–`vlan110` (VID 101–110, parent `ge3`) +
+`bridge101`–`bridge110` (member `vxlan10x` + `vlan10x`, IP
+`10.99.101.1`–`10.99.110.1/24`), VTEP lokal `10.10.2.3` ↔ remote
+`192.168.91.32` (RB3011, VNI sama, IP `10.99.101.2`–`10.99.110.2/24`
+langsung di interface vxlan — tanpa bridge di sisi RB3011, dan ARP
+statis `10.99.10x.1` → MAC `bridge10x`). Ping overlay 10/10 dua arah
+0% loss; `tcpdump -i vxlan10x` membuktikan trafik lewat segmennya
+sendiri (FDB bridge10x mempelajari MAC vxlan RB3011). Catatan: RB3011
+me-redistribute connected via BGP, jadi `10.99.101–110.0/24` juga
+muncul di tabel BIRD via `10.99.40.2` — tetapi FIB kernel memakai route
+connected (`bridge10x`), jadi tidak membayangi. Jangan pakai
+`import all` ke peer yang me-redistribute connected: prefix underlay
+(mis. `192.168.91.0/24`, jaringan VTEP) yang keimpor lewat tunnel
+membuat loop VXLAN (pernah terjadi saat build 10 peer BGP, 17 Nov
+2026) — pakai `import filter F-RB3011-IN`.
 
 ---
 

@@ -374,6 +374,12 @@ exit                        # back to configure mode
 `ip address` takes effect live when executed; `save` (from exec) only
 determines whether the setting survives a reboot.
 
+`ip address` is additive: one interface may hold many IPv4 addresses at
+once, with no limit — each command adds one address (alias) and never
+replaces the existing ones. Remove them one by one with
+`no ip address <CIDR-address>`; delete the interface itself with
+`no interface <type> <name>`.
+
 ### 3.2 Point-to-point (PtP) addresses
 
 Titian supports MikroTik/PPP-style PtP: local and peer addresses may be
@@ -546,6 +552,25 @@ remote 192.0.2.10
 ip address 198.51.100.2/24
 exit
 ```
+
+### Multi-VXLAN (10 segments, proven 17 Nov 2026)
+
+The pattern above scales to 10 VXLANs at once: `vxlan101`–`vxlan110`
+(VNI 101–110) + `vlan101`–`vlan110` (VID 101–110, parent `ge3`) +
+`bridge101`–`bridge110` (members `vxlan10x` + `vlan10x`, IP
+`10.99.101.1`–`10.99.110.1/24`), local VTEP `10.10.2.3` ↔ remote
+`192.168.91.32` (RB3011, same VNI, IP `10.99.101.2`–`10.99.110.2/24`
+directly on the vxlan interface — no bridge on the RB3011 side, and a
+static ARP `10.99.10x.1` → `bridge10x` MAC). Overlay ping 10/10 both
+directions 0% loss; `tcpdump -i vxlan10x` proves traffic uses its own
+segment (bridge10x FDB learns the RB3011 vxlan MAC). Note: RB3011
+redistributes connected via BGP, so `10.99.101–110.0/24` also appear in
+the BIRD table via `10.99.40.2` — but the kernel FIB uses the connected
+routes (`bridge10x`), so they do not shadow. Never use `import all`
+towards a peer that redistributes connected: an imported underlay
+prefix (e.g. `192.168.91.0/24`, the VTEP network) creates a VXLAN loop
+(happened during the 10-peer BGP build, 17 Nov 2026) — use
+`import filter F-RB3011-IN`.
 
 ---
 

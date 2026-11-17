@@ -111,7 +111,7 @@
         </PARAM>
         <CONFIG pattern="ip address ${ip}" splitter="false"/>
         <ACTION>
-            ${RT_SBIN}/titian-if.sh addr-set "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
+            ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
         </ACTION>
     </COMMAND>
 
