@@ -65,7 +65,7 @@
 #     bird.conf sudah lolos sebelum file diganti).
 # POSIX sh (jalan di dash Debian dan sh FreeBSD).
 set -u
-OS=$(uname -s)
+OS=${TITIAN_OS:-$(uname -s)}
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 BIN=$ROOT/bin
@@ -112,6 +112,9 @@ birdc_sock() {
 }
 
 bird_conf_path() {
+    # Hook uji (pola TITIAN_FRR_CONF): override lokasi live untuk
+    # mock. JANGAN override di mesin live.
+    if [ -n "${TITIAN_BIRD_LIVE_CONF:-}" ]; then echo "$TITIAN_BIRD_LIVE_CONF"; return 0; fi
     if [ "$OS" = "FreeBSD" ]; then echo "/usr/local/etc/bird.conf"; else echo "/etc/bird/bird.conf"; fi
 }
 
@@ -151,7 +154,22 @@ snapshot_files() {
     # save (berstempel) — strip di sini membuatnya kanonis.
     grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$src" > "$d/running-config.tmp" 2>/dev/null && \
         mv "$d/running-config.tmp" "$d/running-config" || return 1
-    [ -f "$conf" ] && cp -f "$conf" "$d/bird.conf"
+    # GUARD (Temuan 4, 17 Nov 2026): JANGAN memotret bird.conf yang
+    # bukan hasil generate titian (tanpa marker #-GLOBAL-# — mis.
+    # file default BSDRP yang kembali sesudah reboot karena
+    # /cfg/local basi). Memotret default meracuni checkpoint
+    # (.last-save berisi default 13 Nov) dan rollback berikutnya
+    # akan memulihkan file default itu. Bila live bukan titian:
+    # lewati (snapshot bird.conf lama di titik dipertahankan) +
+    # peringatan lantang. Rollback memakai bird.conf titik hanya
+    # bila file itu ada (restore_files sudah menjaga).
+    if [ -f "$conf" ]; then
+        if grep -qF '#-GLOBAL-#' "$conf" 2>/dev/null; then
+            cp -f "$conf" "$d/bird.conf"
+        else
+            warn "bird.conf live bukan hasil generate titian (tanpa marker #-GLOBAL-# — kemungkinan file default BSDRP pasca-reboot) — TIDAK dimasukkan ke checkpoint (snapshot lama dipertahankan)"
+        fi
+    fi
     mkdir -p "$d/bird.d" "$d/netstate" || return 1
     for f in "$STATE_ROOT/bird.d/"*.conf; do
         [ -e "$f" ] || continue
@@ -472,6 +490,9 @@ restore_files() {
     if [ -f "$d/bird.conf" ]; then
         cp -f "$d/bird.conf" "$conf" || return 1
         if [ "$OS" = "FreeBSD" ]; then chmod 644 "$conf" 2>/dev/null || true; fi
+        # Cerminkan ke /cfg/local (Temuan 4) agar rollback bertahan
+        # melewati reboot berikutnya — best-effort.
+        sh "$SBIN/titian-bird.sh" mirror-bird-conf "$conf" 2>/dev/null || true
     fi
     if [ -d "$d/bird.d" ]; then
         for f in "$STATE_ROOT/bird.d/"*.conf; do

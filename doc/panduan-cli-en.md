@@ -1677,14 +1677,20 @@ clean BIRD + BGP re-Established. Details:
   is skipped when bird is not running; the "BIRD unknown" label was
   replaced with the correct version label).
 
-**New design 17 Nov 2026 (staging, NOT live-tested):**
+**New design 17 Nov 2026 — live-tested (17 Nov 2026, 17:30–17:59 WIB, PASSED):**
 - The `vtysh` handoff (§9c.2), frr.conf ↔ /cfg persistence + boot
   reconcile (§9c.6), deprecation of the klish config commands (§9c.7),
   and bounded backend calls (`service frr start` 60 s,
   `vtysh -c` 30 s — anti-hang for `router frr enable`+`commit`, see
-  the diagnosis below) — all **staging-only**, proven by the
-  `FRR-HANDOFF-MOCK.sh` mock (65 PASS/0 FAIL), **none of it tested
-  live yet**. Live testing is the next run (plan at the end of §9c.5).
+  the diagnosis below) — deploy 5/5 md5 match, `router frr enable` +
+  commit in 8 seconds with NO hang (vs >4 minutes twice on 16 Nov),
+  enter vtysh + `exit` back to klish, BGP via FRR Established both
+  ways to the RB3011 (PfxRcd 21/23, as-path 65000×3, community
+  65000:100, MED 50), `show frr bgp summary` works, frr.conf
+  live==/cfg `ff589198…` (native), reboot: FRR up + BGP back, then
+  back to the BIRD anchor + BGP 12 Established. Mock
+  `FRR-HANDOFF-MOCK.sh` 65 PASS/0 FAIL (staging) + the live evidence
+  above.
 - The klish `router-id` / `log syslog` / `write-memory` commands
   have been REMOVED (not merely untested) — their equivalents are
   now the same-named vtysh commands inside a `vtysh` session (§9c.7).
@@ -1699,8 +1705,7 @@ bounded at 10 s, but the calls after it were not); (3) `service frr
 onestop`/`stop` on the disable path. Staging fix: every one-shot
 backend call now goes through the `run_bounded` watchdog (vtysh 30 s,
 service start 60 s, stop 30 s); the interactive `vtysh` session is
-NEVER wrapped in a timeout. Live verification of this fix is part of
-the next run.
+NEVER wrapped in a timeout. **Live verification 17 Nov 2026: FRR enable+commit 8 s, FRR disable 2 s, BIRD enable 8 s — the hang did not recur in any commit of this run (nor in the later fixes run, enable ~6–8 s).**
 
 **Limitations that still apply:**
 - FRR BGP/OSPF = vtysh-only (see §9c.4 — in+out route-map mandatory).
@@ -1710,14 +1715,29 @@ the next run.
   route` contains kernel routes** at the next FRR test, not only BGP
   routes.
 
-**Live-test plan for the next run (not yet executed):** full backup
-(BIRD anchor bird.conf `bb21986089d77002e227315a216ea4be`,
-startup-config content-without-stamp
-`99c1a974e464d85b623ed35511dacf6f`) → enter live `vtysh` from klish
-→ configure BGP via vtysh → `write memory` → exit vtysh
-(check the /cfg sync) → `save` → reboot test (check the live frr.conf
-is restored + FRR comes up, BIRD does NOT come up) → back to the
-BIRD anchor + verify BGP Established.
+**Fixes for the 5 live-test findings (17 Nov 2026, ~18:30–19:07 WIB, PASSED live):**
+(1) frr.conf boot race — `frr-boot-reconcile` restarts FRR after
+the restore (only when a snapshot was actually installed + zebra is
+running); proven in the reboot test: FRR came up with the FULL
+config and no manual restart (BGP Established, frr.conf live==/cfg
+`ff589198…`); (2) L2 not restored at boot — the `#-TITIAN-L2-#`
+block (`cloned_interfaces` + ifconfig + bridge members) is written
+to `/etc/rc.conf` + `/cfg/rc.conf` on every `save`/`restore`
+(`sync-rc-l2`); proven in the reboot test: 33 clone interfaces +
+VXLAN 11 UP + overlay ping 0% loss with no manual recovery;
+(3) replay silently stopping on the old FRR intent — the 19-line
+intent block was removed from startup-config (NEW content-without-
+stamp anchor `48bd81b083cf8b466783d9d86812aa6f`, 407 lines; bird.conf
+still `bb21986089d77002e227315a216ea4be`); replay runs fully + `save`
+is safe; (4) `.last-save/bird.conf` checkpoint holding the default
+— `mirror_bird_conf()` mirrors the generated bird.conf to
+`/cfg/local/bird.conf` + a snapshot guard rejects bird.conf without
+the `#-GLOBAL-#` marker; (5) orphaned FRR daemons after disable —
+the stop list now has 14 names + a sweep of `/usr/local/lib/frr/*`;
+proven live: `ps` shows 0 FRR processes after disable (7 orphans
+in the previous run). Mocks after the fixes: `FRR-HANDOFF-MOCK.sh`
+72 PASS/0 FAIL, `BOOT-PERSIST-MOCK.sh` (new) 38 PASS/0 FAIL;
+`verify.py` zero errors (2117 COMMAND).
 
 **References:**
 - FreeBSD port `net/frr10`, official rc script: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in
@@ -1738,7 +1758,7 @@ reboot). Now:
 |---|---|
 | Exiting `vtysh` (§9c.2) | `write memory`, then copy the live frr.conf → `/cfg/titian/frr.conf` (best-effort) |
 | `save` | The same hook via `titian-cfg.sh` (sync, after the startup-config dump lands) |
-| Boot | `titian-cfg.sh restore` installs the `/cfg/titian/frr.conf` snapshot → the live location BEFORE FRR comes up; then `frr-boot-reconcile` aligns `bird_enable`/`frr_enable` in rc.conf from `routing.intent` + stops the wrong daemon if it already came up (closes bug b: boot restoring BIRD despite FRR intent — root cause: `sysrc` only writes tmpfs `/etc/rc.conf`, while the stale `/cfg/rc.conf` (`bird_enable=YES`) is restored at boot and rc starts BIRD; now the flags are mirrored to `/cfg/rc.conf` on every commit + reconciled on every boot) |
+| Boot | `titian-cfg.sh restore` installs the `/cfg/titian/frr.conf` snapshot → the live location; **but FRR has ALREADY come up** (rcorder places `frr` before `titian`) with a minimal config from the empty RAM disk — installing the file alone does not make the daemons use that config. `frr-boot-reconcile` then **restarts FRR** after the restore (only when a snapshot was actually installed + zebra is running) so the restored config is really loaded (Finding 1, live test 17 Nov 2026 — the old claim "restore BEFORE FRR comes up" is WRONG under the current rcorder). If FRR is not running yet at boot, no restart is needed: `apply-all` later starts it with the already-restored file. `frr-boot-reconcile` also aligns `bird_enable`/`frr_enable` in rc.conf from `routing.intent` + stops the wrong daemon if it already came up (closes bug b: boot restoring BIRD despite FRR intent — root cause: `sysrc` only writes tmpfs `/etc/rc.conf`, while the stale `/cfg/rc.conf` (`bird_enable=YES`) is restored at boot and rc starts BIRD; now the flags are mirrored to `/cfg/rc.conf` on every commit + reconciled on every boot) |
 
 Idempotent: running `save`/boot twice gives the same result (the copy
 is skipped when the content is identical). A snapshot in the old klish

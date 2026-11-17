@@ -1666,14 +1666,19 @@ ke BIRD bersih + BGP re-Established. Detail: `~/workspace/titian-live-test-20261
   dilewati bila bird tidak jalan; label "BIRD unknown" diganti
   label versi yang benar).
 
-**Desain baru 17 Nov 2026 (staging, BELUM diuji live):**
+**Desain baru 17 Nov 2026 — SUDAH diuji live (17 Nov 2026, 17:30–17:59 WIB, LOLOS):**
 - Handoff `vtysh` (§9c.2), persistensi frr.conf ↔ /cfg + boot
   reconcile (§9c.6), depresiasi perintah config klish (§9c.7),
   dan batas waktu pemanggilan backend (`service frr start` 60 dtk,
   `vtysh -c` 30 dtk — anti-hang `router frr enable`+`commit`, lihat
-  §9c.5 diagnosis di bawah) — semuanya **staging-only**, dibuktikan
-  mock `FRR-HANDOFF-MOCK.sh` (65 PASS/0 FAIL), **belum satu pun
-  diuji live**. Uji live di run berikut (rencana: §9c.5 akhir).
+  diagnosis di bawah) — deploy 5/5 md5 cocok, `router frr enable` +
+  commit 8 detik TANPA hang (vs >4 menit 2× pada 16 Nov), masuk
+  vtysh + `exit` kembali ke klish, BGP via FRR Established dua arah
+  ke RB3011 (PfxRcd 21/23, as-path 65000×3, community 65000:100,
+  MED 50), `show frr bgp summary` jalan, frr.conf live==/cfg
+  `ff589198…` (native), reboot: FRR naik + BGP kembali, lalu kembali
+  ke anchor BIRD + BGP 12 Established. Mock `FRR-HANDOFF-MOCK.sh`
+  65 PASS/0 FAIL (staging) + bukti live di atas.
 - Perintah `router-id` / `log syslog` / `write-memory` di klish
   SUDAH DIHAPUS (bukan sekadar tidak diuji) — padanannya kini
   perintah vtysh yang sama namanya di dalam sesi `vtysh` (§9c.7).
@@ -1688,7 +1693,7 @@ pemanggilan sesudahnya tidak); (3) `service frr onestop`/`stop` di
 jalur disable. Fix staging: semua pemanggilan backend satu-tembak
 kini lewat watchdog `run_bounded` (vtysh 30 dtk, service start 60
 dtk, stop 30 dtk); sesi interaktif `vtysh` TIDAK PERNAH dibungkus
-timeout. Verifikasi live fix ini bagian dari run berikut.
+timeout. **Verifikasi live 17 Nov 2026: enable+commit FRR 8 detik, disable FRR 2 detik, enable BIRD 8 detik — hang tidak terulang di semua commit run ini (juga di run perbaikan sesudahnya, enable ~6–8 dtk).**
 
 **Batasan yang masih berlaku:**
 - BGP/OSPF FRR = vtysh-only (lihat §9c.4 — route-map in+out wajib).
@@ -1698,14 +1703,29 @@ timeout. Verifikasi live fix ini bagian dari run berikut.
   verifikasi `show ip route` memuat route kernel** saat uji FRR
   berikutnya, bukan cuma route BGP.
 
-**Rencana uji live run berikut (belum dijalankan):** backup penuh
-(anchor BIRD bird.conf `bb21986089d77002e227315a216ea4be`,
-startup-config isi-tanpa-stamp
-`99c1a974e464d85b623ed35511dacf6f`) → masuk `vtysh` live dari klish
-→ konfigurasi BGP via vtysh → `write memory` → keluar vtysh
-(cek sinkronisasi /cfg) → `save` → uji reboot (cek frr.conf live
-pulih + FRR naik, BIRD TIDAK naik) → kembali ke anchor BIRD +
-verifikasi BGP Established.
+**Perbaikan 5 temuan live test (17 Nov 2026, ~18:30–19:07 WIB, LOLOS live):**
+(1) race boot frr.conf — `frr-boot-reconcile` me-restart FRR
+sesudah restore (bila snapshot baru dipasang + zebra jalan);
+terbukti di uji reboot: FRR naik dengan config LENGKAP tanpa
+restart manual (BGP Established, frr.conf live==/cfg `ff589198…`);
+(2) L2 tidak pulih saat boot — blok `#-TITIAN-L2-#`
+(`cloned_interfaces` + ifconfig + member bridge) ditulis ke
+`/etc/rc.conf` + `/cfg/rc.conf` tiap `save`/`restore` (`sync-rc-l2`);
+terbukti di uji reboot: 33 clone iface + VXLAN 11 UP + ping
+overlay 0% loss tanpa pemulihan manual; (3) replay berhenti
+diam-diam di intent FRR lama — blok intent 19 baris dihapus dari
+startup-config (anchor BARU isi-tanpa-stamp
+`48bd81b083cf8b466783d9d86812aa6f`, 407 baris; bird.conf tetap
+`bb21986089d77002e227315a216ea4be`); replay jalan penuh + `save`
+aman; (4) checkpoint `.last-save/bird.conf` berisi default —
+`mirror_bird_conf()` mencerminkan bird.conf hasil generate ke
+`/cfg/local/bird.conf` + guard snapshot menolak bird.conf tanpa
+marker `#-GLOBAL-#`; (5) daemon FRR yatim sesudah disable — daftar
+stop kini 14 nama + sweep `/usr/local/lib/frr/*`; terbukti live:
+`ps` FRR = 0 sesudah disable (run lalu 7 yatim). Mock sesudah
+perbaikan: `FRR-HANDOFF-MOCK.sh` 72 PASS/0 FAIL,
+`BOOT-PERSIST-MOCK.sh` (baru) 38 PASS/0 FAIL; `verify.py` NOL
+error (2117 COMMAND).
 
 **Referensi:**
 - FreeBSD port `net/frr10`, rc script resmi: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in
@@ -1726,7 +1746,7 @@ pasca-reboot). Kini:
 |---|---|
 | Keluar `vtysh` (§9c.2) | `write memory` lalu salin frr.conf live → `/cfg/titian/frr.conf` (best-effort) |
 | `save` | Hook yang sama via `titian-cfg.sh` (sinkron, sesudah dump startup-config mendarat) |
-| Boot | `titian-cfg.sh restore` memasang snapshot `/cfg/titian/frr.conf` → lokasi live SEBELUM FRR naik; lalu `frr-boot-reconcile` menyelaraskan `bird_enable`/`frr_enable` di rc.conf dari `routing.intent` + menghentikan daemon yang salah bila sempat naik (menutup bug b: boot restore BIRD meski intent FRR — akarnya: `sysrc` hanya menulis `/etc/rc.conf` tmpfs, sementara `/cfg/rc.conf` yang basi (`bird_enable=YES`) dipulihkan saat boot dan rc menaikkan BIRD; kini flag dicerminkan ke `/cfg/rc.conf` tiap commit + direkonsiliasi tiap boot) |
+| Boot | `titian-cfg.sh restore` memasang snapshot `/cfg/titian/frr.conf` → lokasi live; **namun FRR sudah naik LEBIH DULU** (rcorder menempatkan `frr` sebelum `titian`) dengan config minimal dari RAM disk kosong — memasang file saja tidak membuat daemon memakai config itu. `frr-boot-reconcile` lalu **me-restart FRR** sesudah restore (hanya bila snapshot memang baru dipasang + zebra jalan) agar config yang dipulihkan benar-benar dipakai (Temuan 1, live test 17 Nov 2026 — klaim lama "restore SEBELUM FRR naik" SALAH pada rcorder saat ini). Bila FRR belum jalan saat boot, restart tidak perlu: `apply-all` nanti men-start-nya dengan file yang sudah dipulihkan. `frr-boot-reconcile` juga menyelaraskan `bird_enable`/`frr_enable` di rc.conf dari `routing.intent` + menghentikan daemon yang salah bila sempat naik (menutup bug b: boot restore BIRD meski intent FRR — akarnya: `sysrc` hanya menulis `/etc/rc.conf` tmpfs, sementara `/cfg/rc.conf` yang basi (`bird_enable=YES`) dipulihkan saat boot dan rc menaikkan BIRD; kini flag dicerminkan ke `/cfg/rc.conf` tiap commit + direkonsiliasi tiap boot) |
 
 Idempotent: `save`/boot dua kali = hasil sama (salinan dilewati
 bila isi identik). Snapshot format intent klish lama (baris `bgp

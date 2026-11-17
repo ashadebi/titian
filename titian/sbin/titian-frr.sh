@@ -37,6 +37,10 @@ DIRTY=/var/run/routing.dirty
 # seperti TITIAN_STATE_ROOT di titian-bird.sh, B22). Default = lokasi
 # live FreeBSD. JANGAN override di mesin live.
 FRR_CONF=${TITIAN_FRR_CONF:-/usr/local/etc/frr/frr.conf}
+# Direktori binary daemon FRR — overridable untuk uji (pola yang sama
+# seperti TITIAN_FRR_CONF). Default = libdir FreeBSD. JANGAN override
+# di mesin live.
+FRR_LIBDIR=${TITIAN_FRR_LIBDIR:-/usr/local/lib/frr}
 VTYSH_TIMEOUT=${TITIAN_FRR_VTYSH_TIMEOUT:-30}
 SERVICE_TIMEOUT=${TITIAN_FRR_SERVICE_TIMEOUT:-60}
 err() { echo "Error: $*" >&2; exit 33; }
@@ -118,12 +122,26 @@ svc() {
 }
 
 stop_frr_daemons() {
-    # Matikan SEMUA daemon FRR (watchfrr + zebra/bgpd/ospfd/ripd/
-    # staticd/mgmtd). `service frr stop` hanya mematikan watchfrr;
-    # keenam daemon lain tertinggal yatim (tes 14) dan zebra yatim
-    # bisa berebut tabel route dengan BIRD. Beri waktu berhenti
-    # bersih, paksa (-9) bila masih ada sesudah 5 detik.
-    _daemons="watchfrr zebra bgpd ospfd ripd staticd mgmtd"
+    # Matikan SEMUA daemon FRR. Daftar lama hanya mengenal 7 nama
+    # (watchfrr/zebra/bgpd/ospfd/ripd/staticd/mgmtd) padahal
+    # `frr_daemons` tak di-set → default rc script menaikkan SEMUA
+    # 13 daemon + watchfrr, sehingga 7 daemon (ospf6d/ripngd/babeld/
+    # bfdd/eigrpd/fabricd/isisd) tertinggal yatim sesudah disable
+    # (Temuan 5, live test 17 Nov 2026). Daftar eksplisit lengkap di
+    # bawah + sweep $FRR_LIBDIR (menangkap daemon tambahan seperti
+    # pathd atau daemon FRR versi berikut — nama di sana selalu
+    # daemon FRR; pkill -x pada nama yang tidak jalan = no-op).
+    # `service frr stop` hanya mematikan watchfrr; zebra yatim bisa
+    # berebut tabel route dengan BIRD. Beri waktu berhenti bersih,
+    # paksa (-9) bila masih ada sesudah 5 detik.
+    _daemons="watchfrr zebra bgpd ospfd ospf6d ripd ripngd staticd mgmtd babeld bfdd eigrpd fabricd isisd"
+    if [ -d "$FRR_LIBDIR" ]; then
+        for _f in "$FRR_LIBDIR"/*; do
+            [ -e "$_f" ] || continue
+            [ -x "$_f" ] || continue
+            _daemons="$_daemons $(basename "$_f")"
+        done
+    fi
     _i=0
     while [ "$_i" -lt 10 ]; do
         _left=""
@@ -210,7 +228,8 @@ do_apply() {
         # walau frr_enable sudah NO (dari commit sebelumnya yang gagal).
         # `onestop` gagal di Linux -> fallback ke `stop`. Lalu matikan
         # SEMUA daemon (stop_frr_daemons) — `service frr stop` hanya
-        # mematikan watchfrr (tes 14: 6 daemon yatim tertinggal).
+        # mematikan watchfrr (Temuan 5: 7 daemon yatim — ospf6d/
+        # ripngd/babeld/bfdd/eigrpd/fabricd/isisd — tertinggal).
         run_bounded 30 svc frr onestop >/dev/null 2>&1 \
             || run_bounded 30 svc frr stop >/dev/null 2>&1 || true
         stop_frr_daemons
@@ -279,7 +298,14 @@ do_sync() {
 
 do_restore() {
     # Pasang snapshot /cfg -> frr.conf live (dipanggil titian-cfg.sh
-    # restore saat boot, SEBELUM FRR naik). Best-effort, exit 0.
+    # restore saat boot). PERHATIAN (Temuan 1, 17 Nov 2026): FRR
+    # sudah naik LEBIH DULU (rcorder `frr` sebelum `titian`) dengan
+    # config minimal — memasang file saja TIDAK membuat daemon
+    # memakai config itu; frr-boot-reconcile me-restart FRR sesudah
+    # restore agar config yang dipulihkan benar-benar dipakai.
+    # Bila snapshot BENAR-BENAR dipasang (file berubah), tandai
+    # dengan flag $STATE_ROOT/.frr-restored untuk reconcile.
+    # Best-effort, exit 0.
     # TOLAK snapshot format intent klish lama (baris `bgp ...` /
     # `ospf ...` / `route-map ...` / `prefix-list ...` /
     # `community-list ...`, atau header "intent klish") — itu BUKAN
@@ -288,6 +314,9 @@ do_restore() {
     # config native (via frr-sync).
     _snap="$CFG_DIR/frr.conf"
     [ -f "$_snap" ] || return 0
+    # Keputusan segar tiap restore: hapus flag lama dulu; hanya
+    # pemasangan snapshot baru yang boleh menyetelnya kembali.
+    rm -f "$STATE_ROOT/.frr-restored" 2>/dev/null || true
     _first=$(grep -v '^#' "$_snap" 2>/dev/null | grep -v '^$' | head -1)
     case "$_first" in
         bgp\ *|ospf\ *|route-map\ *|prefix-list\ *|community-list\ *)
@@ -306,6 +335,9 @@ do_restore() {
     # `write memory` dari vtysh harus bisa menulis file ini: owner
     # frr:frr bila user itu ada (seperti yang dibuat rc script FRR).
     chown frr:frr "$FRR_CONF" 2>/dev/null || true
+    # Tandai pemasangan untuk frr-boot-reconcile (Temuan 1).
+    mkdir -p "$STATE_ROOT" 2>/dev/null || true
+    touch "$STATE_ROOT/.frr-restored" 2>/dev/null || true
     echo "frr: frr.conf live dipulihkan dari $_snap"
     return 0
 }
@@ -318,6 +350,12 @@ do_boot_reconcile() {
     # memblokir FRR — gejala "boot restore BIRD meski intent FRR".
     # Selaraskan rc.conf dari intent + hentikan daemon yang salah bila
     # sempat naik, agar replay + apply-all berjalan. Best-effort.
+    # Flag restore dikonsumsi di sini (Temuan 1): dibaca + dihapus
+    # di awal — apa pun cabang intent-nya — agar keputusan restart
+    # selalu segar dari restore boot ini, bukan flag basi.
+    _restored=0
+    if [ -f "$STATE_ROOT/.frr-restored" ]; then _restored=1; fi
+    rm -f "$STATE_ROOT/.frr-restored" 2>/dev/null || true
     _want=$(intent_val)
     [ "$_want" = "unset" ] && return 0
     _bird_want=$(sed -n 's/^bird //p' "$INTENT" 2>/dev/null | head -1)
@@ -335,6 +373,27 @@ do_boot_reconcile() {
             echo "frr-boot: intent FRR — menghentikan BIRD yang sempat naik saat boot"
             run_bounded 30 svc bird onestop >/dev/null 2>&1 \
                 || run_bounded 30 svc bird stop >/dev/null 2>&1 || true
+        fi
+        # RACE BOOT frr.conf (Temuan 1, 17 Nov 2026): rcorder
+        # menempatkan `frr` SEBELUM `titian` — FRR sudah naik dengan
+        # config minimal (RAM disk kosong) SEBELUM titian-cfg.sh
+        # restore memasang snapshot /cfg; daemon tidak me-reload
+        # file sendiri. Bila snapshot memang baru dipasang (flag
+        # .frr-restored) DAN zebra jalan, restart FRR agar config
+        # yang dipulihkan benar-benar dipakai (workaround yang
+        # teruji live: `service frr restart` → BGP Established
+        # kembali). Bila zebra belum jalan, restart tidak perlu —
+        # apply-all nanti men-start FRR dengan file yang sudah
+        # dipulihkan (tanpa race). Gagal restart = peringatan
+        # lantang, boot tetap jalan.
+        # (Jalan `BEFORE: frr` di rcorder tidak bisa ditempuh dari
+        # staging ini: rc script titian tidak ada di repo ini —
+        # hanya etc/rc.d/firewall + traffic-shape.)
+        if [ "$_restored" = "1" ] && [ -n "$(pgrep -x zebra 2>/dev/null | head -1)" ]; then
+            echo "frr-boot: intent FRR — restart FRR agar frr.conf yang dipulihkan dipakai (race boot, Temuan 1)"
+            run_bounded "$SERVICE_TIMEOUT" svc frr restart >/dev/null 2>&1 \
+                || run_bounded "$SERVICE_TIMEOUT" svc frr onerestart >/dev/null 2>&1 \
+                || echo "Warning: frr-boot: restart FRR gagal — running-config mungkin masih minimal; jalankan 'service frr restart' manual" >&2
         fi
     elif [ "$_bird_want" = "yes" ]; then
         if command -v sysrc >/dev/null 2>&1; then

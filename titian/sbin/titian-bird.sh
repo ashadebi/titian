@@ -23,11 +23,15 @@
 # adalah $TITIAN_STATE_ROOT/bird.conf (scratch); birdc configure
 # dilewati di mode scratch. Lihat conf_path().
 # POSIX sh.
-OS=$(uname -s)
+OS=${TITIAN_OS:-$(uname -s)}
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
+# Lokasi persisten bird.conf BSDRP — overridable untuk uji (pola yang
+# sama seperti TITIAN_FRR_CONF). Default = tempat BSDRP me-restore
+# /usr/local/etc dari /cfg/local saat boot. JANGAN override di mesin live.
+BIRD_PERSIST=${TITIAN_BIRD_PERSIST:-/cfg/local/bird.conf}
 INTENT="$STATE_ROOT/netstate/routing.intent"
 DIRTY=/var/run/routing.dirty
 err() { echo "Error: $*" >&2; exit 33; }
@@ -51,11 +55,49 @@ warn_bird() {
 # 17 Nov: tidak ada export di /opt/titian/etc, rc.conf, rc.d), jadi
 # jalur commit/boot/klish tidak berubah.
 live_conf_path() {
+    # Hook uji (pola TITIAN_FRR_CONF): override lokasi live untuk
+    # mock. JANGAN override di mesin live.
+    if [ -n "${TITIAN_BIRD_LIVE_CONF:-}" ]; then echo "$TITIAN_BIRD_LIVE_CONF"; return 0; fi
     if [ "$OS" = "FreeBSD" ]; then
         echo "/usr/local/etc/bird.conf"
     else
         echo "/etc/bird/bird.conf"
     fi
+}
+
+# mirror_bird_conf [file]: cerminkan bird.conf live -> lokasi
+# persisten BSDRP ($BIRD_PERSIST). Dipanggil setiap kali titian
+# menulis bird.conf live (generate/set-threads) + saat save
+# (titian-cfg.sh copy_all) + saat rollback memulihkan bird.conf.
+# TANPA cermin ini, BSDRP me-restore /usr/local/etc dari /cfg/local
+# saat boot dan live kembali ke file default 13 Nov (Temuan 4,
+# 17 Nov 2026) — lalu boot apply-all gagal tulis seksi (marker
+# #-GLOBAL-# tidak ada di file default) dan checkpoint ikut
+# terkontaminasi. Best-effort, selalu exit 0.
+# GUARD (2 lapis, jangan dilonggarkan):
+#   1. FreeBSD saja + sumber HARUS bird.conf live (bukan scratch —
+#      B22: state scratch TIDAK PERNAH menyentuh live).
+#   2. Sumber HARUS berisi marker titian #-GLOBAL-# — JANGAN PERNAH
+#      menimpa salinan persisten yang baik dengan file default
+#      BSDRP (file default hanya punya marker #-BGP-#/#-ENDBGP-#).
+# Idempotent: isi sama = tidak ada penulisan.
+mirror_bird_conf() {
+    local src=${1:-$(live_conf_path)}
+    [ "$OS" = "FreeBSD" ] || return 0
+    [ "$src" = "$(live_conf_path)" ] || return 0
+    [ -f "$src" ] || return 0
+    grep -qF '#-GLOBAL-#' "$src" 2>/dev/null || return 0
+    if [ ! -d "$(dirname "$BIRD_PERSIST")" ]; then
+        mount /cfg 2>/dev/null || true
+        mkdir -p "$(dirname "$BIRD_PERSIST")" 2>/dev/null || return 0
+    fi
+    [ -d "$(dirname "$BIRD_PERSIST")" ] || return 0
+    if cmp -s "$src" "$BIRD_PERSIST" 2>/dev/null; then return 0; fi
+    _tmp="$BIRD_PERSIST.tmp.$$"
+    cp -f "$src" "$_tmp" 2>/dev/null && mv "$_tmp" "$BIRD_PERSIST" 2>/dev/null \
+        || { rm -f "$_tmp" 2>/dev/null; return 0; }
+    chmod 644 "$BIRD_PERSIST" 2>/dev/null || true
+    return 0
 }
 
 conf_path() {
@@ -402,6 +444,9 @@ do_generate() {
     cp -f "$conf" "$bakdir/bird.conf.bak"
     cat "$tmp" > "$conf" || { rm -f "$tmp"; err "gagal tulis $conf (backup: $bakdir/bird.conf.$ts)"; }
     rm -f "$tmp"
+    # Cerminkan ke /cfg/local (Temuan 4) — best-effort, tidak pernah
+    # menggagalkan generate.
+    mirror_bird_conf "$conf" 2>/dev/null || true
     echo "backup: $bakdir/bird.conf.$ts"
     echo "parse OK: section $section"
     birdc=$(birdc_bin)
@@ -472,6 +517,8 @@ do_set_threads() {
     cp -f "$conf" "$STATE_ROOT/bird-backup/bird.conf.threads-bak" 2>/dev/null || true
     cat "$_tmp" > "$conf" || { rm -f "$_tmp"; err "gagal tulis $conf"; }
     rm -f "$_tmp"
+    # Cerminkan ke /cfg/local (Temuan 4) — best-effort.
+    mirror_bird_conf "$conf" 2>/dev/null || true
     echo "threads $n ditulis to $conf"
     # B22: sama seperti generate — birdc configure HANYA bila target
     # adalah bird.conf live; mode scratch lewati.
@@ -542,6 +589,7 @@ do_show_version() {
 
 case "${1:-}" in
     conf-path) conf_path ;;
+    mirror-bird-conf) mirror_bird_conf "${2:-$(live_conf_path)}" ;;
     detect) detect_variant ;;
     check)     do_check "${2:-}" ;;
     validate-config) validate_config "${2:-}" ;;

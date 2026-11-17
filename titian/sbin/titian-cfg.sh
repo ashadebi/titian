@@ -35,16 +35,25 @@
 # diperbaiki 2026-11-15 (save tertinggal satu versi -> persist latar).
 
 PROG="titian-cfg"
-CFG_MNT="/cfg"
-CFG_DIR="/cfg/titian"
-STATE_DIR="/etc/titian"
+# Jalur persisten/state overridable untuk uji (pola hermetik yang sama
+# seperti TITIAN_STATE_ROOT di titian-bird.sh/titian-frr.sh).
+# Produksi TIDAK PERNAH men-set variabel ini (unset = perilaku lama).
+CFG_DIR=${TITIAN_CFG_DIR:-/cfg/titian}
+CFG_MNT=${TITIAN_CFG_MNT:-$(dirname "$CFG_DIR")}
+STATE_DIR=${TITIAN_STATE_ROOT:-/etc/titian}
+OS=${TITIAN_OS:-$(uname -s)}
+# rc.conf live + lokasi bird.conf live/persisten (FreeBSD) —
+# overridable untuk uji. JANGAN override di mesin live.
+RC_CONF=${TITIAN_RC_CONF:-/etc/rc.conf}
+BIRD_LIVE=${TITIAN_BIRD_LIVE_CONF:-/usr/local/etc/bird.conf}
+BIRD_PERSIST=${TITIAN_BIRD_PERSIST:-/cfg/local/bird.conf}
 
 mount_cfg() {
-    if mount 2>/dev/null | grep -q "[[:space:]]/cfg[[:space:]]"; then
+    if mount 2>/dev/null | grep -q "[[:space:]]$CFG_MNT[[:space:]]"; then
         return 0
     fi
-    mount /cfg 2>/dev/null && return 0
-    echo "Warning: $PROG: failed mount /cfg (config Not persisten reboot)" >&2
+    mount "$CFG_MNT" 2>/dev/null && return 0
+    echo "Warning: $PROG: failed mount $CFG_MNT (config Not persisten reboot)" >&2
     return 1
 }
 
@@ -63,6 +72,124 @@ file_sig() {
         md5sum "$_f" 2>/dev/null | awk '{print $1}' && return 0
     fi
     cksum "$_f" 2>/dev/null | awk '{print $1"-"$2}' || echo ""
+}
+
+# --- persistensi L2 ke rc.conf (Temuan 2a, 17 Nov 2026) ---
+# MASALAH: `cloned_interfaces` TIDAK ADA di rc.conf (baik /etc
+# maupun /cfg) dan /cfg/rc.conf basi (hanya ifconfig bridge0/ixl3/
+# lagg0/xe3) — netif tidak membuat bridge/lo/vlan/lagg saat boot;
+# keanggotaan bridge (member vlan/vxlan) TIDAK TERSIMPAN di mana
+# pun. Replay startup-config adalah jalur utama pemulihan L2, tapi
+# bila replay gagal/terpotong (Temuan 3), L2 hilang total.
+# FUNGSI INI (sync-rc-l2): turunkan blok deklaratif `#-TITIAN-L2-#`
+# dari startup-config (sumber kebenaran kanonis) dan tulis ke
+# /etc/rc.conf (live) + /cfg/rc.conf (persisten — yang di-restore
+# BSDRP saat boot). Blok ini milik titian-cfg.sh; baris di luar
+# blok tidak pernah disentuh (pola yang sama dengan blok
+# #-TITIAN-# milik titian-persist.sh dan #-TITIAN-RENAME-# milik
+# titian-rename.sh).
+# Isi blok:
+#   cloned_interfaces="..." — semua interface clone titian dari
+#     startup-config, urutan kemunculan pertama: bridge, loopback
+#     (kecuali lo0 sistem), vlan, lagg. vxlan TIDAK masuk — sudah
+#     dibangun ulang safety-net titian-vxlan.sh apply-all dari
+#     netstate. ethernet TIDAK masuk — NIC fisik, milik
+#     #-TITIAN-# (netstate).
+#   ifconfig_<iface>="..." (+ _aliasN) — alamat dari startup-config
+#     (urutan apa adanya; pertama = utama, sisanya alias), lalu:
+#     bridge: `addm <member>` per member; vlan: `vlan <VID>
+#     vlandev <parent>`; lagg: `laggproto lacp laggport <p>...`
+#     (lacp SELALU — klish `interface lagg` mengeset laggproto lacp
+#     tanpa syarat, tree/conf-if-lagg-fbsd.xml); semua diakhiri `up`.
+# Dipanggil: tiap save (copy_all) + tiap restore (boot). Idempotent
+# (isi sama = file tidak berubah). FreeBSD saja; Linux = no-op.
+# Best-effort: gagal = diam, bukan fatal (replay tetap jalur utama).
+cmd_sync_rc_l2() {
+    [ "$OS" = "FreeBSD" ] || return 0
+    [ -f "$STATE_DIR/startup-config" ] || return 0
+    _l2tmp=$(mktemp /tmp/titian-rc-l2.XXXXXX) || return 0
+    _l2blk=$(mktemp /tmp/titian-rc-l2-blk.XXXXXX) || { rm -f "$_l2tmp"; return 0; }
+    awk '
+        function flush() {
+            if (cur_type == "") return
+            if (!(cur_name in seen)) {
+                seen[cur_name] = 1
+                cloned = cloned (cloned == "" ? "" : " ") cur_name
+            }
+            params = ""
+            if (cur_type == "bridge") {
+                for (i = 1; i <= nmem; i++) params = params " addm " mem[i]
+            } else if (cur_type == "vlan") {
+                params = " vlan " cur_vid " vlandev " cur_parent
+            } else if (cur_type == "lagg") {
+                params = " laggproto lacp"
+                for (i = 1; i <= nport; i++) params = params " laggport " port[i]
+            }
+            if (naddr >= 1) {
+                val = addr[1] params " up"
+                sub(/^ /, "", val)
+                out_lines[++nout] = "ifconfig_" cur_name "=\"" val "\""
+                for (i = 2; i <= naddr; i++) {
+                    out_lines[++nout] = "ifconfig_" cur_name "_alias" (i - 2) "=\"" addr[i] "\""
+                }
+            } else {
+                val = params " up"
+                sub(/^ /, "", val)
+                out_lines[++nout] = "ifconfig_" cur_name "=\"" val "\""
+            }
+            cur_type = ""; cur_name = ""; cur_vid = ""; cur_parent = ""
+            naddr = 0; nmem = 0; nport = 0
+        }
+        /^interface / {
+            flush()
+            if ($2 == "loopback") {
+                if ($3 == "lo0") next
+                cur_type = "loopback"; cur_name = $3
+            } else if ($2 == "bridge") {
+                cur_type = "bridge"; cur_name = $3
+            } else if ($2 == "vlan") {
+                cur_type = "vlan"; cur_name = "vlan" $3; cur_vid = $3; cur_parent = $4
+            } else if ($2 == "lagg") {
+                cur_type = "lagg"; cur_name = $3
+            }
+            next
+        }
+        !/^ / { flush(); next }
+        {
+            if (cur_type == "") next
+            if ($1 == "ip" && $2 == "address") addr[++naddr] = "inet " $3
+            else if ($1 == "ipv6" && $2 == "address") addr[++naddr] = "inet6 " $3
+            else if ($1 == "member") mem[++nmem] = $2
+            else if ($1 == "laggport") port[++nport] = $2
+        }
+        END {
+            flush()
+            printf "cloned_interfaces=\"%s\"\n", cloned
+            for (i = 1; i <= nout; i++) print out_lines[i]
+        }
+    ' "$STATE_DIR/startup-config" > "$_l2blk" 2>/dev/null || { rm -f "$_l2tmp" "$_l2blk"; return 0; }
+    {
+        echo "#-TITIAN-L2-#"
+        cat "$_l2blk"
+        echo "#-ENDTITIAN-L2-#"
+    } > "$_l2tmp" 2>/dev/null || { rm -f "$_l2tmp" "$_l2blk"; return 0; }
+    rm -f "$_l2blk"
+    for _l2rc in "$RC_CONF" "$(dirname "$CFG_DIR")/rc.conf"; do
+        [ -f "$_l2rc" ] || continue
+        _l2rtmp=$(mktemp /tmp/titian-rc-l2-rc.XXXXXX) || continue
+        awk '/^#-TITIAN-L2-#/{skip=1; next} /^#-ENDTITIAN-L2-#/{skip=0; next} !skip {print}' "$_l2rc" > "$_l2rtmp" 2>/dev/null || { rm -f "$_l2rtmp"; continue; }
+        cat "$_l2tmp" >> "$_l2rtmp" 2>/dev/null || { rm -f "$_l2rtmp"; continue; }
+        if ! sh -n "$_l2rtmp" 2>/dev/null; then
+            echo "Warning: $PROG: rc.conf hasil sync L2 gagal sh -n, tidak ditulis ($_l2rc)" >&2
+            rm -f "$_l2rtmp"; continue
+        fi
+        if cmp -s "$_l2rtmp" "$_l2rc" 2>/dev/null; then rm -f "$_l2rtmp"; continue; fi
+        cp -f "$_l2rc" "$_l2rc.titian-bak" 2>/dev/null || true
+        cat "$_l2rtmp" > "$_l2rc" 2>/dev/null || { echo "Warning: $PROG: gagal tulis $_l2rc" >&2; rm -f "$_l2rtmp"; continue; }
+        rm -f "$_l2rtmp"
+    done
+    rm -f "$_l2tmp"
+    return 0
 }
 
 copy_all() {
@@ -100,6 +227,15 @@ copy_all() {
     if [ -x "$SBIN_DIR/titian-frr.sh" ]; then
         sh "$SBIN_DIR/titian-frr.sh" frr-sync 2>/dev/null || true
     fi
+    # Cermin bird.conf live -> /cfg/local (Temuan 4): titian menulis
+    # bird.conf hanya ke live; tanpa cermin, boot me-restore default
+    # BSDRP dari /cfg/local. Best-effort (mirror sendiri yang
+    # menjaga: FreeBSD saja + marker #-GLOBAL-#).
+    if [ -x "$SBIN_DIR/titian-bird.sh" ]; then
+        sh "$SBIN_DIR/titian-bird.sh" mirror-bird-conf 2>/dev/null || true
+    fi
+    # Sinkronisasi blok L2 rc.conf (Temuan 2a) — best-effort.
+    cmd_sync_rc_l2 2>/dev/null || true
     return 0
 }
 
@@ -189,13 +325,38 @@ cmd_restore() {
         [ -f "$CFG_DIR/$_f" ] && cp -f "$CFG_DIR/$_f" "$STATE_DIR/$_f" 2>/dev/null || true
     done
     # Jembatan persistensi FRR (handoff vtysh, 17 Nov 2026): pasang
-    # snapshot frr.conf /cfg -> lokasi live SEBELUM FRR naik. Best-effort;
+    # snapshot frr.conf /cfg -> lokasi live. PERHATIAN (Temuan 1):
+    # FRR sudah naik LEBIH DULU (rcorder `frr` sebelum `titian`)
+    # dengan config minimal — file yang dipasang baru dipakai
+    # sesudah frr-boot-reconcile me-restart FRR. Best-effort;
     # snapshot format intent klish lama DITOLAK di sana (bukan config
     # FRR native). /etc/titian/frr.conf (intent lama) sengaja TIDAK
     # di-restore lagi.
     if [ -x "$SBIN_DIR/titian-frr.sh" ]; then
         sh "$SBIN_DIR/titian-frr.sh" frr-restore 2>/dev/null || true
     fi
+    # Perbaikan bird.conf live dari salinan persisten (Temuan 4,
+    # jaring pengaman): bila live bukan hasil generate titian
+    # (tanpa marker #-GLOBAL-# — mis. default BSDRP pasca-reboot)
+    # sementara /cfg/local/bird.conf berisi config titian, pulihkan
+    # live dari salinan persisten. Best-effort; tidak pernah
+    # menimpa live yang baik, tidak pernah menyalin default.
+    if [ "$OS" = "FreeBSD" ] && [ -f "$BIRD_PERSIST" ] && [ -f "$BIRD_LIVE" ]; then
+        if grep -qF '#-GLOBAL-#' "$BIRD_PERSIST" 2>/dev/null && ! grep -qF '#-GLOBAL-#' "$BIRD_LIVE" 2>/dev/null; then
+            _btmp="$BIRD_LIVE.tmp.$$"
+            if cp -f "$BIRD_PERSIST" "$_btmp" 2>/dev/null && mv "$_btmp" "$BIRD_LIVE" 2>/dev/null; then
+                chmod 644 "$BIRD_LIVE" 2>/dev/null || true
+                echo "titian config: bird.conf live dipulihkan dari $BIRD_PERSIST (default BSDRP pasca-reboot)"
+            else
+                rm -f "$_btmp" 2>/dev/null || true
+            fi
+        fi
+    fi
+    # Sinkronisasi blok L2 rc.conf (Temuan 2a): /cfg/rc.conf bisa
+    # basi (tanpa blok L2 — boot pertama sesudah deploy fix ini);
+    # turunkan ulang dari startup-config yang baru di-restore ke
+    # /etc/rc.conf + /cfg/rc.conf. Best-effort.
+    cmd_sync_rc_l2 2>/dev/null || true
     echo "titian config at-restore from $CFG_DIR"
     return 0
 }
@@ -205,6 +366,7 @@ case "$1" in
     save-now)  cmd_save_now ;;
     save-wait) cmd_save_wait "${2:-}" ;;
     restore)   cmd_restore ;;
-    *) echo "usage: $PROG <save|save-now|save-wait <sig>|restore>" >&2; exit 2 ;;
+    sync-rc-l2) cmd_sync_rc_l2 ;;
+    *) echo "usage: $PROG <save|save-now|save-wait <sig>|restore|sync-rc-l2>" >&2; exit 2 ;;
 esac
 exit 0
