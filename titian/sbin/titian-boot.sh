@@ -13,6 +13,16 @@ BIN=$ROOT/bin
 if [ -x "$ROOT/sbin/titian-cfg.sh" ]; then
     "$ROOT/sbin/titian-cfg.sh" restore 2>/dev/null || true
 fi
+# FRR/BIRD reconcile (handoff vtysh, 17 Nov 2026): routing.intent adalah
+# sumber kebenaran; /etc/rc.conf yang dipulihkan dari /cfg bisa basi
+# (bird_enable=YES) sehingga rc menaikkan BIRD saat boot, lalu
+# check-exclusion commit memblokir FRR — gejala "boot restore BIRD
+# meski intent FRR". Selaraskan rc.conf dari intent + hentikan daemon
+# yang salah bila sempat naik, SEBELUM replay (replay `router frr
+# enable` juga dicek exclusion). Best-effort, tidak menggagalkan boot.
+if [ -x "$ROOT/sbin/titian-frr.sh" ]; then
+    "$ROOT/sbin/titian-frr.sh" frr-boot-reconcile 2>/dev/null || true
+fi
 if [ ! -x "$BIN/konfd" ] && [ -x /usr/local/bin/konfd ]; then
     BIN=/usr/local/bin
 fi

@@ -1420,17 +1420,26 @@ routing suite replacing BIRD. BIRD and FRR **cannot run together**
 | BGP neighbor, filter, network | Yes — complete via `router bird` (§9b) | No — no neighbor/filter commands in klish |
 | Attributes (local-pref, MED, prepend, community) | Yes — per-neighbor | No — not in klish |
 | Enable/disable + `commit` | Yes | Yes (`router frr enable`) |
-| Basic config (router-id, log) | Yes (`router-id`, via bird.conf) | Yes — directly via `vtysh` + `write memory` |
-| Show status/version | Yes (`show bird`, `show route`) | Yes (`show frr`, `show frr version`) |
+| Enter the native CLI (vtysh) | — | Yes — `vtysh` in the `router frr` view (§9c.2) |
+| Show status/version | Yes (`show bird`, `show route`) | Yes (`show frr`, `show frr version`, `show frr bgp summary`, `show frr ospf neighbor`) |
 
 FRR routing protocol configuration (BGP neighbor, route-map,
 prefix-list, community, local-pref, MED, AS-path prepend) is done
-**directly in `vtysh`** (the `cli` command in Titian enters vtysh),
-not via klish. Native FRR model: config via vtysh applies
-immediately (running) + `write memory` to persist it to
-`/usr/local/etc/frr/frr.conf`. The FRR daemon itself supports all
-those features (route-map, prefix-list, standard/large community,
-local-pref, MED, prepend) — only the path is vtysh, not klish.
+**directly in `vtysh`** (§9c.2), not via klish. Native FRR model:
+config via vtysh applies immediately (running) + `write memory` to
+persist it to `/usr/local/etc/frr/frr.conf`. The FRR daemon itself
+supports all those features (route-map, prefix-list, standard/large
+community, local-pref, MED, prepend) — only the path is vtysh, not
+klish.
+
+> **Design change 17 Nov 2026 (user decision):** the klish FRR
+> config commands (`router-id`, `log syslog`, `write-memory`,
+> `router bgp`, `router ospf`, `route-map`, `ip prefix-list`,
+> `ip community-list`) are **REMOVED**. The full klish coverage
+> program for FRR is cancelled; all config now goes through the
+> `vtysh` handoff. Migration notes are in §9c.7. The old intent file
+> `/etc/titian/frr.conf` is no longer used and must never be installed
+> as the live `frr.conf`.
 
 ### 9c.1 Enable — BIRD must die first (two separate commits)
 
@@ -1501,42 +1510,57 @@ between"), not to be run together. BIRD↔FRR interop is proven at the
 protocol level (BSDRP lab route-reflector + confederation mixing Bird 3
 and FRR 10 as BGP peers) — but that is on **different routers**, not one host.
 
-### 9c.2 Basic config via klish (direct vtysh + write memory)
+### 9c.2 Entering vtysh from klish (handoff)
 
 ```
 configure terminal
 router frr
-router-id 10.99.40.1
-log syslog
-write-memory
+vtysh
+! ... now in the native FRR CLI (vtysh prompt) — configure as usual ...
+exit
+! back in klish (config-frr); the running-config is auto-synced to /cfg
 exit
 end
 ```
 
-| Command | Meaning |
+| Item | Meaning |
 |---|---|
-| `router-id <IPv4>` | FRR router ID (used by OSPF/BGP) — directly via vtysh + `write memory` |
-| `no router-id` | Delete router-id |
-| `log syslog` / `no log syslog` | Log FRR to syslog / turn off |
-| `write-memory` | Write FRR running-config to `/usr/local/etc/frr/frr.conf` (persistent) |
+| `vtysh` in the `router frr` view | Enter the native FRR CLI as a klish child — `exit` in vtysh returns to klish |
+| Requirement | FRR must already be running (`router frr enable` + `commit`); this command needs an interactive session (TTY) — from a pipe/script it fails LOUD (rc=33), it never hangs silently |
+| After exiting | The wrapper runs `write memory`, then copies the live frr.conf to `/cfg/titian/frr.conf` (best-effort, §9c.6) |
+| `save` | Runs the same sync (hook in `titian-cfg.sh`) |
 
-These commands apply **immediately** (they do not wait for `commit`) —
-only enable/disable waits for `commit`.
+Outside klish, the BSDRP shell `cli` command still enters vtysh
+as before. The klish command is named `vtysh`, not `cli` — `cli`
+is already used by the BIRD CLI-socket command in klish
+(conf-bgp.xml), so `cli` inside klish would be ambiguous.
 
 ### 9c.3 Show
 
 ```
 show frr
 show frr version
+show frr bgp summary
+show frr ospf neighbor
+show ip bgp
+show ip bgp summary
+show ip ospf
+show ip ospf neighbor
+show frr route
 ```
 
-`show frr` shows version, intent, `frr_enable` in rc.conf,
+`show frr` shows version, enable intent, `frr_enable` in rc.conf,
 service status, and the `zebra` pid if running. `show frr version`
 shows version + `vtysh show version` output.
+`show frr bgp summary` and `show frr ospf neighbor` are the
+FRR-namespaced counterparts of `show ip bgp summary` and `show ip
+ospf neighbor` (the same `vtysh -c` passthrough). `show frr
+route` shows the FRR/zebra route table (`vtysh show ip route`;
+the plain `show ip route` is the kernel table).
 
 ### 9c.4 BGP via vtysh — example (not klish)
 
-Enter vtysh via the `cli` command in Titian, then configure
+Enter vtysh via the §9c.2 handoff, then configure
 BGP as usual in FRR (eBGP example to RB3011, AS 65001 — exact
 equivalent of the BIRD configuration in §9b.1):
 
@@ -1547,7 +1571,7 @@ equivalent of the BIRD configuration in §9b.1):
 > session Established but 0 prefixes until the route-map was installed.
 
 ```
-! in vtysh (via `cli`)
+! in vtysh (via the §9c.2 handoff)
 configure terminal
 router bgp 65000
  bgp router-id 10.99.40.1
@@ -1577,13 +1601,13 @@ write memory
 ```
 
 BGP FRR is **deliberately vtysh-only by design**: the FRR klish only
-manages enable/disable + router-id + log + write-memory. Adding full
+manages enable/disable + the `vtysh` handoff + show. Adding full
 route-map/policy commands to klish makes no sense — FRR BGP itself is
 already vtysh-only (see §9c.2), and a route-map is a one-off
 per-neighbor configuration, not state that needs klish replay.
 Working pattern: express the enable intent in klish → `commit` →
 daemon comes up → configure BGP (neighbor + route-map) in vtysh →
-`write memory`.
+`write memory` (or exit vtysh / `save` — sync is automatic, §9c.6).
 
 BIRD → FRR attribute equivalents: `local-pref` = `set
 local-preference` (or `bgp default local-preference`),
@@ -1630,7 +1654,7 @@ already fixed, but during the FRR test you **must verify `show ip
 route` contains kernel routes** (default/static), not only BGP
 routes.
 
-### 9c.5 Test status (honest) — updated 15 Nov 2026
+### 9c.5 Test status (honest) — updated 17 Nov 2026
 
 FRR has **run live** on the test machine (test 14, 15 Nov 2026):
 daemon up via klish (`router frr enable` + `commit`), router-id/log/
@@ -1653,15 +1677,47 @@ clean BIRD + BGP re-Established. Details:
   is skipped when bird is not running; the "BIRD unknown" label was
   replaced with the correct version label).
 
+**New design 17 Nov 2026 (staging, NOT live-tested):**
+- The `vtysh` handoff (§9c.2), frr.conf ↔ /cfg persistence + boot
+  reconcile (§9c.6), deprecation of the klish config commands (§9c.7),
+  and bounded backend calls (`service frr start` 60 s,
+  `vtysh -c` 30 s — anti-hang for `router frr enable`+`commit`, see
+  the diagnosis below) — all **staging-only**, proven by the
+  `FRR-HANDOFF-MOCK.sh` mock (65 PASS/0 FAIL), **none of it tested
+  live yet**. Live testing is the next run (plan at the end of §9c.5).
+- The klish `router-id` / `log syslog` / `write-memory` commands
+  have been REMOVED (not merely untested) — their equivalents are
+  now the same-named vtysh commands inside a `vtysh` session (§9c.7).
+
+**Diagnosis of the `router frr enable`+`commit` hang (>4 minutes, 2×, 16 Nov 2026):**
+from the CODE, three unbounded calls on the commit path — (1)
+`service frr start` (waiting on daemons that never come up, e.g.
+because the live frr.conf was missing/stale); (2) `vtysh -c "show
+running-config"` and `vtysh -f` in the old intent reconciliation
+(waiting on an unresponsive mgmtd — the readiness wait loop was
+bounded at 10 s, but the calls after it were not); (3) `service frr
+onestop`/`stop` on the disable path. Staging fix: every one-shot
+backend call now goes through the `run_bounded` watchdog (vtysh 30 s,
+service start 60 s, stop 30 s); the interactive `vtysh` session is
+NEVER wrapped in a timeout. Live verification of this fix is part of
+the next run.
+
 **Limitations that still apply:**
 - FRR BGP/OSPF = vtysh-only (see §9c.4 — in+out route-map mandatory).
-- There is no `show frr bgp summary` command in klish yet — use
-  `vtysh -c "show ip bgp summary"`.
 - FreeBSD quirk (§9c.4): `show ip route` in FRR 9.x–10.1.1 does not
   show the default gateway & kernel static routes (issue #17113) —
   in 10.7.1 it is probably already fixed, **must verify `show ip
   route` contains kernel routes** at the next FRR test, not only BGP
   routes.
+
+**Live-test plan for the next run (not yet executed):** full backup
+(BIRD anchor bird.conf `bb21986089d77002e227315a216ea4be`,
+startup-config content-without-stamp
+`99c1a974e464d85b623ed35511dacf6f`) → enter live `vtysh` from klish
+→ configure BGP via vtysh → `write memory` → exit vtysh
+(check the /cfg sync) → `save` → reboot test (check the live frr.conf
+is restored + FRR comes up, BIRD does NOT come up) → back to the
+BIRD anchor + verify BGP Established.
 
 **References:**
 - FreeBSD port `net/frr10`, official rc script: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in
@@ -1671,6 +1727,47 @@ clean BIRD + BGP re-Established. Details:
 - Official FRR 10.0 docs (BGP): https://docs.frrouting.org/en/stable-10.0/bgp.html
 - Official FRR 10.0 docs (route-map): https://docs.frrouting.org/en/stable-10.0/routemap.html
 - FRR issue #17113 (`show ip route` does not show kernel routes on FreeBSD): https://github.com/FRRouting/frr/issues/17113
+
+### 9c.6 frr.conf ↔ /cfg persistence + boot
+
+`/usr/local/etc/frr/frr.conf` lives on a BSDRP RAM disk (gone after a
+reboot) — it used to never be persisted (bug a: frr.conf lost after
+reboot). Now:
+
+| Moment | What happens |
+|---|---|
+| Exiting `vtysh` (§9c.2) | `write memory`, then copy the live frr.conf → `/cfg/titian/frr.conf` (best-effort) |
+| `save` | The same hook via `titian-cfg.sh` (sync, after the startup-config dump lands) |
+| Boot | `titian-cfg.sh restore` installs the `/cfg/titian/frr.conf` snapshot → the live location BEFORE FRR comes up; then `frr-boot-reconcile` aligns `bird_enable`/`frr_enable` in rc.conf from `routing.intent` + stops the wrong daemon if it already came up (closes bug b: boot restoring BIRD despite FRR intent — root cause: `sysrc` only writes tmpfs `/etc/rc.conf`, while the stale `/cfg/rc.conf` (`bird_enable=YES`) is restored at boot and rc starts BIRD; now the flags are mirrored to `/cfg/rc.conf` on every commit + reconciled on every boot) |
+
+Idempotent: running `save`/boot twice gives the same result (the copy
+is skipped when the content is identical). A snapshot in the old klish
+intent format (lines `bgp ...`/`route-map ...`, header "intent klish")
+is **REJECTED** at restore — it is not native FRR config; installing it
+would make the daemons fail to parse. Such a snapshot is left alone;
+the next `save` overwrites it with native config.
+
+### 9c.7 Migration notes — old klish commands → vtysh
+
+Every command below was REMOVED from klish on 17 Nov 2026. Its vtysh
+equivalent is typed inside a `vtysh` session (§9c.2):
+
+| Old klish command (removed) | vtysh equivalent |
+|---|---|
+| `router frr` → `router-id <IP>` | `configure terminal` → `router-id <IP>` → `end` → `write memory` |
+| `router frr` → `no router-id` | `configure terminal` → `no router-id` → `end` → `write memory` |
+| `router frr` → `log syslog` / `no log syslog` | `configure terminal` → `log syslog` / `no log syslog` → `end` → `write memory` |
+| `router frr` → `write-memory` | `write memory` (in vtysh) — or exit `vtysh` / `save` (automatic sync, §9c.6) |
+| `router bgp <AS>` + `neighbor <IP>` + `remote-as` / `description` / `route-map` / `prefix-list` / `send-community` / `timers` + `network` | `configure terminal` → `router bgp <AS>` → `neighbor <IP> remote-as ...` etc. (full example §9c.4) |
+| `router ospf` + `network ... area ...` / `redistribute ...` | `configure terminal` → `router ospf` → `network ... area ...` / `redistribute ...` |
+| `route-map <NAME> <permit\|deny> <SEQ>` + `match ...` / `set ...` | `route-map <NAME> <permit\|deny> <SEQ>` + `match ...` / `set ...` (example §9c.4) |
+| `ip prefix-list ...` | `ip prefix-list ...` (example §9c.4) |
+| `ip community-list standard <NAME> <VALUE>` | `bgp community-list standard <NAME> permit <VALUE>` (FRR 10.7.1 syntax; the daemons reject `ip community-list`) |
+
+Note: config previously written as klish intent in
+`/etc/titian/frr.conf` is NOT migrated automatically — that file
+is no longer used. Reconfigure once via `vtysh`, then `write memory` /
+exit `vtysh` / `save` to persist it (§9c.6).
 
 ---
 

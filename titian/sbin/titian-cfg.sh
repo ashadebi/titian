@@ -83,13 +83,23 @@ copy_all() {
     fi
     # Intent-intent di /etc (tmpfs) ikut dipersistenkan — semuanya hilang
     # saat reboot bila tidak disalin. Daftar: terminal-length (pager),
-    # ipoe/bgp/frr/bfd/static/rip/ospf/direct/pipe/kernel/device +
+    # ipoe/bgp/bfd/static/rip/ospf/direct/pipe/kernel/device +
     # rpki/radv/babel/bird-global/aggregator/bmp/l3vpn/mrt (Batch 9 —
     # sebelumnya rpki/radv/babel/global hilang saat reboot meski ada
     # di /etc/titian).
-    for _f in terminal-length ipoe.conf bgp.conf frr.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf; do
+    # CATATAN (handoff vtysh, 17 Nov 2026): frr.conf TIDAK ada di daftar
+    # ini lagi. /etc/titian/frr.conf adalah file intent klish LAMA
+    # (format `bgp ...`/`route-map ...`, bukan config FRR native) dan
+    # tidak dipakai lagi. Yang dipersistenkan adalah frr.conf LIVE
+    # (/usr/local/etc/frr/frr.conf) via titian-frr.sh frr-sync di bawah
+    # (write memory dulu bila zebra jalan, lalu salin ke /cfg).
+    for _f in terminal-length ipoe.conf bgp.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf; do
         [ -f "$STATE_DIR/$_f" ] && cp -f "$STATE_DIR/$_f" "$CFG_DIR/$_f" 2>/dev/null || true
     done
+    # Jembatan persistensi FRR (best-effort, tidak pernah menggagalkan save).
+    if [ -x "$SBIN_DIR/titian-frr.sh" ]; then
+        sh "$SBIN_DIR/titian-frr.sh" frr-sync 2>/dev/null || true
+    fi
     return 0
 }
 
@@ -175,9 +185,17 @@ cmd_restore() {
         mkdir -p "$STATE_DIR/netstate" 2>/dev/null
         cp -f "$CFG_DIR/netstate/"* "$STATE_DIR/netstate/" 2>/dev/null || true
     fi
-    for _f in terminal-length ipoe.conf bgp.conf frr.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf; do
+    for _f in terminal-length ipoe.conf bgp.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf; do
         [ -f "$CFG_DIR/$_f" ] && cp -f "$CFG_DIR/$_f" "$STATE_DIR/$_f" 2>/dev/null || true
     done
+    # Jembatan persistensi FRR (handoff vtysh, 17 Nov 2026): pasang
+    # snapshot frr.conf /cfg -> lokasi live SEBELUM FRR naik. Best-effort;
+    # snapshot format intent klish lama DITOLAK di sana (bukan config
+    # FRR native). /etc/titian/frr.conf (intent lama) sengaja TIDAK
+    # di-restore lagi.
+    if [ -x "$SBIN_DIR/titian-frr.sh" ]; then
+        sh "$SBIN_DIR/titian-frr.sh" frr-restore 2>/dev/null || true
+    fi
     echo "titian config at-restore from $CFG_DIR"
     return 0
 }

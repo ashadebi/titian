@@ -1410,17 +1410,25 @@ alternatif pengganti BIRD. BIRD dan FRR **tidak bisa jalan bersamaan**
 | BGP neighbor, filter, network | Ya — lengkap via `router bird` (§9b) | Tidak — tidak ada perintah neighbor/filter di klish |
 | Atribut (local-pref, MED, prepend, community) | Ya — per-neighbor | Tidak — tidak ada di klish |
 | Enable/disable + `commit` | Ya | Ya (`router frr enable`) |
-| Config dasar (router-id, log) | Ya (`router-id`, via bird.conf) | Ya — langsung via `vtysh` + `write memory` |
-| Show status/versi | Ya (`show bird`, `show route`) | Ya (`show frr`, `show frr version`) |
+| Masuk CLI native (vtysh) | — | Ya — `vtysh` di view `router frr` (§9c.2) |
+| Show status/versi | Ya (`show bird`, `show route`) | Ya (`show frr`, `show frr version`, `show frr bgp summary`, `show frr ospf neighbor`) |
 
 Konfigurasi routing protocol FRR (BGP neighbor, route-map,
 prefix-list, community, local-pref, MED, AS-path prepend) dilakukan
-**langsung di `vtysh`** (perintah `cli` di Titian masuk ke vtysh),
-bukan lewat klish. Model native FRR: config via vtysh berlaku
-langsung (running) + `write memory` agar persisten ke
-`/usr/local/etc/frr/frr.conf`. Daemon FRR sendiri mendukung semua
-fitur itu (route-map, prefix-list, community standard/large,
-local-pref, MED, prepend) — hanya saja jalurnya vtysh, bukan klish.
+**langsung di `vtysh`** (§9c.2), bukan lewat klish. Model native FRR:
+config via vtysh berlaku langsung (running) + `write memory` agar
+persisten ke `/usr/local/etc/frr/frr.conf`. Daemon FRR sendiri
+mendukung semua fitur itu (route-map, prefix-list, community
+standard/large, local-pref, MED, prepend) — hanya saja jalurnya
+vtysh, bukan klish.
+
+> **Perubahan desain 17 Nov 2026 (keputusan user):** perintah klish
+> FRR untuk config (`router-id`, `log syslog`, `write-memory`,
+> `router bgp`, `router ospf`, `route-map`, `ip prefix-list`,
+> `ip community-list`) **DIHAPUS**. Program coverage klish penuh
+> untuk FRR dibatalkan; semua config kini lewat handoff `vtysh`.
+> Catatan migrasi ada di §9c.7. File intent lama `/etc/titian/frr.conf`
+> tidak dipakai lagi dan tidak boleh dipasang sebagai `frr.conf` live.
 
 ### 9c.1 Enable — BIRD harus mati dulu (dua commit terpisah)
 
@@ -1492,42 +1500,57 @@ bersamaan. Interop BIRD↔FRR terbukti di level protokol (lab BSDRP
 route-reflector + confederation mencampur Bird 3 dan FRR 10 sebagai
 peer BGP) — tapi itu di **router berbeda**, bukan satu host.
 
-### 9c.2 Config dasar via klish (langsung vtysh + write memory)
+### 9c.2 Masuk vtysh dari klish (handoff)
 
 ```
 configure terminal
 router frr
-router-id 10.99.40.1
-log syslog
-write-memory
+vtysh
+! ... kini di CLI native FRR (prompt vtysh) — konfigurasi seperti biasa ...
+exit
+! kembali ke klish (config-frr); running-config otomatis disinkronkan ke /cfg
 exit
 end
 ```
 
-| Perintah | Arti |
+| Hal | Arti |
 |---|---|
-| `router-id <IPv4>` | Router ID FRR (dipakai OSPF/BGP) — langsung via vtysh + `write memory` |
-| `no router-id` | Hapus router-id |
-| `log syslog` / `no log syslog` | Log FRR ke syslog / matikan |
-| `write-memory` | Tulis running-config FRR ke `/usr/local/etc/frr/frr.conf` (persisten) |
+| `vtysh` di view `router frr` | Masuk CLI native FRR sebagai child klish — `exit` di vtysh kembali ke klish |
+| Syarat | FRR harus sudah jalan (`router frr enable` + `commit`); perintah ini butuh sesi interaktif (TTY) — dari pipe/skrip gagal LOUD (rc=33), bukan hang diam-diam |
+| Sesudah keluar | Wrapper menjalankan `write memory` lalu menyalin frr.conf live ke `/cfg/titian/frr.conf` (best-effort, §9c.6) |
+| `save` | Juga menjalankan sinkronisasi yang sama (hook di `titian-cfg.sh`) |
 
-Perintah ini berlaku **langsung** (tidak menunggu `commit`) —
-hanya enable/disable yang menunggu `commit`.
+Di luar klish, perintah shell BSDRP `cli` tetap masuk ke vtysh
+seperti dulu. Nama perintah klish-nya `vtysh`, bukan `cli` — `cli`
+sudah dipakai perintah socket CLI BIRD di klish (conf-bgp.xml),
+sehingga `cli` di dalam klish akan ambigu.
 
 ### 9c.3 Show
 
 ```
 show frr
 show frr version
+show frr bgp summary
+show frr ospf neighbor
+show ip bgp
+show ip bgp summary
+show ip ospf
+show ip ospf neighbor
+show frr route
 ```
 
-`show frr` menampilkan versi, intent, `frr_enable` di rc.conf,
-status service, dan pid `zebra` bila jalan. `show frr version`
-menampilkan versi + output `vtysh show version`.
+`show frr` menampilkan versi, intent enable, `frr_enable` di
+rc.conf, status service, dan pid `zebra` bila jalan. `show frr
+version` menampilkan versi + output `vtysh show version`.
+`show frr bgp summary` dan `show frr ospf neighbor` adalah
+pasangan namespace-FRR dari `show ip bgp summary` dan `show ip
+ospf neighbor` (passthrough `vtysh -c` yang sama). `show frr
+route` menampilkan tabel route FRR/zebra (`vtysh show ip route`;
+`show ip route` yang biasa adalah tabel kernel).
 
 ### 9c.4 BGP via vtysh — contoh (bukan klish)
 
-Masuk ke vtysh lewat perintah `cli` di Titian, lalu konfigurasi
+Masuk ke vtysh lewat handoff §9c.2, lalu konfigurasi
 BGP seperti biasa di FRR (contoh eBGP ke RB3011, AS 65001 — padanan
 persis konfigurasi BIRD §9b.1):
 
@@ -1538,7 +1561,7 @@ persis konfigurasi BIRD §9b.1):
 > session Established tapi 0 prefix sampai route-map dipasang.
 
 ```
-! di vtysh (lewat `cli`)
+! di vtysh (lewat handoff §9c.2)
 configure terminal
 router bgp 65000
  bgp router-id 10.99.40.1
@@ -1568,12 +1591,13 @@ write memory
 ```
 
 BGP FRR **sengaja vtysh-only by design**: klish FRR hanya mengatur
-enable/disable + router-id + log + write-memory. Menambah perintah
+enable/disable + handoff `vtysh` + show. Menambah perintah
 route-map/policy penuh di klish tidak masuk akal — BGP FRR sendiri
 sudah vtysh-only (lihat §9c.2) dan route-map adalah konfigurasi
 sekali-pakai per-neighbor, bukan state yang perlu di-replay klish.
 Pola kerja: niat enable di klish → `commit` → daemon naik →
-konfigurasi BGP (neighbor + route-map) di vtysh → `write memory`.
+konfigurasi BGP (neighbor + route-map) di vtysh → `write memory`
+(atau keluar vtysh / `save` — sinkronisasi otomatis, §9c.6).
 
 Padanan atribut BIRD → FRR: `local-pref` = `set
 local-preference` (atau `bgp default local-preference`),
@@ -1620,7 +1644,7 @@ diperbaiki, tapi saat uji FRR nanti **wajib verifikasi `show ip
 route` memuat route kernel** (default/static), bukan cuma route
 BGP.
 
-### 9c.5 Status uji (jujur) — diperbarui 15 Nov 2026
+### 9c.5 Status uji (jujur) — diperbarui 17 Nov 2026
 
 FRR **SUDAH jalan live** di mesin test (tes 14, 15 Nov 2026):
 daemon naik via klish (`router frr enable` + `commit`), sub-command
@@ -1642,15 +1666,46 @@ ke BIRD bersih + BGP re-Established. Detail: `~/workspace/titian-live-test-20261
   dilewati bila bird tidak jalan; label "BIRD unknown" diganti
   label versi yang benar).
 
+**Desain baru 17 Nov 2026 (staging, BELUM diuji live):**
+- Handoff `vtysh` (§9c.2), persistensi frr.conf ↔ /cfg + boot
+  reconcile (§9c.6), depresiasi perintah config klish (§9c.7),
+  dan batas waktu pemanggilan backend (`service frr start` 60 dtk,
+  `vtysh -c` 30 dtk — anti-hang `router frr enable`+`commit`, lihat
+  §9c.5 diagnosis di bawah) — semuanya **staging-only**, dibuktikan
+  mock `FRR-HANDOFF-MOCK.sh` (65 PASS/0 FAIL), **belum satu pun
+  diuji live**. Uji live di run berikut (rencana: §9c.5 akhir).
+- Perintah `router-id` / `log syslog` / `write-memory` di klish
+  SUDAH DIHAPUS (bukan sekadar tidak diuji) — padanannya kini
+  perintah vtysh yang sama namanya di dalam sesi `vtysh` (§9c.7).
+
+**Diagnosis hang `router frr enable`+`commit` (>4 menit, 2×, 16 Nov 2026):**
+dari KODE, tiga pemanggilan tanpa batas di jalur commit — (1)
+`service frr start` (menunggu daemon yang tidak naik, mis. karena
+frr.conf live hilang/basi); (2) `vtysh -c "show running-config"` dan
+`vtysh -f` di rekonsiliasi intent lama (menunggu mgmtd yang tidak
+responsif — wait-loop readiness-nya berbatas 10 dtk, tapi
+pemanggilan sesudahnya tidak); (3) `service frr onestop`/`stop` di
+jalur disable. Fix staging: semua pemanggilan backend satu-tembak
+kini lewat watchdog `run_bounded` (vtysh 30 dtk, service start 60
+dtk, stop 30 dtk); sesi interaktif `vtysh` TIDAK PERNAH dibungkus
+timeout. Verifikasi live fix ini bagian dari run berikut.
+
 **Batasan yang masih berlaku:**
 - BGP/OSPF FRR = vtysh-only (lihat §9c.4 — route-map in+out wajib).
-- Belum ada perintah `show frr bgp summary` di klish — pakai
-  `vtysh -c "show ip bgp summary"`.
 - Quirk FreeBSD (§9c.4): `show ip route` FRR 9.x–10.1.1 tidak
   menampilkan default gateway & static route kernel (issue
   #17113) — di 10.7.1 kemungkinan sudah diperbaiki, **wajib
   verifikasi `show ip route` memuat route kernel** saat uji FRR
   berikutnya, bukan cuma route BGP.
+
+**Rencana uji live run berikut (belum dijalankan):** backup penuh
+(anchor BIRD bird.conf `bb21986089d77002e227315a216ea4be`,
+startup-config isi-tanpa-stamp
+`99c1a974e464d85b623ed35511dacf6f`) → masuk `vtysh` live dari klish
+→ konfigurasi BGP via vtysh → `write memory` → keluar vtysh
+(cek sinkronisasi /cfg) → `save` → uji reboot (cek frr.conf live
+pulih + FRR naik, BIRD TIDAK naik) → kembali ke anchor BIRD +
+verifikasi BGP Established.
 
 **Referensi:**
 - FreeBSD port `net/frr10`, rc script resmi: https://raw.githubusercontent.com/freebsd/freebsd-ports/main/net/frr10/files/frr.in
@@ -1660,6 +1715,47 @@ ke BIRD bersih + BGP re-Established. Detail: `~/workspace/titian-live-test-20261
 - Dok resmi FRR 10.0 (BGP): https://docs.frrouting.org/en/stable-10.0/bgp.html
 - Dok resmi FRR 10.0 (route-map): https://docs.frrouting.org/en/stable-10.0/routemap.html
 - Issue FRR #17113 (`show ip route` tidak tampilkan route kernel di FreeBSD): https://github.com/FRRouting/frr/issues/17113
+
+### 9c.6 Persistensi frr.conf ↔ /cfg + boot
+
+`/usr/local/etc/frr/frr.conf` hidup di RAM disk BSDRP (hilang saat
+reboot) — dulu tidak pernah dipersistenkan (bug a: frr.conf hilang
+pasca-reboot). Kini:
+
+| Momen | Yang terjadi |
+|---|---|
+| Keluar `vtysh` (§9c.2) | `write memory` lalu salin frr.conf live → `/cfg/titian/frr.conf` (best-effort) |
+| `save` | Hook yang sama via `titian-cfg.sh` (sinkron, sesudah dump startup-config mendarat) |
+| Boot | `titian-cfg.sh restore` memasang snapshot `/cfg/titian/frr.conf` → lokasi live SEBELUM FRR naik; lalu `frr-boot-reconcile` menyelaraskan `bird_enable`/`frr_enable` di rc.conf dari `routing.intent` + menghentikan daemon yang salah bila sempat naik (menutup bug b: boot restore BIRD meski intent FRR — akarnya: `sysrc` hanya menulis `/etc/rc.conf` tmpfs, sementara `/cfg/rc.conf` yang basi (`bird_enable=YES`) dipulihkan saat boot dan rc menaikkan BIRD; kini flag dicerminkan ke `/cfg/rc.conf` tiap commit + direkonsiliasi tiap boot) |
+
+Idempotent: `save`/boot dua kali = hasil sama (salinan dilewati
+bila isi identik). Snapshot format intent klish lama (baris `bgp
+...`/`route-map ...`, header "intent klish") **DITOLAK** saat
+restore — itu bukan config FRR native; memasangnya akan membuat
+daemon gagal parse. Snapshot begitu dibiarkan; `save` berikutnya
+menimpanya dengan config native.
+
+### 9c.7 Catatan migrasi — perintah klish lama → vtysh
+
+Semua perintah di bawah DIHAPUS dari klish 17 Nov 2026. Padanan
+vtysh-nya diketik di dalam sesi `vtysh` (§9c.2):
+
+| Perintah klish lama (dihapus) | Padanan vtysh |
+|---|---|
+| `router frr` → `router-id <IP>` | `configure terminal` → `router-id <IP>` → `end` → `write memory` |
+| `router frr` → `no router-id` | `configure terminal` → `no router-id` → `end` → `write memory` |
+| `router frr` → `log syslog` / `no log syslog` | `configure terminal` → `log syslog` / `no log syslog` → `end` → `write memory` |
+| `router frr` → `write-memory` | `write memory` (di vtysh) — atau keluar `vtysh` / `save` (sinkronisasi otomatis, §9c.6) |
+| `router bgp <AS>` + `neighbor <IP>` + `remote-as` / `description` / `route-map` / `prefix-list` / `send-community` / `timers` + `network` | `configure terminal` → `router bgp <AS>` → `neighbor <IP> remote-as ...` dst. (contoh lengkap §9c.4) |
+| `router ospf` + `network ... area ...` / `redistribute ...` | `configure terminal` → `router ospf` → `network ... area ...` / `redistribute ...` |
+| `route-map <NAMA> <permit\|deny> <SEQ>` + `match ...` / `set ...` | `route-map <NAMA> <permit\|deny> <SEQ>` + `match ...` / `set ...` (contoh §9c.4) |
+| `ip prefix-list ...` | `ip prefix-list ...` (contoh §9c.4) |
+| `ip community-list standard <NAMA> <NILAI>` | `bgp community-list standard <NAMA> permit <NILAI>` (sintaks FRR 10.7.1; `ip community-list` ditolak daemon) |
+
+Catatan: config yang dulu ditulis sebagai intent klish di
+`/etc/titian/frr.conf` TIDAK dimigrasikan otomatis — file itu
+tidak dipakai lagi. Konfigurasi ulang via `vtysh` sekali, lalu
+`write memory` / keluar `vtysh` / `save` agar persisten (§9c.6).
 
 ---
 

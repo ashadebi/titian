@@ -303,15 +303,6 @@ apply_bgp() {
     fi
 }
 
-apply_frr_config() {
-    # FRR (BGP/OSPF/route-map/prefix-list/community-list): terapkan
-    # intent frr.conf via vtysh + write memory (titian-frr.sh
-    # frr-apply-config). Dilewati bila tidak ada intent / FRR belum
-    # jalan (fungsi itu sendiri yang memutuskan); gagal keras bila
-    # vtysh menolak perintah (commit gagal, intent tetap tersimpan).
-    sh "$FRR_SH" frr-apply-config || exit 33
-}
-
 apply_wireguard() {
     [ -f /var/run/wireguard.dirty ] || return 0
     sh "$WG_SH" apply-all || exit 33
@@ -357,7 +348,6 @@ do_commit() {
     apply_l3vpn || exit 33
     apply_function || exit 33
     apply_bgp || exit 33
-    apply_frr_config || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
     echo "commit: done"
@@ -389,7 +379,6 @@ do_apply_all() {
     apply_l3vpn || exit 33
     apply_function || exit 33
     apply_bgp || exit 33
-    apply_frr_config || exit 33
     apply_wireguard || exit 33
     apply_monitoring || exit 33
     echo "commit apply-all: done"
