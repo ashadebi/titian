@@ -80,7 +80,7 @@ live_conf_path() {
 #   2. Sumber HARUS berisi marker titian #-GLOBAL-# — JANGAN PERNAH
 #      menimpa salinan persisten yang baik dengan file default
 #      BSDRP (file default hanya punya marker #-BGP-#/#-ENDBGP-#).
-# Idempotent: isi sama = tidak ada penulisan.
+# Aman diulang: isi sama = tidak ada penulisan.
 mirror_bird_conf() {
     local src=${1:-$(live_conf_path)}
     [ "$OS" = "FreeBSD" ] || return 0

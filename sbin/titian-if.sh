@@ -116,7 +116,7 @@ addr_add() {
             ifconfig "$iface" inet "$ADDR" netmask 255.255.255.255 alias 2>/dev/null || \
                 ifconfig "$iface" inet "$ADDR" netmask 255.255.255.255 alias || err "gagal set PtP $ADDR peer $peer di $iface"
             # route get TIDAK bisa jadi guard: ia fallback ke default route (exit 0)
-            # meski host route belum ada. Hapus dulu (idempotent) lalu tambah.
+            # meski host route belum ada. Hapus dulu (aman diulang) lalu tambah.
             route delete -host "$peer" >/dev/null 2>&1 || true
             route add -host "$peer" -iface "$iface" >/dev/null 2>&1 || err "gagal tambah route peer $peer di $iface"
         else
@@ -161,7 +161,7 @@ addr_del() {
     if [ -n "$peer" ]; then
         valid_v4 "$peer" || err "peer IPv4 tidak valid: $peer"
         if [ "$OS" = "FreeBSD" ]; then
-            # hapus /32 + host route (idempotent: absen = sukses)
+            # hapus /32 + host route (aman diulang: absen = sukses)
             ifconfig "$iface" inet "$ADDR" -alias >/dev/null 2>&1 || true
             route delete -host "$peer" >/dev/null 2>&1 || true
         else

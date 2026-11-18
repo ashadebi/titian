@@ -13,7 +13,7 @@
 #   2. Salin isi files/ ke checkout BSDRP (9 file baru: port net/titian,
 #      pf.conf, nfacctd, clear-logs, pkglist bird2/bird3, dsb).
 #
-# Idempotent: dijalankan 2x aman — patch yang sudah terpasang di-skip
+# Aman diulang — patch yang sudah terpasang di-skip
 # (dideteksi dari marker net/titian di pkglist.common), file disalin ulang
 # dengan isi yang sama. Keluar 1 bila ada langkah yang gagal.
 #

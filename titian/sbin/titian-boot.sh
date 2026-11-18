@@ -103,7 +103,7 @@ restore_default_route() {
     echo "default route dikembalikan: $_gw (via ${_if:-?})"
 }
 
-# replay startup-config (bila ada) — idempotent (replace semantics)
+# replay startup-config (bila ada) — aman diulang (replace semantics)
 # Perbaikan replay (12 Nov 2026, reboot ke-2/ke-4):
 #  `!` pemisah seksi keluar dari sub-mode KECUALI bridge — sub-mode
 #  bridge TIDAK keluar pada `!`, sehingga `interface` sesudah bridge
@@ -148,7 +148,7 @@ if [ -f "$STATE_ROOT/startup-config" ]; then
 fi
 
 # jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat
-# (best-effort, idempotent, tidak pernah menggagalkan boot). Ini
+# (best-effort, aman diulang, tidak pernah menggagalkan boot). Ini
 # menutup celah bila replay baris view `options` (nested) gagal, dan
 # menerapkan tuning yang tercatat di cermin meski belum sempat `save`.
 if [ -x "$ROOT/sbin/titian-tune.sh" ]; then

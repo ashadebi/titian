@@ -10,7 +10,7 @@
 #    parameter settable (port tetap 4789).
 # Jadi: vni/local/remote/group/dstport diubah lewat hapus + buat ulang
 # dengan parameter baru. Alamat dipulihkan dari netstate <iface>.addr
-# via titian-if.sh (state_add idempotent, tidak duplikat); MTU dari
+# via titian-if.sh (state_add aman diulang, tidak duplikat); MTU dari
 # <iface>.tuning (set langsung, tanpa menyentuh bookkeeping
 # .tuning.prev titian-tune.sh). Recreate = flap singkat. MAC interface
 # TERNYATA STABIL untuk nama yang sama di lab ini (terbukti: hapus+buat
@@ -202,7 +202,7 @@ do_recreate() {
             fi
         fi
     fi
-    # alamat dari .addr (titian-if.sh state_add idempotent)
+    # alamat dari .addr (titian-if.sh state_add aman diulang)
     f="$STATE_DIR/$iface.addr"
     if [ -f "$f" ]; then
         while IFS= read -r line; do

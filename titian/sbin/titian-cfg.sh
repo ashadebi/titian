@@ -101,7 +101,7 @@ file_sig() {
 #     vlandev <parent>`; lagg: `laggproto lacp laggport <p>...`
 #     (lacp SELALU — klish `interface lagg` mengeset laggproto lacp
 #     tanpa syarat, tree/conf-if-lagg-fbsd.xml); semua diakhiri `up`.
-# Dipanggil: tiap save (copy_all) + tiap restore (boot). Idempotent
+# Dipanggil: tiap save (copy_all) + tiap restore (boot). Aman diulang
 # (isi sama = file tidak berubah). FreeBSD saja; Linux = no-op.
 # Best-effort: gagal = diam, bukan fatal (replay tetap jalur utama).
 cmd_sync_rc_l2() {

@@ -214,7 +214,7 @@ tanpa biner `arping` akan gagal bersih dengan pesan, bukan diam);
 
 1. **Utama (kedua OS): replay startup-config saat boot** (model rtcli:
    service titian menjalankan konfd lalu `clish -w configure-view
-   startup-config`). Perintah CLI idempotent (`replace`/`change-or-add`).
+   startup-config`). Perintah CLI aman diulang (`replace`/`change-or-add`).
 2. **Cermin deklaratif (keputusan default yang diminta)**:
    - Debian: `/etc/systemd/network/00-titian-<iface>.network` untuk
      interface yang dibuat titian saja (NIC sistem tidak pernah ditulis;

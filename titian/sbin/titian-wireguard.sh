@@ -258,7 +258,7 @@ cmd_del_iface() {
 
 # --- apply ---
 apply_one() {
-    # $1 = nama iface; buat + konfigurasi dari state. Idempotent.
+    # $1 = nama iface; buat + konfigurasi dari state. Aman diulang.
     # Mekanisme: `wg` tool — subcommand ifconfig wg* (wgkey/wgport)
     # terbukti "bad value" di image ini (tes 13, B1/B2), dan apply
     # lama tidak pernah `up` (B3). `wg set` terbukti jalan live.

@@ -336,7 +336,7 @@ cmd_flush() {
 #   anchor "firewall"                    -> /etc/pf-firewall.conf
 # The traffic-shape anchor lives in the same pf.conf (separate subsystem).
 #
-# Idempotent: full rebuild from the config file on every run. Exit 0 on
+# Safe to re-run: full rebuild from the config file on every run. Exit 0 on
 # success (including disabled / no config). Non-zero with a clear message
 # on bad config or failed parse-check, so a klish commit can fail loudly.
 

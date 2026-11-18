@@ -1748,7 +1748,7 @@ pasca-reboot). Kini:
 | `save` | Hook yang sama via `titian-cfg.sh` (sinkron, sesudah dump startup-config mendarat) |
 | Boot | `titian-cfg.sh restore` memasang snapshot `/cfg/titian/frr.conf` → lokasi live; **namun FRR sudah naik LEBIH DULU** (rcorder menempatkan `frr` sebelum `titian`) dengan config minimal dari RAM disk kosong — memasang file saja tidak membuat daemon memakai config itu. `frr-boot-reconcile` lalu **me-restart FRR** sesudah restore (hanya bila snapshot memang baru dipasang + zebra jalan) agar config yang dipulihkan benar-benar dipakai (Temuan 1, live test 17 Nov 2026 — klaim lama "restore SEBELUM FRR naik" SALAH pada rcorder saat ini). Bila FRR belum jalan saat boot, restart tidak perlu: `apply-all` nanti men-start-nya dengan file yang sudah dipulihkan. `frr-boot-reconcile` juga menyelaraskan `bird_enable`/`frr_enable` di rc.conf dari `routing.intent` + menghentikan daemon yang salah bila sempat naik (menutup bug b: boot restore BIRD meski intent FRR — akarnya: `sysrc` hanya menulis `/etc/rc.conf` tmpfs, sementara `/cfg/rc.conf` yang basi (`bird_enable=YES`) dipulihkan saat boot dan rc menaikkan BIRD; kini flag dicerminkan ke `/cfg/rc.conf` tiap commit + direkonsiliasi tiap boot) |
 
-Idempotent: `save`/boot dua kali = hasil sama (salinan dilewati
+Aman diulang: `save`/boot dua kali = hasil sama (salinan dilewati
 bila isi identik). Snapshot format intent klish lama (baris `bgp
 ...`/`route-map ...`, header "intent klish") **DITOLAK** saat
 restore — itu bukan config FRR native; memasangnya akan membuat

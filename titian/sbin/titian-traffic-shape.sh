@@ -56,7 +56,7 @@ upsert() {
     mark_dirty
 }
 
-# delete lines matching regex; idempotent — tidak gagal bila tidak ada
+# delete lines matching regex; aman diulang — tidak gagal bila tidak ada
 # (agar `no pipe/rule/...` tetap membersihkan entri CONFIG klish meski
 # baris di conf sudah hilang duluan).
 dellines() {
@@ -484,7 +484,7 @@ cmd_del_rule() {
 # The anchor only takes effect if /etc/pf.conf references it:
 #     anchor "traffic-shape"
 # (integration step — see README.md; the apply step warns if missing.)
-# Idempotent: flushes only its own number ranges before re-applying.
+# Safe to re-run: flushes only its own number ranges before re-applying.
 # Exit 0 on success (including disabled / no config). Non-zero with a
 # clear message on bad config, so a klish commit can fail loudly.
 

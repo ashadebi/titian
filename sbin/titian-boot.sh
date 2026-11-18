@@ -52,13 +52,13 @@ if [ "$(uname -s)" = "FreeBSD" ]; then
     kldload if_vxlan 2>/dev/null || true
 fi
 
-# replay startup-config (bila ada) — idempotent (replace semantics)
+# replay startup-config (bila ada) — aman diulang (replace semantics)
 if [ -f "$ROOT/etc/startup-config" ]; then
     "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$ROOT/etc/startup-config" 2>&1 | tee /var/log/titian-replay.log
 fi
 
 # jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat
-# (best-effort, idempotent, tidak pernah menggagalkan boot). Ini
+# (best-effort, aman diulang, tidak pernah menggagalkan boot). Ini
 # menutup celah bila replay baris view `options` (nested) gagal, dan
 # menerapkan tuning yang tercatat di cermin meski belum sempat `save`.
 if [ -x "$ROOT/sbin/titian-tune.sh" ]; then

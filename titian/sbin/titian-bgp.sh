@@ -2415,7 +2415,7 @@ cmd_filter_if() { # filter-if <NAME> <COND> <THEN> [ELSE]
     cond_to_bird "$_c" "$_vl" >/dev/null || exit 33
     stmt_to_bird "$_t" "$_vl" >/dev/null || exit 33
     # B9: APPEND (bukan upsert) — satu filter boleh punya banyak baris if;
-    # baris yang sama persis dideduplikasi agar idempotent.
+    # baris yang sama persis dideduplikasi agar aman diulang.
     _b5_line="filter $_b5_n if $_b5_c then $_b5_t"
     [ -n "$_e" ] && _b5_line="$_b5_line else $_b5_e"
     touch_conf; _tmp="$CONF.tmp.$$"
@@ -3398,7 +3398,7 @@ cmd_generate() {
     chmod 644 "$SECTION" 2>/dev/null || true
     echo "BGP section ditulis: $SECTION"
     # router-id adalah setting GLOBAL BIRD (bukan per-protocol).
-    # Terapkan ke bird.conf di luar section BGP (sed, idempotent).
+    # Terapkan ke bird.conf di luar section BGP (sed, aman diulang).
     if [ -n "$_rid" ]; then
         _conf="/usr/local/etc/bird.conf"
         [ -f "$_conf" ] || _conf="/etc/bird/bird.conf"

@@ -15,7 +15,7 @@
 #       FreeBSD: opsi `mtu` + flag offload (-tso/-lro/rxcsum/...)
 #               di baris ifconfig_<iface> blok #-TITIAN-# rc.conf.
 #     titian-boot.sh menjalankan `titian-tune.sh apply-all` sehabis
-#     replay (best-effort, idempotent) sebagai jaring pengaman bila
+#     replay (best-effort, aman diulang) sebagai jaring pengaman bila
 #     replay baris view `options` (nested) gagal.
 #
 # Semantik `no <param>` (perintah `no mtu`, `no tso`, dsb.):
@@ -468,7 +468,7 @@ speed_set_quiet() {
     ethtool -s "$1" speed "$2" duplex "$3" 2>/dev/null || true
 }
 
-# --- apply ulang (jaring pengaman boot; idempotent) ---
+# --- apply ulang (jaring pengaman boot; aman diulang) ---
 apply_iface() {
     # $1=iface: terapkan semua baris .tuning live (tanpa tulis ulang state)
     local iface=$1 f line a b c

@@ -109,7 +109,7 @@ cmd_interface_add() {
     # eksplisit berlaku apa adanya; `no ipv4` benar-benar mematikan ipv4.
     grep -q '^channel ' "$CONF" 2>/dev/null || \
         printf 'channel ipv4\n' >> "$CONF"
-    # Idempotent: pola yang sama sudah ada -> tidak duplikat.
+    # Aman diulang: pola yang sama sudah ada -> tidak duplikat.
     if grep -q "^interface $(re_esc "$_pat")\$" "$CONF" 2>/dev/null; then
         echo "Direct interface $_pat sudah ada"
         return 0

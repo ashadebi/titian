@@ -1054,7 +1054,7 @@ X    mv "$_tmp" "$SECTION" || die "cannot write $SECTION"
 X    chmod 644 "$SECTION" 2>/dev/null || true
 X    echo "BGP section ditulis: $SECTION"
 X    # router-id adalah setting GLOBAL BIRD (bukan per-protocol).
-X    # Terapkan ke bird.conf di luar section BGP (sed, idempotent).
+X    # Terapkan ke bird.conf di luar section BGP (sed, aman diulang).
 X    if [ -n "$_rid" ]; then
 X        _conf="/usr/local/etc/bird.conf"
 X        [ -f "$_conf" ] || _conf="/etc/bird/bird.conf"
@@ -1644,7 +1644,7 @@ Xif [ "$(uname -s)" = "FreeBSD" ]; then
 X    kldload if_vxlan 2>/dev/null || true
 Xfi
 X
-X# replay startup-config (bila ada) — idempotent (replace semantics)
+X# replay startup-config (bila ada) — aman diulang (replace semantics)
 X# Perbaikan replay (12 Nov 2026, reboot ke-2/ke-4):
 X#  `!` pemisah seksi keluar dari sub-mode KECUALI bridge — sub-mode
 X#  bridge TIDAK keluar pada `!`, sehingga `interface` sesudah bridge
@@ -1673,7 +1673,7 @@ X    rm -f "$_replay_tmp" 2>/dev/null || true
 Xfi
 X
 X# jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat
-X# (best-effort, idempotent, tidak pernah menggagalkan boot). Ini
+X# (best-effort, aman diulang, tidak pernah menggagalkan boot). Ini
 X# menutup celah bila replay baris view `options` (nested) gagal, dan
 X# menerapkan tuning yang tercatat di cermin meski belum sempat `save`.
 Xif [ -x "$ROOT/sbin/titian-tune.sh" ]; then
@@ -3917,7 +3917,7 @@ X#   nat-anchor "nat" + rdr-anchor "nat"  -> /etc/pf-nat.conf
 X#   anchor "firewall"                    -> /etc/pf-firewall.conf
 X# The traffic-shape anchor lives in the same pf.conf (separate subsystem).
 X#
-X# Idempotent: full rebuild from the config file on every run. Exit 0 on
+X# Safe to re-run: full rebuild from the config file on every run. Exit 0 on
 X# success (including disabled / no config). Non-zero with a clear message
 X# on bad config or failed parse-check, so a klish commit can fail loudly.
 X
@@ -4333,7 +4333,7 @@ X            ifconfig "$iface" inet "$ADDR" -alias >/dev/null 2>&1
 X            ifconfig "$iface" inet "$ADDR" netmask 255.255.255.255 alias 2>/dev/null || \
 X                ifconfig "$iface" inet "$ADDR" netmask 255.255.255.255 alias || err "gagal set PtP $ADDR peer $peer di $iface"
 X            # route get TIDAK bisa jadi guard: ia fallback ke default route (exit 0)
-X            # meski host route belum ada. Hapus dulu (idempotent) lalu tambah.
+X            # meski host route belum ada. Hapus dulu (aman diulang) lalu tambah.
 X            route delete -host "$peer" >/dev/null 2>&1 || true
 X            route add -host "$peer" -iface "$iface" >/dev/null 2>&1 || err "gagal tambah route peer $peer di $iface"
 X        else
@@ -4378,7 +4378,7 @@ X    valid_v4 "$ADDR" || err "alamat IPv4 tidak valid: $cidr"
 X    if [ -n "$peer" ]; then
 X        valid_v4 "$peer" || err "peer IPv4 tidak valid: $peer"
 X        if [ "$OS" = "FreeBSD" ]; then
-X            # hapus /32 + host route (idempotent: absen = sukses)
+X            # hapus /32 + host route (aman diulang: absen = sukses)
 X            ifconfig "$iface" inet "$ADDR" -alias >/dev/null 2>&1 || true
 X            route delete -host "$peer" >/dev/null 2>&1 || true
 X        else
@@ -6886,7 +6886,7 @@ X    mv "$_tmp" "$CONF" || die "cannot write $CONF"
 X    mark_dirty
 X}
 X
-X# delete lines matching regex; idempotent — tidak gagal bila tidak ada
+X# delete lines matching regex; aman diulang — tidak gagal bila tidak ada
 X# (agar `no pipe/rule/...` tetap membersihkan entri CONFIG klish meski
 X# baris di conf sudah hilang duluan).
 Xdellines() {
@@ -7314,7 +7314,7 @@ X# Rules divert traffic via pf anchor "traffic-shape" (dnpipe/dnqueue).
 X# The anchor only takes effect if /etc/pf.conf references it:
 X#     anchor "traffic-shape"
 X# (integration step — see README.md; the apply step warns if missing.)
-X# Idempotent: flushes only its own number ranges before re-applying.
+X# Safe to re-run: flushes only its own number ranges before re-applying.
 X# Exit 0 on success (including disabled / no config). Non-zero with a
 X# clear message on bad config, so a klish commit can fail loudly.
 X
@@ -7857,7 +7857,7 @@ X#               replay + apply-all di titian-boot.sh yang membawanya).
 X#       FreeBSD: opsi `mtu` + flag offload (-tso/-lro/rxcsum/...)
 X#               di baris ifconfig_<iface> blok #-TITIAN-# rc.conf.
 X#     titian-boot.sh menjalankan `titian-tune.sh apply-all` sehabis
-X#     replay (best-effort, idempotent) sebagai jaring pengaman bila
+X#     replay (best-effort, aman diulang) sebagai jaring pengaman bila
 X#     replay baris view `options` (nested) gagal.
 X#
 X# Semantik `no <param>` (perintah `no mtu`, `no tso`, dsb.):
@@ -8314,7 +8314,7 @@ X    command -v ethtool >/dev/null 2>&1 || return 0
 X    ethtool -s "$1" speed "$2" duplex "$3" 2>/dev/null || true
 X}
 X
-X# --- apply ulang (jaring pengaman boot; idempotent) ---
+X# --- apply ulang (jaring pengaman boot; aman diulang) ---
 Xapply_iface() {
 X    # $1=iface: terapkan semua baris .tuning live (tanpa tulis ulang state)
 X    local iface=$1 f line a b c
@@ -8476,7 +8476,7 @@ X#  - FreeBSD: "-vxlanlocal" ditolak ("bad value"); vxlanport bukan
 X#    parameter settable (port tetap 4789).
 X# Jadi: vni/local/remote/group/dstport diubah lewat hapus + buat ulang
 X# dengan parameter baru. Alamat dipulihkan dari netstate <iface>.addr
-X# via titian-if.sh (state_add idempotent, tidak duplikat); MTU dari
+X# via titian-if.sh (state_add aman diulang, tidak duplikat); MTU dari
 X# <iface>.tuning (set langsung, tanpa menyentuh bookkeeping
 X# .tuning.prev titian-tune.sh). Recreate = flap singkat. MAC interface
 X# TERNYATA STABIL untuk nama yang sama di lab ini (terbukti: hapus+buat
@@ -8672,7 +8672,7 @@ X                ip link set dev "$iface" mtu "$mtu" 2>/dev/null || true
 X            fi
 X        fi
 X    fi
-X    # alamat dari .addr (titian-if.sh state_add idempotent)
+X    # alamat dari .addr (titian-if.sh state_add aman diulang)
 X    f="$STATE_DIR/$iface.addr"
 X    if [ -f "$f" ]; then
 X        while IFS= read -r line; do
@@ -9110,7 +9110,7 @@ X}
 X
 X# --- apply ---
 Xapply_one() {
-X    # $1 = nama iface; buat + konfigurasi dari state. Idempotent.
+X    # $1 = nama iface; buat + konfigurasi dari state. Aman diulang.
 X    _n="$1"; _f=$(state_file "$_n")
 X    [ -f "$_f" ] || return 0
 X    _en=$(sed -n 's/^enable //p' "$_f" | head -1)

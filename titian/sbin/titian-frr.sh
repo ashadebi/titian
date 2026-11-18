@@ -270,7 +270,7 @@ _sync_persist() {
     # Best-effort, selalu exit 0: flush running-config FRR ke disk
     # (bila zebra jalan) lalu salin frr.conf live -> snapshot /cfg.
     # Dipanggil: sesudah keluar vtysh handoff + saat `save`
-    # (titian-cfg.sh copy_all). Idempotent: isi sama = hasil sama
+    # (titian-cfg.sh copy_all). Aman diulang: isi sama = hasil sama
     # (cmp: tidak ada penulisan bila identik).
     _zpid=$(pgrep -x zebra 2>/dev/null | head -1)
     if [ -n "$_zpid" ] && have_vtysh; then

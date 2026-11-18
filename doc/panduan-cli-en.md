@@ -1760,7 +1760,7 @@ reboot). Now:
 | `save` | The same hook via `titian-cfg.sh` (sync, after the startup-config dump lands) |
 | Boot | `titian-cfg.sh restore` installs the `/cfg/titian/frr.conf` snapshot → the live location; **but FRR has ALREADY come up** (rcorder places `frr` before `titian`) with a minimal config from the empty RAM disk — installing the file alone does not make the daemons use that config. `frr-boot-reconcile` then **restarts FRR** after the restore (only when a snapshot was actually installed + zebra is running) so the restored config is really loaded (Finding 1, live test 17 Nov 2026 — the old claim "restore BEFORE FRR comes up" is WRONG under the current rcorder). If FRR is not running yet at boot, no restart is needed: `apply-all` later starts it with the already-restored file. `frr-boot-reconcile` also aligns `bird_enable`/`frr_enable` in rc.conf from `routing.intent` + stops the wrong daemon if it already came up (closes bug b: boot restoring BIRD despite FRR intent — root cause: `sysrc` only writes tmpfs `/etc/rc.conf`, while the stale `/cfg/rc.conf` (`bird_enable=YES`) is restored at boot and rc starts BIRD; now the flags are mirrored to `/cfg/rc.conf` on every commit + reconciled on every boot) |
 
-Idempotent: running `save`/boot twice gives the same result (the copy
+Safe to re-run: running `save`/boot twice gives the same result (the copy
 is skipped when the content is identical). A snapshot in the old klish
 intent format (lines `bgp ...`/`route-map ...`, header "intent klish")
 is **REJECTED** at restore — it is not native FRR config; installing it

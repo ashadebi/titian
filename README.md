@@ -30,7 +30,7 @@ chmod +x bsdrp-titian/apply.sh   # bit executable tidak terbawa push GitHub;
 # 4. Build image seperti biasa (lihat docs/INSTALL.md)
 ```
 
-`apply.sh` idempotent — dijalankan 2x aman (patch yang sudah terpasang
+`apply.sh` aman diulang (patch yang sudah terpasang
 di-skip, file disalin ulang dengan isi yang sama). Setelah apply,
 `git status` di checkout BSDRP menunjukkan 21 entri (12 modified +
 9 untracked) — sama persis dengan keadaan build ke-10.

@@ -1502,7 +1502,7 @@ cmd_if() { # function-if <NAMA> <COND> <THEN> [ELSE]
     cond_to_bird "$_c" "$_vl" >/dev/null || exit 33
     stmt_to_bird "$_t" "$_vl" >/dev/null || exit 33
     # B9: APPEND (bukan upsert) — satu fungsi boleh punya banyak baris if;
-    # baris yang sama persis dideduplikasi agar idempotent (sama seperti
+    # baris yang sama persis dideduplikasi agar aman diulang (sama seperti
     # filter-if di titian-bgp.sh).
     _b5_line="function $_b5_n if $_b5_c then $_b5_t"
     [ -n "$_e" ] && _b5_line="$_b5_line else $_b5_e"

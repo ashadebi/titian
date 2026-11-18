@@ -513,7 +513,7 @@ Sisa sesudah BGP: PtP live em0↔MikroTik (sintaks `peer` §3.3).
   SELESAI diimplementasi di source 4 Nov siang
   (`sbin/titian-filter.sh` + `filter attach/detach/show` di
   `tree/bird.xml`; test lokal 24/24 lulus: edit fragmen single-line
-  + multi-line, validasi filter/protokol, no-op idempotent, restore
+  + multi-line, validasi filter/protokol, no-op (aman diulang), restore
   saat check gagal, tolak filter inline). Uji live di guest lab
   4 Nov sore — LULUS (paket 0.2.0, §5.3): `filter show` baseline
   (import all/export none) → `community export add 65000:100` →
