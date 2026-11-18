@@ -510,6 +510,25 @@ cmd_apply() {
     pfctl -a firewall -f "$FW_FILE" 2>/dev/null \
         || die "pfctl failed to load firewall anchor"
 
+    # --- load main ruleset so the anchors are evaluated (Tes 12 retest) -----
+    # `pfctl -e` alone activates pf with an EMPTY main ruleset — the
+    # firewall/nat anchors above are loaded but never referenced, so no
+    # rule is ever evaluated (Tes 12 retest 18 Nov 2026: `pfctl -sr`
+    # EMPTY, filter counter 0, fetch RB3011->mesin tetap 200 padahal
+    # `commit: firewall enabled + applied`). $PF_CONF must reference
+    # anchor "firewall" + nat-anchor "nat" (warned above when absent);
+    # loading it here makes the anchors live. Parse-check first so a
+    # bad main ruleset never kills the running pf; on failure warn and
+    # continue (anchors stay loaded — fix $PF_CONF, then re-apply).
+    if [ -f "$PF_CONF" ]; then
+        if pfctl -n -f "$PF_CONF" 2>/dev/null; then
+            pfctl -f "$PF_CONF" 2>/dev/null \
+                || warn "pfctl -f $PF_CONF failed — anchors loaded but main ruleset not active"
+        else
+            warn "$PF_CONF FAILED parse-check — anchors loaded but main ruleset not active (fix $PF_CONF, then re-apply)"
+        fi
+    fi
+
     # --- enable pf if it is not running -------------------------------------
     if ! pfctl -s Running >/dev/null 2>&1; then
         pfctl -e 2>/dev/null || warn "pfctl -e failed (pf not running — check pf_enable)"

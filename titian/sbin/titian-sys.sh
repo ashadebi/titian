@@ -167,9 +167,21 @@ case "${1:-}" in
         }
         _port=$(_val Port 22)
         echo "SSH service:"
-        if command -v pgrep >/dev/null 2>&1; then
-            _pid=$(pgrep -x sshd 2>/dev/null | head -1)
-        else
+        # pgrep -x TIDAK andal untuk listener sshd di image ini (flaky:
+        # kadang tidak menemukan proses yang jalan — Tes 16 retest
+        # 18 Nov 2026: `pgrep -x sshd` rc=1 padahal sshd jalan, sementara
+        # pgrep normal untuk konfd/bird/sh dan `pgrep -a sshd` selalu
+        # menemukan). Pakai pidfile + kill -0 (kanonik FreeBSD),
+        # fallback pgrep -a, terakhir ps.
+        _pid=""
+        if [ -f /var/run/sshd.pid ]; then
+            _pf=$(cat /var/run/sshd.pid 2>/dev/null | tr -d ' \t\n')
+            case "$_pf" in *[!0-9]*|"") ;; *) kill -0 "$_pf" 2>/dev/null && _pid="$_pf" ;; esac
+        fi
+        if [ -z "$_pid" ] && command -v pgrep >/dev/null 2>&1; then
+            _pid=$(pgrep -a sshd 2>/dev/null | head -1)
+        fi
+        if [ -z "$_pid" ]; then
             _pid=$(ps -ax 2>/dev/null | awk '$5=="sshd" || $NF=="sshd" {print $1; exit}')
         fi
         if [ -n "$_pid" ]; then echo "  sshd: running (pid $_pid)"; else echo "  sshd: not running"; fi
@@ -178,7 +190,10 @@ case "${1:-}" in
         echo "  UseDNS: $(_val UseDNS no)"
         if [ "$OS" = "FreeBSD" ]; then
             if command -v sockstat >/dev/null 2>&1; then
-                _ls=$(sockstat -l 2>/dev/null | awk -v p=":$_port" '$1=="sshd" && $6 ~ p"$" {print $6}' | sort -u | tr '\n' ' ')
+                # sockstat: $1=USER $2=COMMAND $3=PID $4=FD $5=PROTO $6=LOCAL.
+                # (Dulu $1=="sshd" — tidak pernah cocok karena $1 adalah
+                # user "root"; baris Listen tidak pernah tercetak.)
+                _ls=$(sockstat -l 2>/dev/null | awk -v p=":$_port" '$2=="sshd" && $6 ~ p"$" {print $6}' | sort -u | tr '\n' ' ')
                 [ -n "$_ls" ] && echo "  Listen: $_ls"
             fi
         else
