@@ -4,7 +4,7 @@
 # beberapa titik, melihat daftarnya, lalu memilih mau balik ke titik
 # yang mana. Bukan "undo satu langkah".
 #
-# Isi satu checkpoint (di /opt/titian/etc/checkpoints/<nama>/):
+# Isi satu checkpoint (di /etc/titian/checkpoints/<nama>/):
 #   running-config  — dump running-config saat titik dibuat, TANPA
 #                     baris stempel (! version / ! last commit).
 #                     Alasan: stempel adalah metadata save, bukan
@@ -65,17 +65,29 @@
 #     bird.conf sudah lolos sebelum file diganti).
 # POSIX sh (jalan di dash Debian dan sh FreeBSD).
 set -u
-OS=$(uname -s)
+OS=${TITIAN_OS:-$(uname -s)}
 ROOT=${TITIAN_ROOT:-/opt/titian}
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in list) titian_page_begin ;; esac
+
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 BIN=$ROOT/bin
 if [ ! -x "$BIN/clish" ] && [ -x /usr/local/bin/clish ]; then BIN=/usr/local/bin; fi
 SBIN=${RT_SBIN:-$ROOT/sbin}
-STATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
-CKPT_DIR=$ROOT/etc/checkpoints
+STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
+CKPT_DIR=$STATE_ROOT/checkpoints
 SOCKFILE=/tmp/konfd.socket
 
 err() { echo "Error: $*" >&2; exit 33; }
-warn() { echo "Warning(checkpoint): $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(checkpoint):\033[0m %s\n' "$*" >&2
+    else echo "Warning(checkpoint): $*" >&2; fi
+}
 
 valid_name() {
     # $1=nama -> 0 bila valid: [A-Za-z0-9][A-Za-z0-9_-]*, maks 64
@@ -99,7 +111,18 @@ birdc_bin() {
     command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
         { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
 }
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
 bird_conf_path() {
+    # Hook uji (pola TITIAN_FRR_CONF): override lokasi live untuk
+    # mock. JANGAN override di mesin live.
+    if [ -n "${TITIAN_BIRD_LIVE_CONF:-}" ]; then echo "$TITIAN_BIRD_LIVE_CONF"; return 0; fi
     if [ "$OS" = "FreeBSD" ]; then echo "/usr/local/etc/bird.conf"; else echo "/etc/bird/bird.conf"; fi
 }
 
@@ -111,8 +134,27 @@ dump_running() {
     cmd=$(mktemp /tmp/titian-ckpt-cmd.XXXXXX) || { rm -f "$tmp"; return 1; }
     printf 'show running-config\n' > "$cmd"
     if ! "$BIN/clish" -x "$ROOT/etc/clish-en" -w enable-view "$cmd" > "$tmp" 2>&1; then
-        warn "batch clish dump gagal"
-        rm -f "$tmp" "$cmd"; return 1
+        rm -f "$tmp" "$cmd"
+        # FALLBACK (akar bug checkpoint pra-reset, 21 Nov 2026): batch
+        # clish gagal bila dump_running dipanggil dari DALAM sesi klish
+        # (factory-reset confirm / checkpoint save via klish) — klish
+        # luar memegang koneksi konfd (/tmp/konfd.socket) eksklusif,
+        # batch clish di dalam tidak bisa terhubung ("konfd tidak
+        # terjangkau?") sehingga checkpoint TIDAK PERNAH dibuat dan
+        # wipe menghapus semuanya. Fallback: pakai startup-config
+        # (config terakhir yang di-save/di-commit). Untuk pra-reset ini
+        # SAMA dengan running-config (anchor sudah commit+save).
+        # Peringatan lantang agar transparan: perubahan yang di-commit
+        # tapi BELUM di-save tidak ikut.
+        warn "batch clish dump gagal (dipanggil dari dalam sesi klish — konfd dipegang sesi luar); fallback ke startup-config (config terakhir yang di-save)"
+        if [ -s "$STATE_ROOT/startup-config" ]; then
+            grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$STATE_ROOT/startup-config" | \
+                awk '{lines[NR]=$0} END {last=NR; while (last>0 && lines[last]=="") last--; for (i=1;i<=last;i++) print lines[i]}' > "$1"
+            [ -s "$1" ] || return 1
+            grep -q '^end$' "$1" || return 1
+            return 0
+        fi
+        return 1
     fi
     rm -f "$cmd"
     # buang banner sesi + baris prompt-echo; sisakan dump mulai
@@ -139,9 +181,24 @@ snapshot_files() {
     # save (berstempel) — strip di sini membuatnya kanonis.
     grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$src" > "$d/running-config.tmp" 2>/dev/null && \
         mv "$d/running-config.tmp" "$d/running-config" || return 1
-    [ -f "$conf" ] && cp -f "$conf" "$d/bird.conf"
+    # GUARD (Temuan 4, 17 Nov 2026): JANGAN memotret bird.conf yang
+    # bukan hasil generate titian (tanpa marker #-GLOBAL-# — mis.
+    # file default BSDRP yang kembali sesudah reboot karena
+    # /cfg/local basi). Memotret default meracuni checkpoint
+    # (.last-save berisi default 13 Nov) dan rollback berikutnya
+    # akan memulihkan file default itu. Bila live bukan titian:
+    # lewati (snapshot bird.conf lama di titik dipertahankan) +
+    # peringatan lantang. Rollback memakai bird.conf titik hanya
+    # bila file itu ada (restore_files sudah menjaga).
+    if [ -f "$conf" ]; then
+        if grep -qF '#-GLOBAL-#' "$conf" 2>/dev/null; then
+            cp -f "$conf" "$d/bird.conf"
+        else
+            warn "bird.conf live bukan hasil generate titian (tanpa marker #-GLOBAL-# — kemungkinan file default BSDRP pasca-reboot) — TIDAK dimasukkan ke checkpoint (snapshot lama dipertahankan)"
+        fi
+    fi
     mkdir -p "$d/bird.d" "$d/netstate" || return 1
-    for f in "$ROOT/etc/bird.d/"*.conf; do
+    for f in "$STATE_ROOT/bird.d/"*.conf; do
         [ -e "$f" ] || continue
         case "$f" in *.cli-bak|*.pkgsave) continue ;; esac
         cp -f "$f" "$d/bird.d/" 2>/dev/null || true
@@ -152,8 +209,8 @@ snapshot_files() {
             cp -f "$f" "$d/netstate/" 2>/dev/null || true
         done
     fi
-    [ -f "$ROOT/etc/sysctl.titian" ] && cp -f "$ROOT/etc/sysctl.titian" "$d/sysctl.titian"
-    [ -f "$ROOT/etc/sysctl.titian.prev" ] && cp -f "$ROOT/etc/sysctl.titian.prev" "$d/sysctl.titian.prev"
+    [ -f "$STATE_ROOT/sysctl.titian" ] && cp -f "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
+    [ -f "$STATE_ROOT/sysctl.titian.prev" ] && cp -f "$STATE_ROOT/sysctl.titian.prev" "$d/sysctl.titian.prev"
     chmod 700 "$d" "$d/bird.d" "$d/netstate" 2>/dev/null || true
     chmod 600 "$d/running-config" "$d/bird.conf" "$d/meta" 2>/dev/null || true
     return 0
@@ -188,7 +245,7 @@ cmd_save() {
     rm -f "$tmp"
     write_meta "$d" "$name" "running" || warn "gagal tulis meta (checkpoint tetap tersimpan)"
     echo "checkpoint $name dibuat: $(grep '^created_wib=' "$d/meta" 2>/dev/null | cut -d= -f2-)"
-    echo "  isi: running-config + bird.conf + bird.d + netstate + sysctl (beku; 'save' biasa tidak mengubah titik ini)"
+    echo "  isi: running-config + bird.conf + bird.d + netstate + sysctl (beku; 'save' biasa not mengubah point ini)"
 }
 
 cmd_snapshot_last_save() {
@@ -197,7 +254,7 @@ cmd_snapshot_last_save() {
     local d="$CKPT_DIR/.last-save"
     mkdir -p "$CKPT_DIR" 2>/dev/null || { warn "gagal mkdir $CKPT_DIR"; return 0; }
     mkdir -p "$d" 2>/dev/null || { warn "gagal mkdir $d"; return 0; }
-    if ! snapshot_files "$d" "$ROOT/etc/startup-config"; then
+    if ! snapshot_files "$d" "$STATE_ROOT/startup-config"; then
         warn "gagal memotret .last-save (save tetap berhasil)"
         return 0
     fi
@@ -215,12 +272,12 @@ cmd_list() {
         done
     fi
     if [ "$found" -eq 0 ]; then
-        echo "(belum ada checkpoint — pakai 'checkpoint save <nama>')"
+        echo "(none yet checkpoint — pakai 'checkpoint save <name>')"
         return 0
     fi
     tmp=$(mktemp /tmp/titian-ckpt-list.XXXXXX) || tmp=""
     if [ -n "$tmp" ] && ! dump_running "$tmp"; then rm -f "$tmp"; tmp=""; fi
-    printf '%-24s %-22s %s\n' "NAMA" "DIBUAT (WIB)" "SAAT INI"
+    printf '%-24s %-22s %s\n' "Name" "DIBUAT (WIB)" "SAAT INI"
     # kumpulkan "created|name", urutkan kronologis, lalu cetak
     for d in "$CKPT_DIR/"*/; do
         [ -d "$d" ] || continue
@@ -237,7 +294,7 @@ cmd_list() {
         printf '%-24s %-22s %s\n' "$name" "$created" "$line"
     done
     [ -n "$tmp" ] && rm -f "$tmp"
-    echo "  * = isi titik sama persis dengan running-config saat ini"
+    echo "  * = isi point sama persis with running-config current"
 }
 
 cmd_delete() {
@@ -246,7 +303,7 @@ cmd_delete() {
     d="$CKPT_DIR/$name"
     [ -d "$d" ] || err "checkpoint tidak ada: $name — tidak ada yang dihapus"
     rm -rf "$d" || err "gagal hapus checkpoint $name"
-    echo "checkpoint $name dihapus"
+    echo "checkpoint $name deleted"
 }
 
 # --- prune: hapus objek live yang tidak ada di titik ---
@@ -410,7 +467,7 @@ prune_all() {
         done
     fi
     # (d) sysctl global ekstra
-    prune_sysctls "$ROOT/etc/sysctl.titian" "$d/sysctl.titian"
+    prune_sysctls "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
     # (e) interface buatan Titian yang mengendap — TERAKHIR:
     #     header seksi `interface <tipe> <nama>` di dump saat ini
     #     tapi tidak di titik
@@ -442,7 +499,7 @@ restore_files() {
     # netstate + sysctl dari titik (menimpa penuh)
     local d=$1 conf f
     conf=$(bird_conf_path)
-    cp -f "$d/running-config" "$ROOT/etc/startup-config" || return 1
+    cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
     # MODE FILE LIVE (perbaikan 2 Nov 2026): cp FreeBSD MENULAR mode
     # sumber ke tujuan yang sudah ada (terbukti di lab: cp -f src600
     # dst644 -> dst 600), sementara file snapshot sengaja 600
@@ -452,24 +509,27 @@ restore_files() {
     # checkpoint (1 Nov 22:29). GNU cp Linux mempertahankan mode
     # tujuan, jadi chmod ini no-op di sana; tapi tetap ditulis
     # eksplisit agar restore tidak bergantung pada perilaku cp.
-    # Mode live yang benar: 644 (semua saudara file di /opt/titian/etc
+    # Mode live yang benar: 644 (semua saudara file di /etc/titian
     # dan /usr/local/etc FreeBSD 644; startup-config Debian 644).
     # bird.conf Debian DIKECUALIKAN: normanya 640 bird:bird di dir
     # 750 (hanya via sudo) — jangan dilebarkan.
-    chmod 644 "$ROOT/etc/startup-config" 2>/dev/null || true
+    chmod 644 "$STATE_ROOT/startup-config" 2>/dev/null || true
     if [ -f "$d/bird.conf" ]; then
         cp -f "$d/bird.conf" "$conf" || return 1
         if [ "$OS" = "FreeBSD" ]; then chmod 644 "$conf" 2>/dev/null || true; fi
+        # Cerminkan ke /cfg/local (Temuan 4) agar rollback bertahan
+        # melewati reboot berikutnya — best-effort.
+        sh "$SBIN/titian-bird.sh" mirror-bird-conf "$conf" 2>/dev/null || true
     fi
     if [ -d "$d/bird.d" ]; then
-        for f in "$ROOT/etc/bird.d/"*.conf; do
+        for f in "$STATE_ROOT/bird.d/"*.conf; do
             [ -e "$f" ] || continue
             case "$f" in *.cli-bak|*.pkgsave) continue ;; esac
             rm -f "$f"
         done
         for f in "$d/bird.d/"*.conf; do
             [ -e "$f" ] || continue
-            cp -f "$f" "$ROOT/etc/bird.d/" 2>/dev/null || true
+            cp -f "$f" "$STATE_ROOT/bird.d/" 2>/dev/null || true
         done
     fi
     rm -rf "$STATE_DIR" 2>/dev/null || true
@@ -480,10 +540,10 @@ restore_files() {
             cp -f "$f" "$STATE_DIR/" 2>/dev/null || true
         done
     fi
-    if [ -f "$d/sysctl.titian" ]; then cp -f "$d/sysctl.titian" "$ROOT/etc/sysctl.titian";
-    else rm -f "$ROOT/etc/sysctl.titian"; fi
-    if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$ROOT/etc/sysctl.titian.prev";
-    else rm -f "$ROOT/etc/sysctl.titian.prev"; fi
+    if [ -f "$d/sysctl.titian" ]; then cp -f "$d/sysctl.titian" "$STATE_ROOT/sysctl.titian";
+    else rm -f "$STATE_ROOT/sysctl.titian"; fi
+    if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$STATE_ROOT/sysctl.titian.prev";
+    else rm -f "$STATE_ROOT/sysctl.titian.prev"; fi
     return 0
 }
 
@@ -545,15 +605,15 @@ cmd_rollback() {
         rm -f "$cur"
         err "gagal membuang running-config saat ini (konfd tidak terjangkau?) — TIDAK ADA PERUBAHAN"
     fi
-    echo "rollback ke $name — prune objek live yang tidak ada di titik..."
+    echo "rollback to $name — prune objek live that no  at point..."
     prune_all "$cur" "$d"
-    echo "rollback ke $name — pulihkan file (startup-config + bird + netstate + sysctl)..."
+    echo "rollback to $name — pulihkan file (startup-config + bird + netstate + sysctl)..."
     if ! restore_files "$d"; then
         rm -f "$cur"
         err "gagal memulihkan file dari titik $name — KEADAAN MUNGKIN SETENGAH (periksa manual; titik tidak diubah)"
     fi
     regen_mirrors
-    echo "rollback ke $name — restart service titian..."
+    echo "rollback to $name — restart service titian..."
     if ! service_restart; then
         rm -f "$cur"
         err "service titian TIDAK KEMBALI setelah restart — file sudah dipulihkan dari titik, tapi konfd tidak jalan (periksa log service)"
@@ -562,16 +622,16 @@ cmd_rollback() {
     # ulang cermin titian saat restart service — apply eksplisit)
     "$SBIN/titian-sysctl.sh" apply 2>/dev/null || true
     if [ -f "$d/bird.conf" ]; then
-        out=$("$(birdc_bin)" configure 2>&1); rc=$?
+        out=$("$(birdc_bin)" $(birdc_sock) configure 2>&1); rc=$?
         echo "$out" | grep -v '^BIRD' || true
         [ "$rc" -ne 0 ] && warn "birdc configure gagal (bird.conf sudah dipulihkan + parse lolos; periksa birdc)"
     fi
     tmp=$(mktemp /tmp/titian-ckpt-rb2.XXXXXX) || tmp=""
     if [ -n "$tmp" ] && dump_running "$tmp"; then
         if cmp -s "$tmp" "$d/running-config"; then
-            echo "rollback OK: running-config sama persis dengan titik $name"
+            echo "rollback OK: running-config sama persis with point $name"
         else
-            echo "PERINGATAN: running-config sesudah rollback BERBEDA dari titik $name (diff di bawah):" >&2
+            echo "Warning: running-config after rollback Differs from point $name (diff at below):" >&2
             diff "$d/running-config" "$tmp" 2>/dev/null | head -40 >&2
             warn "verifikasi diff tidak kosong — periksa manual"
         fi
@@ -586,7 +646,7 @@ cmd_rollback() {
         grep -v '^last_rollback_wib=' "$d/meta" > "$d/meta.tmp" 2>/dev/null && mv "$d/meta.tmp" "$d/meta" 2>/dev/null || true
         echo "last_rollback_wib=$(now_wib)" >> "$d/meta" 2>/dev/null || true
     fi
-    echo "rollback ke $name SELESAI (persistensi: startup-config sudah ditulis dari titik — bertahan melewati reboot)."
+    echo "rollback to $name Done (persistensi: startup-config already ditulis from point — bertahan melewati reboot)."
     [ "$PRUNE_WARN" -eq 1 ] && warn "ada peringatan prune di atas — periksa baris Warning sebelum menganggap rollback bersih"
     return 0
 }
