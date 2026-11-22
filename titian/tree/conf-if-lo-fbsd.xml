@@ -101,7 +101,7 @@
                 help="IP address"
                 ptype="IP_ADDR_MASK_OPT"/>
         <PARAM name="peer"
-                help="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
+                help="Peer address for point-to-point link (ex: IP address 103.50.128.1 peer 10.10.10.10)" help-id="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
                 optional="true"
                 mode="subcommand"
                 ptype="SUBCOMMAND">

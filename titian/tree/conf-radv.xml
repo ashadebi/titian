@@ -75,7 +75,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -88,16 +88,16 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="import"
-        help="Channel import (all|none|filter NAME)"/>
+        help="Import channel (all|none|filter NAME)" help-id="Channel import (all|none|filter NAME)"/>
 
     <COMMAND name="export"
-        help="Channel export (all|none|filter NAME)"/>
+        help="Export channel (all|none|filter NAME)" help-id="Channel export (all|none|filter NAME)"/>
 
     <COMMAND name="show"
-        help="Show radv state"/>
+        help="Show RAdv state" help-id="Show radv state"/>
 
     <COMMAND name="propagate-routes"
-        help="Sebarkan route dari tabel ke RA (default BIRD no)">
+        help="Advertise route from table to RA (BIRD default no)" help-id="Sebarkan route dari tabel ke RA (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -107,7 +107,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no propagate-routes"
-        help="Kembali ke propagate routes default BIRD (no)">
+        help="Back to the BIRD default propagate routes (no)" help-id="Kembali ke propagate routes default BIRD (no)">
         <CONFIG operation="unset" pattern="^propagate-routes"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh propagate-routes-del
@@ -115,9 +115,9 @@
     </COMMAND>
 
     <COMMAND name="trigger"
-        help="Trigger RA saat prefix ini berubah (prefix IPv6)">
+        help="Trigger RA when prefix this changes (IPv6 prefix)" help-id="Trigger RA saat prefix ini berubah (prefix IPv6)">
         <PARAM name="Prefix"
-            help="Prefix IPv6 (mis. 2001:db8::/48)"
+            help="IPv6 prefix (e.g. 2001:db8::/48)" help-id="Prefix IPv6 (mis. 2001:db8::/48)"
             ptype="IP6_ADDR_MASK"/>
         <CONFIG/>
         <ACTION>
@@ -125,7 +125,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no trigger"
-        help="Hapus trigger">
+        help="Delete trigger" help-id="Hapus trigger">
         <CONFIG operation="unset" pattern="^trigger"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh trigger-del
@@ -133,9 +133,9 @@
     </COMMAND>
 
     <COMMAND name="table"
-        help="Tabel sumber route (default BIRD master6 bila kosong)">
+        help="Source table route (BIRD default master6 if empty)" help-id="Tabel sumber route (default BIRD master6 bila kosong)">
         <PARAM name="Value"
-            help="Nama tabel (master6 atau tabel ipv6 dari global -> table-add)"
+            help="Table name (master6 or table IPv6 from global -> table-add)" help-id="Nama tabel (master6 atau tabel ipv6 dari global -> table-add)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -143,7 +143,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no table"
-        help="Kembali ke tabel default BIRD (master6)">
+        help="Back to the BIRD default table (master6)" help-id="Kembali ke tabel default BIRD (master6)">
         <CONFIG operation="unset" pattern="^table"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh table-del
@@ -151,23 +151,23 @@
     </COMMAND>
 
     <COMMAND name="import all"
-        help="Import semua route dari tabel">
+        help="Import all routes from table" help-id="Import semua route dari tabel">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh chan-set import all
         </ACTION>
     </COMMAND>
     <COMMAND name="import none"
-        help="Jangan import route">
+        help="Do not import route" help-id="Jangan import route">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh chan-set import none
         </ACTION>
     </COMMAND>
     <COMMAND name="import filter"
-        help="Import route lewat filter bernama">
+        help="Import routes via the named filter" help-id="Import route lewat filter bernama">
         <PARAM name="Name"
-            help="Nama filter"
+            help="Filter name" help-id="Nama filter"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -175,23 +175,23 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="export all"
-        help="Export semua route ke tabel">
+        help="Export all routes to table" help-id="Export semua route ke tabel">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh chan-set export all
         </ACTION>
     </COMMAND>
     <COMMAND name="export none"
-        help="Jangan export route">
+        help="Do not export route" help-id="Jangan export route">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh chan-set export none
         </ACTION>
     </COMMAND>
     <COMMAND name="export filter"
-        help="Export route lewat filter bernama">
+        help="Export routes via the named filter" help-id="Export route lewat filter bernama">
         <PARAM name="Name"
-            help="Nama filter"
+            help="Filter name" help-id="Nama filter"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -200,13 +200,13 @@
     </COMMAND>
 
     <COMMAND name="interface"
-        help="Opsi RAdv per interface (masuk ke interface view)"
+        help="RAdv options per interface (enter interface view)" help-id="Opsi RAdv per interface (masuk ke interface view)"
         view="configure-bird-radv-iface-view"
         viewid="radv_iface=${Pattern}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Pattern"
-            help="Pola interface BIRD (mis. ge*, bridge0)"
+            help="BIRD interface pattern (e.g. ge*, bridge0)" help-id="Pola interface BIRD (mis. ge*, bridge0)"
             ptype="STRING"/>
         <CONFIG priority="0x1560" pattern="^${__line}$"/>
         <ACTION>
@@ -214,9 +214,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no interface"
-        help="Hapus semua opsi RAdv interface ini">
+        help="Delete all this options RAdv interface" help-id="Hapus semua opsi RAdv interface ini">
         <PARAM name="Pattern"
-            help="Pola interface BIRD"
+            help="BIRD interface pattern" help-id="Pola interface BIRD"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
         <ACTION>
@@ -225,13 +225,13 @@
     </COMMAND>
 
     <COMMAND name="prefix"
-        help="Opsi prefix global (masuk ke prefix view)"
+        help="Global prefix options (enter prefix view)" help-id="Opsi prefix global (masuk ke prefix view)"
         view="configure-bird-radv-prefix-view"
         viewid="radv_pfx_ctx=global:${Prefix}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Prefix"
-            help="Prefix IPv6 yang diiklankan (mis. 2001:db8:1::/48)"
+            help="Advertised IPv6 prefix (e.g. 2001:db8:1::/48)" help-id="Prefix IPv6 yang diiklankan (mis. 2001:db8:1::/48)"
             ptype="IP6_ADDR_MASK"/>
         <CONFIG priority="0x1560" pattern="^${__line}$"/>
         <ACTION>
@@ -239,9 +239,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no prefix"
-        help="Hapus semua opsi prefix global ini">
+        help="Delete all this options prefix global" help-id="Hapus semua opsi prefix global ini">
         <PARAM name="Prefix"
-            help="Prefix IPv6"
+            help="IPv6 prefix" help-id="Prefix IPv6"
             ptype="IP6_ADDR_MASK"/>
         <CONFIG operation="unset" pattern="^prefix ${Prefix}"/>
         <ACTION>
@@ -250,7 +250,7 @@
     </COMMAND>
 
     <COMMAND name="rdnss"
-        help="Opsi RDNSS global (masuk ke rdnss view)"
+        help="RDNSS global options (enter rdnss view)" help-id="Opsi RDNSS global (masuk ke rdnss view)"
         view="configure-bird-radv-rdnss-view"
         viewid="radv_dns_ctx=global"
         ptype="SUBCOMMAND"
@@ -261,7 +261,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rdnss"
-        help="Hapus seluruh blok rdnss global">
+        help="Delete entire global rdnss block" help-id="Hapus seluruh blok rdnss global">
         <CONFIG operation="unset" pattern="^rdnss"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh rdnss-del global ""
@@ -269,7 +269,7 @@
     </COMMAND>
 
     <COMMAND name="dnssl"
-        help="Opsi DNSSL global (masuk ke dnssl view)"
+        help="DNSSL global options (enter dnssl view)" help-id="Opsi DNSSL global (masuk ke dnssl view)"
         view="configure-bird-radv-dnssl-view"
         viewid="radv_dns_ctx=global"
         ptype="SUBCOMMAND"
@@ -280,7 +280,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no dnssl"
-        help="Hapus seluruh blok dnssl global">
+        help="Delete entire global dnssl block" help-id="Hapus seluruh blok dnssl global">
         <CONFIG operation="unset" pattern="^dnssl"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh dnssl-del global ""
@@ -290,10 +290,10 @@
     <COMMAND name="custom-option"
         help="Custom RA option global: type N value bytestring">
         <PARAM name="Type"
-            help="Tipe option (0..255)"
+            help="Option type (0..255)" help-id="Tipe option (0..255)"
             ptype="UINT"/>
         <PARAM name="Value"
-            help="Nilai bytestring (hex:0e:10:... atau string hex)"
+            help="Bytestring value (hex:0e:10:... or string hex)" help-id="Nilai bytestring (hex:0e:10:... atau string hex)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -301,9 +301,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no custom-option"
-        help="Hapus custom option global tipe ini">
+        help="Delete this global custom option type" help-id="Hapus custom option global tipe ini">
         <PARAM name="Type"
-            help="Tipe option (0..255)"
+            help="Option type (0..255)" help-id="Tipe option (0..255)"
             ptype="UINT"/>
         <CONFIG operation="unset" pattern="^custom-option ${Type}"/>
         <ACTION>
@@ -312,7 +312,7 @@
     </COMMAND>
 
     <COMMAND name="show radv"
-        help="Tampilkan intent + section + status birdc radv">
+        help="Show the intent + section + birdc status of radv" help-id="Tampilkan intent + section + status birdc radv">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh show
@@ -340,9 +340,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="max-ra-interval"
-        help="Interval maksimum antar RA, detik (4..1800, default BIRD 600)">
+        help="Maximum RA interval, in seconds (4..1800, BIRD default: 600)" help-id="Interval maksimum antar RA, detik (4..1800, default BIRD 600)">
         <PARAM name="Value"
-            help="Detik (4..1800)"
+            help="Seconds (4..1800)" help-id="Detik (4..1800)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -350,16 +350,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no max-ra-interval"
-        help="Kembali ke max-ra-interval default BIRD">
+        help="Back to the BIRD default max-ra-interval" help-id="Kembali ke max-ra-interval default BIRD">
         <CONFIG operation="unset" pattern="^max-ra-interval"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" max-ra-interval
         </ACTION>
     </COMMAND>
     <COMMAND name="min-ra-interval"
-        help="Interval minimum antar RA, detik (3..1800, maks 3/4 x max)">
+        help="Minimum RA interval, in seconds (3..1800, max 3/4 x max)" help-id="Interval minimum antar RA, detik (3..1800, maks 3/4 x max)">
         <PARAM name="Value"
-            help="Detik (3..1800)"
+            help="Seconds (3..1800)" help-id="Detik (3..1800)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -367,16 +367,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no min-ra-interval"
-        help="Kembali ke min-ra-interval default BIRD">
+        help="Back to the BIRD default min-ra-interval" help-id="Kembali ke min-ra-interval default BIRD">
         <CONFIG operation="unset" pattern="^min-ra-interval"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" min-ra-interval
         </ACTION>
     </COMMAND>
     <COMMAND name="min-delay"
-        help="Delay minimum antar RA, detik (default BIRD 3)">
+        help="Minimum RA delay, in seconds (BIRD default: 3)" help-id="Delay minimum antar RA, detik (default BIRD 3)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -384,14 +384,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no min-delay"
-        help="Kembali ke min-delay default BIRD">
+        help="Back to the BIRD default min-delay" help-id="Kembali ke min-delay default BIRD">
         <CONFIG operation="unset" pattern="^min-delay"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" min-delay
         </ACTION>
     </COMMAND>
     <COMMAND name="solicited-ra-unicast"
-        help="Kirim RA unicast saat solicitation (default BIRD no)">
+        help="Send unicast RA upon solicitation (BIRD default: no)" help-id="Kirim RA unicast saat solicitation (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -401,14 +401,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no solicited-ra-unicast"
-        help="Kembali ke solicited-ra-unicast default BIRD">
+        help="Back to the BIRD default solicited-ra-unicast" help-id="Kembali ke solicited-ra-unicast default BIRD">
         <CONFIG operation="unset" pattern="^solicited-ra-unicast"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" solicited-ra-unicast
         </ACTION>
     </COMMAND>
     <COMMAND name="managed"
-        help="Set flag Managed (DHCPv6) di RA (default BIRD no)">
+        help="Set flag Managed (DHCPv6) in RA (BIRD default no)" help-id="Set flag Managed (DHCPv6) di RA (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -418,14 +418,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no managed"
-        help="Kembali ke managed default BIRD">
+        help="Back to the BIRD default managed" help-id="Kembali ke managed default BIRD">
         <CONFIG operation="unset" pattern="^managed"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" managed
         </ACTION>
     </COMMAND>
     <COMMAND name="other-config"
-        help="Set flag OtherConfig (DHCPv6) di RA (default BIRD no)">
+        help="Set flag OtherConfig (DHCPv6) in RA (BIRD default no)" help-id="Set flag OtherConfig (DHCPv6) di RA (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -435,14 +435,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no other-config"
-        help="Kembali ke other-config default BIRD">
+        help="Back to the BIRD default other-config" help-id="Kembali ke other-config default BIRD">
         <CONFIG operation="unset" pattern="^other-config"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" other-config
         </ACTION>
     </COMMAND>
     <COMMAND name="link-mtu"
-        help="MTU yang diiklankan, 0 = pakai MTU interface (default BIRD 0)">
+        help="MTU advertised, 0 = use MTU interface (BIRD default 0)" help-id="MTU yang diiklankan, 0 = pakai MTU interface (default BIRD 0)">
         <PARAM name="Value"
             help="Byte (0..65535)"
             ptype="UINT"/>
@@ -452,14 +452,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no link-mtu"
-        help="Kembali ke link-mtu default BIRD">
+        help="Back to the BIRD default link-MTU" help-id="Kembali ke link-mtu default BIRD">
         <CONFIG operation="unset" pattern="^link-mtu"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" link-mtu
         </ACTION>
     </COMMAND>
     <COMMAND name="reachable-time"
-        help="Reachable time yang diiklankan, ms (default BIRD 0)">
+        help="Reachable time advertised, ms (BIRD default 0)" help-id="Reachable time yang diiklankan, ms (default BIRD 0)">
         <PARAM name="Value"
             help="Milidetik (0..3600000)"
             ptype="UINT"/>
@@ -469,14 +469,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no reachable-time"
-        help="Kembali ke reachable-time default BIRD">
+        help="Back to the BIRD default reachable-time" help-id="Kembali ke reachable-time default BIRD">
         <CONFIG operation="unset" pattern="^reachable-time"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" reachable-time
         </ACTION>
     </COMMAND>
     <COMMAND name="retrans-timer"
-        help="Retrans timer yang diiklankan, ms (default BIRD 0)">
+        help="Retrans timer advertised, ms (BIRD default 0)" help-id="Retrans timer yang diiklankan, ms (default BIRD 0)">
         <PARAM name="Value"
             help="Milidetik (0..4294967295)"
             ptype="UINT"/>
@@ -486,14 +486,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no retrans-timer"
-        help="Kembali ke retrans-timer default BIRD">
+        help="Back to the BIRD default retrans-timer" help-id="Kembali ke retrans-timer default BIRD">
         <CONFIG operation="unset" pattern="^retrans-timer"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" retrans-timer
         </ACTION>
     </COMMAND>
     <COMMAND name="current-hop-limit"
-        help="Hop limit yang diiklankan (default BIRD 64)">
+        help="Advertised Hop limit (BIRD default 64)" help-id="Hop limit yang diiklankan (default BIRD 64)">
         <PARAM name="Value"
             help="Hop (0..255)"
             ptype="UINT"/>
@@ -503,16 +503,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no current-hop-limit"
-        help="Kembali ke current-hop-limit default BIRD">
+        help="Back to the BIRD default current-hop-limit" help-id="Kembali ke current-hop-limit default BIRD">
         <CONFIG operation="unset" pattern="^current-hop-limit"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" current-hop-limit
         </ACTION>
     </COMMAND>
     <COMMAND name="default-lifetime"
-        help="Lifetime default router, detik (default BIRD 3x max)">
+        help="Lifetime default router, seconds (BIRD default 3x max)" help-id="Lifetime default router, detik (default BIRD 3x max)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -520,14 +520,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no default-lifetime"
-        help="Kembali ke default-lifetime default BIRD">
+        help="Back to the BIRD default default-lifetime" help-id="Kembali ke default-lifetime default BIRD">
         <CONFIG operation="unset" pattern="^default-lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" default-lifetime
         </ACTION>
     </COMMAND>
     <COMMAND name="default-lifetime-sensitive"
-        help="Lifetime default router sensitif terhadap perubahan (default BIRD yes)">
+        help="Default router lifetime is sensitive to changes (BIRD default: yes)" help-id="Lifetime default router sensitif terhadap perubahan (default BIRD yes)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -537,14 +537,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no default-lifetime-sensitive"
-        help="Kembali ke default-lifetime-sensitive default BIRD">
+        help="Back to the BIRD default default-lifetime-sensitive" help-id="Kembali ke default-lifetime-sensitive default BIRD">
         <CONFIG operation="unset" pattern="^default-lifetime-sensitive"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" default-lifetime-sensitive
         </ACTION>
     </COMMAND>
     <COMMAND name="default-preference"
-        help="Preferensi default router (default BIRD medium)">
+        help="Default router preference (BIRD default medium)" help-id="Preferensi default router (default BIRD medium)">
         <PARAM name="Value"
             help="low|medium|high"
             ptype="STRING"/>
@@ -554,16 +554,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no default-preference"
-        help="Kembali ke default-preference default BIRD">
+        help="Back to the BIRD default default-preference" help-id="Kembali ke default-preference default BIRD">
         <CONFIG operation="unset" pattern="^default-preference"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" default-preference
         </ACTION>
     </COMMAND>
     <COMMAND name="route-lifetime"
-        help="Lifetime route yang diiklankan, detik (default BIRD 3x max)">
+        help="Lifetime route advertised, seconds (BIRD default 3x max)" help-id="Lifetime route yang diiklankan, detik (default BIRD 3x max)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -571,14 +571,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no route-lifetime"
-        help="Kembali ke route-lifetime default BIRD">
+        help="Back to the BIRD default route-lifetime" help-id="Kembali ke route-lifetime default BIRD">
         <CONFIG operation="unset" pattern="^route-lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-lifetime
         </ACTION>
     </COMMAND>
     <COMMAND name="route-lifetime-sensitive"
-        help="Lifetime route sensitif terhadap perubahan (default BIRD no)">
+        help="Route lifetime is sensitive to changes (BIRD default: no)" help-id="Lifetime route sensitif terhadap perubahan (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -588,14 +588,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no route-lifetime-sensitive"
-        help="Kembali ke route-lifetime-sensitive default BIRD">
+        help="Back to the BIRD default route-lifetime-sensitive" help-id="Kembali ke route-lifetime-sensitive default BIRD">
         <CONFIG operation="unset" pattern="^route-lifetime-sensitive"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-lifetime-sensitive
         </ACTION>
     </COMMAND>
     <COMMAND name="route-preference"
-        help="Preferensi route yang diiklankan (default BIRD medium)">
+        help="Advertised route preference (BIRD default medium)" help-id="Preferensi route yang diiklankan (default BIRD medium)">
         <PARAM name="Value"
             help="low|medium|high"
             ptype="STRING"/>
@@ -605,16 +605,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no route-preference"
-        help="Kembali ke route-preference default BIRD">
+        help="Back to the BIRD default route-preference" help-id="Kembali ke route-preference default BIRD">
         <CONFIG operation="unset" pattern="^route-preference"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-preference
         </ACTION>
     </COMMAND>
     <COMMAND name="prefix-linger-time"
-        help="Waktu prefix dipertahankan sesudah hilang, detik (default BIRD 3x max)">
+        help="Time a prefix is retained after loss, in seconds (BIRD default: 3x max)" help-id="Waktu prefix dipertahankan sesudah hilang, detik (default BIRD 3x max)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -622,16 +622,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no prefix-linger-time"
-        help="Kembali ke prefix-linger-time default BIRD">
+        help="Back to the BIRD default prefix-linger-time" help-id="Kembali ke prefix-linger-time default BIRD">
         <CONFIG operation="unset" pattern="^prefix-linger-time"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" prefix-linger-time
         </ACTION>
     </COMMAND>
     <COMMAND name="route-linger-time"
-        help="Waktu route dipertahankan sesudah hilang, detik (default BIRD 3x max)">
+        help="Time a route is retained after loss, in seconds (BIRD default: 3x max)" help-id="Waktu route dipertahankan sesudah hilang, detik (default BIRD 3x max)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -639,14 +639,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no route-linger-time"
-        help="Kembali ke route-linger-time default BIRD">
+        help="Back to the BIRD default route-linger-time" help-id="Kembali ke route-linger-time default BIRD">
         <CONFIG operation="unset" pattern="^route-linger-time"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" route-linger-time
         </ACTION>
     </COMMAND>
     <COMMAND name="rdnss-local"
-        help="Kirim RDNSS dari interface ini (default BIRD no)">
+        help="Send RDNSS from this interface (BIRD default no)" help-id="Kirim RDNSS dari interface ini (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -656,14 +656,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rdnss-local"
-        help="Kembali ke rdnss-local default BIRD">
+        help="Back to the BIRD default rdnss-local" help-id="Kembali ke rdnss-local default BIRD">
         <CONFIG operation="unset" pattern="^rdnss-local"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" rdnss-local
         </ACTION>
     </COMMAND>
     <COMMAND name="dnssl-local"
-        help="Kirim DNSSL dari interface ini (default BIRD no)">
+        help="Send DNSSL from this interface (BIRD default no)" help-id="Kirim DNSSL dari interface ini (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -673,14 +673,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no dnssl-local"
-        help="Kembali ke dnssl-local default BIRD">
+        help="Back to the BIRD default dnssl-local" help-id="Kembali ke dnssl-local default BIRD">
         <CONFIG operation="unset" pattern="^dnssl-local"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" dnssl-local
         </ACTION>
     </COMMAND>
     <COMMAND name="custom-option-local"
-        help="Kirim custom option dari interface ini (default BIRD no)">
+        help="Send custom option from this interface (BIRD default no)" help-id="Kirim custom option dari interface ini (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -690,7 +690,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no custom-option-local"
-        help="Kembali ke custom-option-local default BIRD">
+        help="Back to the BIRD default custom-option-local" help-id="Kembali ke custom-option-local default BIRD">
         <CONFIG operation="unset" pattern="^custom-option-local"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh interface-unset "${radv_iface}" custom-option-local
@@ -698,13 +698,13 @@
     </COMMAND>
 
     <COMMAND name="prefix"
-        help="Opsi prefix per interface (masuk ke prefix view)"
+        help="Prefix options per interface (enter prefix view)" help-id="Opsi prefix per interface (masuk ke prefix view)"
         view="configure-bird-radv-prefix-view"
         viewid="radv_pfx_ctx=iface:${radv_iface}:${Prefix}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Prefix"
-            help="Prefix IPv6 yang diiklankan (mis. 2001:db8:2::/48)"
+            help="Advertised IPv6 prefix (e.g. 2001:db8:2::/48)" help-id="Prefix IPv6 yang diiklankan (mis. 2001:db8:2::/48)"
             ptype="IP6_ADDR_MASK"/>
         <CONFIG priority="0x1561" pattern="^${__line}$"/>
         <ACTION>
@@ -712,9 +712,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no prefix"
-        help="Hapus semua opsi prefix interface ini">
+        help="Delete all this options prefix interface" help-id="Hapus semua opsi prefix interface ini">
         <PARAM name="Prefix"
-            help="Prefix IPv6"
+            help="IPv6 prefix" help-id="Prefix IPv6"
             ptype="IP6_ADDR_MASK"/>
         <CONFIG operation="unset" pattern="^prefix ${Prefix}"/>
         <ACTION>
@@ -723,7 +723,7 @@
     </COMMAND>
 
     <COMMAND name="rdnss"
-        help="Opsi RDNSS per interface (masuk ke rdnss view)"
+        help="RDNSS options per interface (enter rdnss view)" help-id="Opsi RDNSS per interface (masuk ke rdnss view)"
         view="configure-bird-radv-rdnss-view"
         viewid="radv_dns_ctx=iface:${radv_iface}"
         ptype="SUBCOMMAND"
@@ -734,7 +734,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rdnss"
-        help="Hapus seluruh blok rdnss interface ini">
+        help="Delete this entire rdnss interface block" help-id="Hapus seluruh blok rdnss interface ini">
         <CONFIG operation="unset" pattern="^rdnss"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh rdnss-del iface "${radv_iface}"
@@ -742,7 +742,7 @@
     </COMMAND>
 
     <COMMAND name="dnssl"
-        help="Opsi DNSSL per interface (masuk ke dnssl view)"
+        help="DNSSL options per interface (enter dnssl view)" help-id="Opsi DNSSL per interface (masuk ke dnssl view)"
         view="configure-bird-radv-dnssl-view"
         viewid="radv_dns_ctx=iface:${radv_iface}"
         ptype="SUBCOMMAND"
@@ -753,7 +753,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no dnssl"
-        help="Hapus seluruh blok dnssl interface ini">
+        help="Delete this entire dnssl interface block" help-id="Hapus seluruh blok dnssl interface ini">
         <CONFIG operation="unset" pattern="^dnssl"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh dnssl-del iface "${radv_iface}"
@@ -763,10 +763,10 @@
     <COMMAND name="custom-option"
         help="Custom RA option per interface: type N value bytestring">
         <PARAM name="Type"
-            help="Tipe option (0..255)"
+            help="Option type (0..255)" help-id="Tipe option (0..255)"
             ptype="UINT"/>
         <PARAM name="Value"
-            help="Nilai bytestring (hex:0e:10:... atau string hex)"
+            help="Bytestring value (hex:0e:10:... or string hex)" help-id="Nilai bytestring (hex:0e:10:... atau string hex)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -774,9 +774,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no custom-option"
-        help="Hapus custom option interface ini tipe ini">
+        help="Delete this interface custom option type" help-id="Hapus custom option interface ini tipe ini">
         <PARAM name="Type"
-            help="Tipe option (0..255)"
+            help="Option type (0..255)" help-id="Tipe option (0..255)"
             ptype="UINT"/>
         <CONFIG operation="unset" pattern="^custom-option ${Type}"/>
         <ACTION>
@@ -806,7 +806,7 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="skip"
-        help="Lewati prefix ini saat generate RA (default BIRD no)">
+        help="Skip prefix this when generate RA (BIRD default no)" help-id="Lewati prefix ini saat generate RA (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -816,14 +816,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no skip"
-        help="Kembali ke skip default BIRD">
+        help="Back to the BIRD default skip" help-id="Kembali ke skip default BIRD">
         <CONFIG operation="unset" pattern="^skip"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" skip
         </ACTION>
     </COMMAND>
     <COMMAND name="onlink"
-        help="Set flag on-link prefix (default BIRD yes)">
+        help="Set flag on-link prefix (BIRD default yes)" help-id="Set flag on-link prefix (default BIRD yes)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -833,14 +833,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no onlink"
-        help="Kembali ke onlink default BIRD">
+        help="Back to the BIRD default onlink" help-id="Kembali ke onlink default BIRD">
         <CONFIG operation="unset" pattern="^onlink"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" onlink
         </ACTION>
     </COMMAND>
     <COMMAND name="autonomous"
-        help="Set flag autonomous prefix (default BIRD yes)">
+        help="Set flag autonomous prefix (BIRD default yes)" help-id="Set flag autonomous prefix (default BIRD yes)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -850,16 +850,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no autonomous"
-        help="Kembali ke autonomous default BIRD">
+        help="Back to the BIRD default autonomous" help-id="Kembali ke autonomous default BIRD">
         <CONFIG operation="unset" pattern="^autonomous"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" autonomous
         </ACTION>
     </COMMAND>
     <COMMAND name="valid-lifetime"
-        help="Valid lifetime prefix, detik (default BIRD 86400)">
+        help="Valid lifetime prefix, seconds (BIRD default 86400)" help-id="Valid lifetime prefix, detik (default BIRD 86400)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -867,14 +867,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no valid-lifetime"
-        help="Kembali ke valid-lifetime default BIRD">
+        help="Back to the BIRD default valid-lifetime" help-id="Kembali ke valid-lifetime default BIRD">
         <CONFIG operation="unset" pattern="^valid-lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" valid-lifetime
         </ACTION>
     </COMMAND>
     <COMMAND name="valid-lifetime-sensitive"
-        help="Valid lifetime sensitif terhadap perubahan (default BIRD no)">
+        help="Valid lifetime is sensitive to changes (BIRD default: no)" help-id="Valid lifetime sensitif terhadap perubahan (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -884,16 +884,16 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no valid-lifetime-sensitive"
-        help="Kembali ke valid-lifetime-sensitive default BIRD">
+        help="Back to the BIRD default valid-lifetime-sensitive" help-id="Kembali ke valid-lifetime-sensitive default BIRD">
         <CONFIG operation="unset" pattern="^valid-lifetime-sensitive"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" valid-lifetime-sensitive
         </ACTION>
     </COMMAND>
     <COMMAND name="preferred-lifetime"
-        help="Preferred lifetime prefix, detik (default BIRD 14400)">
+        help="Preferred lifetime prefix, seconds (BIRD default 14400)" help-id="Preferred lifetime prefix, detik (default BIRD 14400)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -901,14 +901,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no preferred-lifetime"
-        help="Kembali ke preferred-lifetime default BIRD">
+        help="Back to the BIRD default preferred-lifetime" help-id="Kembali ke preferred-lifetime default BIRD">
         <CONFIG operation="unset" pattern="^preferred-lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" preferred-lifetime
         </ACTION>
     </COMMAND>
     <COMMAND name="preferred-lifetime-sensitive"
-        help="Preferred lifetime sensitif terhadap perubahan (default BIRD no)">
+        help="Preferred lifetime is sensitive to changes (BIRD default: no)" help-id="Preferred lifetime sensitif terhadap perubahan (default BIRD no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -918,7 +918,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no preferred-lifetime-sensitive"
-        help="Kembali ke preferred-lifetime-sensitive default BIRD">
+        help="Back to the BIRD default preferred-lifetime-sensitive" help-id="Kembali ke preferred-lifetime-sensitive default BIRD">
         <CONFIG operation="unset" pattern="^preferred-lifetime-sensitive"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh prefix-unset "${radv_pfx_ctx}" preferred-lifetime-sensitive
@@ -947,9 +947,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="ns"
-        help="Tambah server DNS (alamat IPv6)">
+        help="Add DNS server (IPv6 address)" help-id="Tambah server DNS (alamat IPv6)">
         <PARAM name="Address"
-            help="Alamat IPv6 server DNS"
+            help="DNS server IPv6 address" help-id="Alamat IPv6 server DNS"
             ptype="IP6_ADDR"/>
         <CONFIG pattern="^ns ${Address}$"/>
         <ACTION>
@@ -957,9 +957,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ns"
-        help="Hapus server DNS ini">
+        help="Delete this DNS server" help-id="Hapus server DNS ini">
         <PARAM name="Address"
-            help="Alamat IPv6 server DNS"
+            help="DNS server IPv6 address" help-id="Alamat IPv6 server DNS"
             ptype="IP6_ADDR"/>
         <CONFIG operation="unset" pattern="^ns ${Address}"/>
         <ACTION>
@@ -968,9 +968,9 @@
     </COMMAND>
 
     <COMMAND name="lifetime"
-        help="Lifetime RDNSS, detik (default BIRD 3x max ra interval)">
+        help="RDNSS lifetime, seconds (BIRD default 3x max RA interval)" help-id="Lifetime RDNSS, detik (default BIRD 3x max ra interval)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -978,7 +978,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no lifetime"
-        help="Kembali ke lifetime RDNSS default BIRD (3x max)">
+        help="Back to the BIRD default RDNSS lifetime (3x max)" help-id="Kembali ke lifetime RDNSS default BIRD (3x max)">
         <CONFIG operation="unset" pattern="^lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh rdnss-lifetime-del "${radv_dns_ctx}"
@@ -986,9 +986,9 @@
     </COMMAND>
 
     <COMMAND name="lifetime-mult"
-        help="Lifetime RDNSS sebagai kelipatan max ra interval (default BIRD 3)">
+        help="RDNSS lifetime as a multiple of max RA interval (BIRD default 3)" help-id="Lifetime RDNSS sebagai kelipatan max ra interval (default BIRD 3)">
         <PARAM name="Value"
-            help="Kelipatan (0..4294967295)"
+            help="Multiple (0..4294967295)" help-id="Kelipatan (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -996,7 +996,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no lifetime-mult"
-        help="Kembali ke lifetime RDNSS default BIRD (3x max)">
+        help="Back to the BIRD default RDNSS lifetime (3x max)" help-id="Kembali ke lifetime RDNSS default BIRD (3x max)">
         <CONFIG operation="unset" pattern="^lifetime mult"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh rdnss-lifetime-del "${radv_dns_ctx}"
@@ -1024,9 +1024,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="domain"
-        help="Tambah domain search">
+        help="Add domain search" help-id="Tambah domain search">
         <PARAM name="Domain"
-            help="Nama domain (mis. example.com)"
+            help="Domain name (e.g. example.com)" help-id="Nama domain (mis. example.com)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -1034,9 +1034,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no domain"
-        help="Hapus domain search ini">
+        help="Delete this domain search" help-id="Hapus domain search ini">
         <PARAM name="Domain"
-            help="Nama domain"
+            help="Domain name" help-id="Nama domain"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^domain ${Domain}"/>
         <ACTION>
@@ -1045,9 +1045,9 @@
     </COMMAND>
 
     <COMMAND name="lifetime"
-        help="Lifetime DNSSL, detik (default BIRD 3x max ra interval)">
+        help="DNSSL lifetime, seconds (BIRD default 3x max RA interval)" help-id="Lifetime DNSSL, detik (default BIRD 3x max ra interval)">
         <PARAM name="Value"
-            help="Detik (0..4294967295)"
+            help="Seconds (0..4294967295)" help-id="Detik (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -1055,7 +1055,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no lifetime"
-        help="Kembali ke lifetime DNSSL default BIRD (3x max)">
+        help="Back to the BIRD default DNSSL lifetime (3x max)" help-id="Kembali ke lifetime DNSSL default BIRD (3x max)">
         <CONFIG operation="unset" pattern="^lifetime"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh dnssl-lifetime-del "${radv_dns_ctx}"
@@ -1063,9 +1063,9 @@
     </COMMAND>
 
     <COMMAND name="lifetime-mult"
-        help="Lifetime DNSSL sebagai kelipatan max ra interval (default BIRD 3)">
+        help="DNSSL lifetime as a multiple of max RA interval (BIRD default 3)" help-id="Lifetime DNSSL sebagai kelipatan max ra interval (default BIRD 3)">
         <PARAM name="Value"
-            help="Kelipatan (0..4294967295)"
+            help="Multiple (0..4294967295)" help-id="Kelipatan (0..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -1073,7 +1073,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no lifetime-mult"
-        help="Kembali ke lifetime DNSSL default BIRD (3x max)">
+        help="Back to the BIRD default DNSSL lifetime (3x max)" help-id="Kembali ke lifetime DNSSL default BIRD (3x max)">
         <CONFIG operation="unset" pattern="^lifetime mult"/>
         <ACTION>
             ${RT_SBIN}/titian-radv.sh dnssl-lifetime-del "${radv_dns_ctx}"

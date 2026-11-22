@@ -39,7 +39,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -52,18 +52,18 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="where"
-        help="Filter dump sebagai ekspresi (alternatif filter-line; maks 8 kata)"/>
+        help="Filter dump as expression (alternative filter-line; max 8 word)" help-id="Filter dump sebagai ekspresi (alternatif filter-line; maks 8 kata)"/>
 
     <COMMAND name="filter-line"
-        help="Tambah satu baris kode ke blok filter (maks 8 kata/baris; tanpa ;)"/>
+        help="Add one line of code to the filter block (max 8 words/line; without ;)" help-id="Tambah satu baris kode ke blok filter (maks 8 kata/baris; tanpa ;)"/>
 
     <COMMAND name="show"
         help="Show MRT state"/>
 
     <COMMAND name="table"
-        help="Tabel yang di-dump (nama atau pola wildcard, default master table)">
+        help="Dumped table (name or pattern wildcard, default master table)" help-id="Tabel yang di-dump (nama atau pola wildcard, default master table)">
         <PARAM name="Value"
-            help="Nama tabel atau pola mis. tab* (master4|master6 atau tabel dari global -> table-add)"
+            help="Table name or pattern, e.g. tab* (master4|master6 or a table from global -> table-add)" help-id="Nama tabel atau pola mis. tab* (master4|master6 atau tabel dari global -> table-add)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -71,7 +71,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no table"
-        help="Hapus table (default master table)">
+        help="Delete table (default master table)" help-id="Hapus table (default master table)">
         <CONFIG operation="unset" pattern="^table"/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh table-del "${mrt_inst}"
@@ -79,36 +79,36 @@
     </COMMAND>
 
     <COMMAND name="where-set"
-        help="Set filter dump sebagai ekspresi (ganti where lama; tidak boleh bersama filter-line)">
+        help="Set filter dump as expression (Change where old; must not together with filter-line)" help-id="Set filter dump sebagai ekspresi (ganti where lama; tidak boleh bersama filter-line)">
         <PARAM name="W1"
-            help="Kata pertama ekspresi (mis. source)"
+            help="First word of the expression (e.g. source)" help-id="Kata pertama ekspresi (mis. source)"
             ptype="STRING"/>
         <PARAM name="W2"
-            help="Kata kedua (opsional)"
+            help="Second word (optional)" help-id="Kata kedua (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W3"
-            help="Kata ketiga (opsional)"
+            help="Third word (optional)" help-id="Kata ketiga (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W4"
-            help="Kata keempat (opsional)"
+            help="Fourth word (optional)" help-id="Kata keempat (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W5"
-            help="Kata kelima (opsional)"
+            help="Fifth word (optional)" help-id="Kata kelima (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W6"
-            help="Kata keenam (opsional)"
+            help="Sixth word (optional)" help-id="Kata keenam (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W7"
-            help="Kata ketujuh (opsional)"
+            help="Seventh word (optional)" help-id="Kata ketujuh (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W8"
-            help="Kata kedelapan (opsional)"
+            help="Eighth word (optional)" help-id="Kata kedelapan (opsional)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -117,7 +117,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no where"
-        help="Hapus where">
+        help="Delete where" help-id="Hapus where">
         <CONFIG operation="unset" pattern="^where"/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh where-del "${mrt_inst}"
@@ -125,36 +125,36 @@
     </COMMAND>
 
     <COMMAND name="filter-line-add"
-        help="Tambah satu baris kode BIRD mentah ke blok filter (maks 8 kata/baris; tanpa ;)">
+        help="Add one line of raw BIRD code to the filter block (max 8 words/line; without ;)" help-id="Tambah satu baris kode BIRD mentah ke blok filter (maks 8 kata/baris; tanpa ;)">
         <PARAM name="W1"
-            help="Kata pertama baris (mis. if)"
+            help="First word of the line (e.g. if)" help-id="Kata pertama baris (mis. if)"
             ptype="STRING"/>
         <PARAM name="W2"
-            help="Kata kedua (opsional)"
+            help="Second word (optional)" help-id="Kata kedua (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W3"
-            help="Kata ketiga (opsional)"
+            help="Third word (optional)" help-id="Kata ketiga (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W4"
-            help="Kata keempat (opsional)"
+            help="Fourth word (optional)" help-id="Kata keempat (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W5"
-            help="Kata kelima (opsional)"
+            help="Fifth word (optional)" help-id="Kata kelima (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W6"
-            help="Kata keenam (opsional)"
+            help="Sixth word (optional)" help-id="Kata keenam (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W7"
-            help="Kata ketujuh (opsional)"
+            help="Seventh word (optional)" help-id="Kata ketujuh (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W8"
-            help="Kata kedelapan (opsional)"
+            help="Eighth word (optional)" help-id="Kata kedelapan (opsional)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -163,9 +163,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="filter-line-del"
-        help="Hapus baris filter ke-N (1-based, lihat urutan di show mrt)">
+        help="Delete the Nth filter line (1-based, see the order in show mrt)" help-id="Hapus baris filter ke-N (1-based, lihat urutan di show mrt)">
         <PARAM name="N"
-            help="Nomor baris (1..)"
+            help="Line number (1..)" help-id="Nomor baris (1..)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -173,7 +173,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no filter-line"
-        help="Hapus SEMUA baris filter">
+        help="Delete ALL filter lines" help-id="Hapus SEMUA baris filter">
         <CONFIG operation="unset" pattern="^filter-line"/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh filter-line-clear "${mrt_inst}"
@@ -181,9 +181,9 @@
     </COMMAND>
 
     <COMMAND name="filename"
-        help="File dump MRT (MANDATORY; boleh strftime + %N nama tabel)">
+        help="MRT dump file (MANDATORY; may strftime + %N name table)" help-id="File dump MRT (MANDATORY; boleh strftime + %N nama tabel)">
         <PARAM name="Value"
-            help="Path absolut (mis. /var/log/bird/%N_%F_%T.mrt)"
+            help="Absolute path (e.g. /var/log/bird/%N_%F_%T.mrt)" help-id="Path absolut (mis. /var/log/bird/%N_%F_%T.mrt)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -191,7 +191,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no filename"
-        help="Hapus filename (filename MANDATORY — generate akan menolak)">
+        help="Delete filename (filename MANDATORY — generate will reject)" help-id="Hapus filename (filename MANDATORY — generate akan menolak)">
         <CONFIG operation="unset" pattern="^filename"/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh filename-del "${mrt_inst}"
@@ -199,9 +199,9 @@
     </COMMAND>
 
     <COMMAND name="period"
-        help="Interval detik antar dump periodik (MANDATORY)">
+        help="Interval in seconds between periodic dumps (MANDATORY)" help-id="Interval detik antar dump periodik (MANDATORY)">
         <PARAM name="Value"
-            help="Detik (1..4294967295)"
+            help="Seconds (1..4294967295)" help-id="Detik (1..4294967295)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -209,7 +209,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no period"
-        help="Hapus period (period MANDATORY — generate akan menolak)">
+        help="Delete period (period MANDATORY — generate will reject)" help-id="Hapus period (period MANDATORY — generate akan menolak)">
         <CONFIG operation="unset" pattern="^period"/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh period-del "${mrt_inst}"
@@ -217,7 +217,7 @@
     </COMMAND>
 
     <COMMAND name="always-add-path"
-        help="Simpan semua route dalam record ADD_PATH (RFC 8050; default BIRD disabled)">
+        help="Save all routes in record ADD_PATH (RFC 8050; BIRD default disabled)" help-id="Simpan semua route dalam record ADD_PATH (RFC 8050; default BIRD disabled)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -227,7 +227,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no always-add-path"
-        help="Hapus always-add-path (default BIRD disabled)">
+        help="Delete always-add-path (BIRD default disabled)" help-id="Hapus always-add-path (default BIRD disabled)">
         <CONFIG operation="unset" pattern="^always-add-path"/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh always-add-path-del "${mrt_inst}"
@@ -235,7 +235,7 @@
     </COMMAND>
 
     <COMMAND name="show mrt"
-        help="Tampilkan intent + section + status birdc instance ini">
+        help="Show the intent + section + birdc status of this instance" help-id="Tampilkan intent + section + status birdc instance ini">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-mrt.sh show

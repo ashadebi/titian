@@ -33,7 +33,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -46,9 +46,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="scan-time"
-        help="Interval scan daftar interface (detik)">
+        help="Interface list scan interval (seconds)" help-id="Interval scan daftar interface (detik)">
         <PARAM name="Secs"
-            help="Detik (1..86400)"
+            help="Seconds (1..86400)" help-id="Detik (1..86400)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -56,7 +56,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no scan-time"
-        help="Hapus scan-time device (kembali ke 10, nilai contoh yang sudah ada)">
+        help="Delete scan-time device (back to 10, value e.g. that already exists)" help-id="Hapus scan-time device (kembali ke 10, nilai contoh yang sudah ada)">
         <CONFIG operation="unset" pattern="^scan-time"/>
         <ACTION>
             ${RT_SBIN}/titian-protocol.sh device-scan-time-del
@@ -64,9 +64,9 @@
     </COMMAND>
 
     <COMMAND name="debug"
-        help="Debug protokol device (all|off|states,routes,filters,interfaces,events,packets)">
+        help="Debug protocol device (all|off|states,routes,filters,interfaces,events,packets)" help-id="Debug protokol device (all|off|states,routes,filters,interfaces,events,packets)">
         <PARAM name="Value"
-            help="Kelas debug (all|off|daftar koma)"
+            help="Debug class (all|off|comma-separated list)" help-id="Kelas debug (all|off|daftar koma)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -74,7 +74,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no debug"
-        help="Matikan debug device (default BIRD off)">
+        help="Disable debug device (BIRD default off)" help-id="Matikan debug device (default BIRD off)">
         <CONFIG operation="unset" pattern="^debug"/>
         <ACTION>
             ${RT_SBIN}/titian-protocol.sh device-del debug
@@ -82,9 +82,9 @@
     </COMMAND>
 
     <COMMAND name="mrtdump"
-        help="Dump MRT protokol device (all|off|states|messages)">
+        help="MRT dump protocol device (all|off|states|messages)" help-id="Dump MRT protokol device (all|off|states|messages)">
         <PARAM name="Value"
-            help="Kelas mrtdump (all|off|states|messages)"
+            help="Mrtdump class (all|off|states|messages)" help-id="Kelas mrtdump (all|off|states|messages)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -92,7 +92,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no mrtdump"
-        help="Matikan mrtdump device (default BIRD off)">
+        help="Disable mrtdump device (BIRD default off)" help-id="Matikan mrtdump device (default BIRD off)">
         <CONFIG operation="unset" pattern="^mrtdump"/>
         <ACTION>
             ${RT_SBIN}/titian-protocol.sh device-del mrtdump
@@ -100,14 +100,14 @@
     </COMMAND>
 
     <COMMAND name="disabled"
-        help="Nonaktifkan protokol device (tidak di-start saat configure)">
+        help="Disable device protocol (not started when configure)" help-id="Nonaktifkan protokol device (tidak di-start saat configure)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-protocol.sh device-set disabled on
         </ACTION>
     </COMMAND>
     <COMMAND name="no disabled"
-        help="Aktifkan kembali protokol device (default BIRD)">
+        help="Re-enable protocol device (BIRD default)" help-id="Aktifkan kembali protokol device (default BIRD)">
         <CONFIG operation="unset" pattern="^disabled"/>
         <ACTION>
             ${RT_SBIN}/titian-protocol.sh device-del disabled
@@ -115,13 +115,13 @@
     </COMMAND>
 
     <COMMAND name="interface"
-        help="Definisi per-interface (masuk ke interface view: preferred IP)"
+        help="Definition per-interface (enter interface view: preferred IP)" help-id="Definisi per-interface (masuk ke interface view: preferred IP)"
         view="configure-bird-device-interface-view"
         viewid="dev_iface=${Pattern}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Pattern"
-            help="Pola interface BIRD (mis. ge0, eth*)"
+            help="BIRD interface pattern (e.g. ge0, eth*)" help-id="Pola interface BIRD (mis. ge0, eth*)"
             ptype="STRING"/>
         <CONFIG priority="0x1558" pattern="^${__line}$"/>
         <ACTION>
@@ -129,9 +129,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no interface"
-        help="Hapus definisi per-interface ini (semua preferred-nya)">
+        help="Delete this definition per-interface (all its preferred addresses)" help-id="Hapus definisi per-interface ini (semua preferred-nya)">
         <PARAM name="Pattern"
-            help="Pola interface BIRD"
+            help="BIRD interface pattern" help-id="Pola interface BIRD"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
         <ACTION>
@@ -157,9 +157,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="preferred"
-        help="IP preferred interface ini (source address / nexthop yang diumumkan)">
+        help="Preferred IP of this interface (announced source address / nexthop)" help-id="IP preferred interface ini (source address / nexthop yang diumumkan)">
         <PARAM name="IP"
-            help="Alamat IP (v4/v6; v6 link-local boleh %iface)"
+            help="IP address (v4/v6; v6 link-local may %iface)" help-id="Alamat IP (v4/v6; v6 link-local boleh %iface)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -167,9 +167,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no preferred"
-        help="Hapus IP preferred ini">
+        help="Delete this preferred IP" help-id="Hapus IP preferred ini">
         <PARAM name="IP"
-            help="Alamat IP"
+            help="IP address" help-id="Alamat IP"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^preferred ${IP}"/>
         <ACTION>
@@ -180,7 +180,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show device"
-        help="Status device BIRD (intent + section + protokol BIRD)"
+        help="BIRD device status (intent + section + BIRD protocol)" help-id="Status device BIRD (intent + section + protokol BIRD)"
         lock="false"
         interrupt="true">
         <ACTION>

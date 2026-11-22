@@ -93,7 +93,7 @@
                 help="Show BIRD routes"
                 lock="false"
                 interrupt="true">
-                <ACTION>birdc show route | grep -v "^BIRD"</ACTION>
+                <ACTION>birdc show route | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
         </COMMAND>
 	
 	<COMMAND name="show route ip"
@@ -103,21 +103,21 @@
 		<PARAM name="get_ip"
 			help="IP address or prefix"
 			ptype="IP_ADDR_ANY"/>
-		<ACTION>birdc show route for "${get_ip}" | grep -v "^BIRD"</ACTION>
+		<ACTION>birdc show route for "${get_ip}" | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
 	</COMMAND>
 
 	<COMMAND name="show route all"
                 help="Show routes with all attributes (birdc show route all)"
                 lock="false"
                 interrupt="true">
-                <ACTION>birdc show route all | grep -v "^BIRD"</ACTION>
+                <ACTION>birdc show route all | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
         </COMMAND>
 
         <COMMAND name="show route count"
-                help="Count Bird Route Count"
+                help="Count BIRD Route Count" help-id="Count Bird Route Count"
                 lock="false"
                 interrupt="true">
-                <ACTION>birdc show route count | grep -v "^BIRD"</ACTION>
+                <ACTION>birdc show route count | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
         </COMMAND>
 
  	<COMMAND name="show protocol"
@@ -127,14 +127,14 @@
 		help="Show protocol summary"
 		lock="false"
                 interrupt="true">
-		<ACTION>birdc show protocol | grep -v "^BIRD"</ACTION>
+		<ACTION>birdc show protocol | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
 	</COMMAND>
 
 	<COMMAND name="show protocol all"
 		help="Show all protocol details"
 		lock="false"
                 interrupt="true">
-		<ACTION>birdc show protocol all | grep -v "^BIRD"</ACTION>
+		<ACTION>birdc show protocol all | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
 	</COMMAND>
 
 	<COMMAND name="show protocol neighbors"
@@ -144,7 +144,7 @@
 		<PARAM name="get_var"
 			help="Protocol name"
 			ptype="STRING"/>
-		<ACTION>birdc show protocol "${get_var}" | grep -v "^BIRD"</ACTION>
+		<ACTION>birdc show protocol "${get_var}" | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
 	</COMMAND>
 
 	<!--<COMMAND name="show route protocol"
@@ -190,11 +190,11 @@
 		</PARAM>
 		 <ACTION>
                         if test -n "${bgp}"; then
-                               birdc show route protocol "${dst} ${pref}" | grep -v "^BIRD"
+                               birdc show route protocol "${dst} ${pref}" | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream
                         elif test -n "${ospf}"; then
-                               birdc show route protocol "${dst} ${pref}" | grep -v "^BIRD"        
+                               birdc show route protocol "${dst} ${pref}" | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream
 			else
-                               birdc show route protocol "${dst}" | grep -v "^BIRD"
+                               birdc show route protocol "${dst}" | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream
                         fi
                 </ACTION>
 	</COMMAND>
@@ -207,7 +207,7 @@
 		<PARAM name="get_export"
 			help="Protocol name"
 			ptype="STRING"/>
-		<ACTION>birdc show route export "${get_export}" | grep -v "^BIRD"</ACTION>
+		<ACTION>birdc show route export "${get_export}" | grep -v "^BIRD" | sh ${RT_SBIN}/titian-pager.sh --stream </ACTION>
 	</COMMAND>
 
 	<!--Reload-->
@@ -241,7 +241,7 @@
 
 	<!-- B7: reload satu protokol dua arah + semua protokol -->
 	<COMMAND name="reload both"
-		help="Reload inbound + outbound satu protokol (birdc reload &lt;nama&gt;)"
+		help="Reload inbound + outbound one protocol (birdc reload &lt;name&gt;)" help-id="Reload inbound + outbound satu protokol (birdc reload &lt;nama&gt;)"
 		lock="false"
 		interrupt="true">
 		<PARAM name="get_var"
@@ -251,7 +251,7 @@
 	</COMMAND>
 
 	<COMMAND name="reload all"
-		help="Reload semua protokol (birdc reload all)"
+		help="Reload all protocols (birdc reload all)" help-id="Reload semua protokol (birdc reload all)"
 		lock="false"
 		interrupt="true">
 		<ACTION>${RT_SBIN}/titian-birdc.sh reload-all</ACTION>
@@ -278,7 +278,7 @@
 
 	<!-- B7: disable/enable semua protokol -->
 	<COMMAND name="disable all"
-		help="Disable semua protokol (birdc disable all)"
+		help="Disable all protocols (birdc disable all)" help-id="Disable semua protokol (birdc disable all)"
 		lock="false"
 		interrupt="true">
 		<ACTION>${RT_SBIN}/titian-birdc.sh proto-disable all</ACTION>
@@ -290,7 +290,7 @@
 	</COMMAND>
 
 	<COMMAND name="enable all"
-		help="Enable semua protokol (birdc enable all)"
+		help="Enable all protocols (birdc enable all)" help-id="Enable semua protokol (birdc enable all)"
 		lock="false"
 		interrupt="true">
 		<ACTION>${RT_SBIN}/titian-birdc.sh proto-enable all</ACTION>
@@ -298,7 +298,7 @@
 
 	<!-- Generator BIRD: render section -> backup -> bird -p -> birdc configure -->
 	<COMMAND name="generate"
-		help="Render, syntax-check, backup and apply one bird.conf section"
+		help="Render, syntax-check, backup and apply one BIRD.conf section" help-id="Render, syntax-check, backup and apply one bird.conf section"
 		lock="false"
 		interrupt="true">
 		<PARAM name="section"
@@ -346,7 +346,7 @@
 	</COMMAND>
 
 	<COMMAND name="generate check"
-		help="Render and syntax-check one bird.conf section without applying"
+		help="Render and syntax-check one BIRD.conf section without applying" help-id="Render and syntax-check one bird.conf section without applying"
 		lock="false"
 		interrupt="true">
 		<PARAM name="section"
@@ -414,7 +414,7 @@
 		help="Delete named community list"
 		lock="false"
 		interrupt="true">
-		<PARAM name="name" help="List name" ptype="STRING"/>
+		<PARAM name="name" help="List name" ptype="STRING" completion="${Get_comm_lists}"/>
 		<ACTION>${RT_SBIN}/titian-comm.sh list-del "${name}"</ACTION>
 	</COMMAND>
 
@@ -437,7 +437,7 @@
 		help="Remove community from BGP export"
 		lock="false"
 		interrupt="true">
-		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<PARAM name="community" help="Community value" ptype="STRING" completion="${Get_comm_values}"/>
 		<ACTION>${RT_SBIN}/titian-comm.sh export-del "${community}"</ACTION>
 	</COMMAND>
 
@@ -461,7 +461,7 @@
 		help="Remove community match on BGP import"
 		lock="false"
 		interrupt="true">
-		<PARAM name="community" help="Community value" ptype="STRING"/>
+		<PARAM name="community" help="Community value" ptype="STRING" completion="${Get_comm_values}"/>
 		<ACTION>${RT_SBIN}/titian-comm.sh import-del "${community}"</ACTION>
 	</COMMAND>
 

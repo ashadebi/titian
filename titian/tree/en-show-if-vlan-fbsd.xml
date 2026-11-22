@@ -10,11 +10,11 @@
 <VIEW name="enable-view">
 
     <COMMAND name="show interfaces vlan"
-            help="Vlan status and configuration"
+            help="VLAN status and configuration" help-id="Vlan status and configuration"
             lock="false"
             interrupt="true">
         <PARAM name="iface"
-                help="Interface vlan"
+                help="Interface VLAN" help-id="Interface vlan"
                 completion="${Get_if_vlan}"
                 ptype="IFACE_VLAN_FBSD"/>
         <PARAM name="detail"

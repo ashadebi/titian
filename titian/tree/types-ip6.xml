@@ -31,10 +31,10 @@
     <!--=======================================================-->
     <PTYPE name="IFACE_VLAN_FBSD"
         pattern="vlan[0-9]+$"
-        help="vlan[N] (FreeBSD)"/>
+        help="VLAN[N] (FreeBSD)" help-id="vlan[N] (FreeBSD)"/>
     <!--=======================================================-->
     <PTYPE name="IFACE_LAGG"
         pattern="lagg[0-9]+$"
-        help="lagg[N] (FreeBSD)"/>
+        help="LAGG[N] (FreeBSD)" help-id="lagg[N] (FreeBSD)"/>
     <!--=======================================================-->
 </CLISH_MODULE>

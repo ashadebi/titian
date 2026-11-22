@@ -32,7 +32,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no pppoe-server"
-            help="Delete SELURUH konfigurasi PPPoE server (all user + pool)">
+            help="Delete ENTIRE configuration PPPoE server (all user + pool)" help-id="Delete SELURUH konfigurasi PPPoE server (all user + pool)">
         <CONFIG operation="unset" pattern="^pppoe-server$"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh flush
@@ -76,7 +76,7 @@
     </COMMAND>
 
     <COMMAND name="interface"
-        help="Interface tempat PPPoE server mendengarkan">
+        help="Interface on which the PPPoE server listens" help-id="Interface tempat PPPoE server mendengarkan">
         <PARAM name="If"
             help="name interface"
             ptype="IFACE_SYS"/>
@@ -94,12 +94,12 @@
     </COMMAND>
 
     <COMMAND name="pool"
-        help="Pool alamat IP for klien PPPoE (range start-end)">
+        help="IP address pool for PPPoE clients (start-end range)" help-id="Pool alamat IP for klien PPPoE (range start-end)">
         <PARAM name="Start"
-            help="alamat awal pool"
+            help="pool start address" help-id="alamat awal pool"
             ptype="IP_ADDR"/>
         <PARAM name="End"
-            help="alamat akhir pool"
+            help="pool end address" help-id="alamat akhir pool"
             ptype="IP_ADDR"/>
         <CONFIG/>
         <ACTION>
@@ -107,7 +107,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no pool"
-        help="Delete pool alamat PPPoE">
+        help="Delete PPPoE address pool" help-id="Delete pool alamat PPPoE">
         <CONFIG operation="unset" pattern="^pool"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh del-pool
@@ -115,7 +115,7 @@
     </COMMAND>
 
     <COMMAND name="user"
-            help="User PPPoE (password + IP statis opsional at subview)"
+            help="PPPoE user (password + optional static IP in the subview)" help-id="User PPPoE (password + IP statis opsional at subview)"
             view="configure-pppoe-user-view"
             viewid="pppoe_user=${Name}"
             ptype="SUBCOMMAND"
@@ -140,9 +140,9 @@
     </COMMAND>
 
     <COMMAND name="radius-server"
-        help="Server RADIUS for auth PPPoE (tanpa CoA)">
+        help="Server RADIUS for auth PPPoE (without CoA)" help-id="Server RADIUS for auth PPPoE (tanpa CoA)">
         <PARAM name="Server"
-            help="alamat IPv4 server RADIUS"
+            help="RADIUS server IPv4 address" help-id="alamat IPv4 server RADIUS"
             ptype="IP_ADDR"/>
         <CONFIG/>
         <ACTION>
@@ -150,7 +150,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no radius-server"
-        help="Delete server RADIUS (back to auth lokal)">
+        help="Delete server RADIUS (back to auth local)" help-id="Delete server RADIUS (back to auth lokal)">
         <CONFIG operation="unset" pattern="^radius-server"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh del-radius-server
@@ -158,7 +158,7 @@
     </COMMAND>
 
     <COMMAND name="radius-secret"
-        help="Shared secret RADIUS (tersimpan at mpd.conf, mode 600)">
+        help="Shared secret RADIUS (stored in mpd.conf, mode 600)" help-id="Shared secret RADIUS (tersimpan at mpd.conf, mode 600)">
         <PARAM name="Secret"
             help="shared secret"
             ptype="STRING"/>
@@ -174,6 +174,81 @@
             ${RT_SBIN}/titian-pppoe.sh del-radius-secret
         </ACTION>
     </COMMAND>
+
+    <!-- RADIUS accounting (19 Nov 2026). `set auth enable radius-acct`
+         di mpd5 5.9 — kirim Accounting-Request (Start/Stop) ke 1813
+         sehingga sesi PPPoE muncul di myRadDASH `GET /v0/sessions`.
+         Default OFF (anchor); nyalakan bila mau monitoring PPPoE.
+         Hanya berlaku bila radius-server ter-set. -->
+    <COMMAND name="radius-acct"
+        help="Enable RADIUS accounting PPPoE (sessions appear in myRadDASH)" help-id="Nyalakan RADIUS accounting PPPoE (sesi muncul di myRadDASH)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-radius-acct yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-acct"
+        help="Disable RADIUS accounting PPPoE (default anchor)" help-id="Matikan RADIUS accounting PPPoE (default anchor)">
+        <CONFIG operation="unset" pattern="^radius-acct"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-radius-acct
+        </ACTION>
+    </COMMAND>
+
+    <!-- NAS-IP-Address eksplisit (19 Nov 2026). `set radius me <ip>` —
+         NAS-IP-Address yang dikirim mpd5 (auth + acct). Wajib di-set
+         bila source IP mesin di-NAT (mesin test: 10.10.2.3 ->
+         103.50.128.18); tanpa ini radacct.nasipaddress tidak cocok
+         dengan NAS `titian-test` di myRadDASH. -->
+    <COMMAND name="radius-nas-ip"
+        help="NAS-IP-Address sent by mpd5 to the RADIUS server (if NATed)" help-id="NAS-IP-Address yang dikirim mpd5 ke server RADIUS (bila di-NAT)">
+        <PARAM name="NasIp"
+            help="NAS IPv4 address (AS seen by the RADIUS server)" help-id="alamat IPv4 NAS (yang dilihat server RADIUS)"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-radius-nas-ip "${NasIp}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-nas-ip"
+        help="Delete the explicit NAS-IP-Address (mpd5 uses the local IP)" help-id="Delete NAS-IP-Address eksplisit (mpd5 pakai IP lokal)">
+        <CONFIG operation="unset" pattern="^radius-nas-ip"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-radius-nas-ip
+        </ACTION>
+    </COMMAND>
+
+    <!-- Console mpd5 (20 Nov 2026, fitur permanen). `set console self
+         127.0.0.1 5005` + `set console open` + `set user titian-console
+         <pw> admin` di mpd.conf (sumber: mpd.conf.sample). Password 16
+         hex char auto-generate (32 hex GAGAL login, 19 Nov), simpan
+         mode 600 di /etc/titian/mpd-console.pw + /cfg/titian/
+         mpd-console.pw, TIDAK PERNAH dicetak. Default OFF (anchor).
+         `console password` = regenerasi (rotasi), aksi transient
+         (tanpa <CONFIG/>) supaya replay startup-config tidak
+         mengganti password. Console dipakai untuk manajemen mpd5
+         (cek status) DAN untuk disconnect sesi PPPoE (Opsi A,
+         keputusan user 20 Nov 12:26 — `pppoe-server disconnect`). -->
+    <COMMAND name="console"
+        help="Enable console mpd5 (127.0.0.1:5005, user titian-console)" help-id="Nyalakan console mpd5 (127.0.0.1:5005, user titian-console)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-console yes
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="console password"
+        help="Regenerate password console mpd5 (16 hex, not shown)" help-id="Regenerasi password console mpd5 (16 hex, tidak ditampilkan)">
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh set-console-password
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no console"
+        help="Disable console mpd5 (password file also deleted)" help-id="Matikan console mpd5 (password file ikut dihapus)">
+        <CONFIG operation="unset" pattern="^console"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh del-console
+        </ACTION>
+    </COMMAND>
 </VIEW>
 
 <VIEW name="configure-pppoe-user-view"
@@ -183,14 +258,14 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to pppoe-server mode"
+        help="Back to PPPoE-server mode" help-id="Back to pppoe-server mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
     <HOTKEY key="^Z" cmd="exit"/>
 
     <COMMAND name="password"
-        help="Password user (tersimpan at mpd.secret, mode 600)">
+        help="Password user (stored in mpd.secret, mode 600)" help-id="Password user (tersimpan at mpd.secret, mode 600)">
         <PARAM name="Pass"
             help="password"
             ptype="STRING"/>
@@ -200,9 +275,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="ip"
-        help="Alamat IP statis for user ini (kosong = from pool)">
+        help="This IP address static for user (empty = from pool)" help-id="Alamat IP statis for user ini (kosong = from pool)">
         <PARAM name="Addr"
-            help="alamat IPv4"
+            help="IPv4 address" help-id="alamat IPv4"
             ptype="IP_ADDR"/>
         <CONFIG/>
         <ACTION>
@@ -210,7 +285,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ip"
-        help="Delete IP statis user (back to pool)">
+        help="Delete the user's static IP (back to pool)" help-id="Delete IP statis user (back to pool)">
         <CONFIG operation="unset" pattern="^ip"/>
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh user-del-ip "${pppoe_user}"
@@ -220,7 +295,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show pppoe-server"
-        help="Status PPPoE server (enable, interface, pool, jumlah user)"
+        help="PPPoE server status (enable, interface, pool, user count)" help-id="Status PPPoE server (enable, interface, pool, jumlah user)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -228,7 +303,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show pppoe-server users"
-        help="List user PPPoE (name + IP statis; password not ditampilkan)"
+        help="PPPoE user list (name + static IP; passwords not shown)" help-id="List user PPPoE (name + IP statis; password not ditampilkan)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -236,11 +311,40 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show pppoe-server sessions"
-        help="Sesi PPPoE that aktif (interface ng*)"
+        help="Active PPPoE sessions (interface ng*)" help-id="Sesi PPPoE that aktif (interface ng*)"
         lock="false"
         interrupt="true">
         <ACTION>
             ${RT_SBIN}/titian-pppoe.sh show-sessions
+        </ACTION>
+    </COMMAND>
+
+    <!-- Disconnect sesi PPPoE aktif via console mpd5 (20 Nov 2026,
+         Opsi A — keputusan user 20 Nov 12:26). mpd5 TIDAK mendengarkan
+         CoA (port 3799), jadi pemutusan dari myRadDASH dilakukan via
+         SSH (titian-remote-kick.sh) yang memanggil backend ini.
+         Backend: verifikasi sesi via `show sessions user` -> `authname`
+         -> `close` (LCP graceful) -> verifikasi sesi hilang. Jalur
+         LAMA (ifconfig <tun> destroy, 19 Nov) DIBUKTIKAN TIDAK VIABLE
+         (20 Nov, 6 mekanisme diuji — HANG >3 mnt, salah sasaran) dan
+         DIHAPUS dari backend. Framed-IP didapat myRadDASH dari radacct.
+         User TIDAK dihapus dari config; agar tidak bisa login lagi,
+         myRadDASH harus juga mengisolir user (status=isolated)
+         sehingga auth RADIUS berikutnya ditolak. -->
+    <COMMAND name="pppoe-server"
+        help="PPPoE server operations (disconnect)"/>
+    <COMMAND name="pppoe-server disconnect"
+        help="Disconnect the active PPPoE session for one user via the mpd5 console (verify the session + close LCP)" help-id="Putus sesi PPPoE aktif untuk satu user via console mpd5 (verifikasi sesi + close LCP)"
+        lock="false"
+        interrupt="true">
+        <PARAM name="User"
+            help="username PPPoE"
+            ptype="STRING"/>
+        <PARAM name="Ip"
+            help="Framed-IP-Address session (from radacct myRadDASH)" help-id="Framed-IP-Address sesi (dari radacct myRadDASH)"
+            ptype="IP_ADDR"/>
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh disconnect "${User}" "${Ip}"
         </ACTION>
     </COMMAND>
 </VIEW>

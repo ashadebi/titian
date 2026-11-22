@@ -34,7 +34,7 @@
 			ptype="SUBCOMMAND"
 			mode="switch">
 			<PARAM name="Asia/Jakarta"
-				help="WIB|pulau jawa|dsk"
+				help="WIB|Java island|etc." help-id="WIB|pulau jawa|dsk"
 				ptype="SUBCOMMAND"
 				mode="subcommand"/>
 			<PARAM name="Asia/Makassar"
@@ -52,6 +52,41 @@
 		</ACTION>
 	</COMMAND>
 
+<!-- help-language config (fitur bahasa help, 21 Nov 2026):
+     default English (teknis), pilihan Indonesian. Berlaku HANYA untuk
+     help (`show help` / `help all` / `show route help`) dan `?` — perintah
+     CLI, pesan error, dan output lain tidak berubah. Mekanisme: tree
+     menyimpan help (EN) + help-id (ID); `system help-language` memanggil
+     titian-help-lang.py set yang regenerate flat dir klish
+     (/opt/titian/etc/clish-en) dari tree. `help` langsung ikut; `?`
+     ikut pada login CLI berikutnya (klish memuat XML saat sesi dimulai).
+     CONFIG-persisten (priority 0x1022) sehingga replay boot
+     menerapkannya lagi (self-healing sesudah re-deploy/reboot). -->
+	<COMMAND name="system help-language"
+		help="Set help language (English/Indonesian)"
+		help-id="Atur bahasa help (Inggris/Indonesia)">
+		<PARAM name="lang"
+			help="Help language"
+			help-id="Bahasa help"
+			ptype="SUBCOMMAND"
+			mode="switch">
+			<PARAM name="english"
+				help="English (default)"
+				help-id="Inggris (default)"
+				ptype="SUBCOMMAND"
+				mode="subcommand"/>
+			<PARAM name="indonesian"
+				help="Indonesian"
+				help-id="Indonesia"
+				ptype="SUBCOMMAND"
+				mode="subcommand"/>
+		</PARAM>
+                <CONFIG priority="0x1022"/>
+		<ACTION>
+			${RT_SBIN}/titian-help-lang.py set "${lang}"
+		</ACTION>
+	</COMMAND>
+
 <!-- sysctl (fitur baru, bukan restorasi titian: tree lama tidak punya
      perintah sysctl). Berlaku SEGERA system-wide (live) + persisten
      (cermin OS-native: /etc/sysctl.d/99-titian.conf di Linux,
@@ -62,12 +97,12 @@
      (mis. tcp_rmem) ditulis pakai tanda kutip. Arti tiap kunci:
      `show system sysctl`. -->
 	<COMMAND name="system sysctl"
-		help="Set kernel parameter (live + persisten; arti tiap kunci: show system sysctl)">
+		help="Set kernel parameter (live + persistent; meaning each key: show system sysctl)" help-id="Set kernel parameter (live + persisten; arti tiap kunci: show system sysctl)">
 		<PARAM name="key"
-			help="MIB key, ex: net.ipv4.ip_forward (Linux) / net.inet.ip.forwarding (FreeBSD)"
+			help="MIB key, ex: net.IPv4.ip_forward (Linux) / net.inet.IP.forwarding (FreeBSD)" help-id="MIB key, ex: net.ipv4.ip_forward (Linux) / net.inet.ip.forwarding (FreeBSD)"
 			ptype="STRING"/>
 		<PARAM name="value"
-			help="Value, ex: 1 (vektor berspasi pakai tanda kutip, ex: &quot;4096 87380 16777216&quot;)"
+			help="Value, ex: 1 (space-separated vectors use quotes, ex: &quot;4096 87380 16777216&quot;)" help-id="Value, ex: 1 (vektor berspasi pakai tanda kutip, ex: &quot;4096 87380 16777216&quot;)"
 			ptype="STRING"/>
 		<CONFIG pattern="system sysctl ${key}"/>
 		<ACTION>
@@ -76,7 +111,7 @@
 	</COMMAND>
 
 	<COMMAND name="no system sysctl"
-		help="Delete setting sysctl Titian (mirror clean; value live back to value before-set, or bertahan sampai reboot if value awal tak tercatat)">
+		help="Delete a Titian sysctl setting (mirror clean; live value returns to the pre-set value, or persists until reboot if the initial value was not recorded)" help-id="Delete setting sysctl Titian (mirror clean; value live back to value before-set, or bertahan sampai reboot if value awal tak tercatat)">
 		<PARAM name="key"
 			help="MIB key that deleted"
 			ptype="STRING"/>

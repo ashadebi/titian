@@ -28,7 +28,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -44,7 +44,7 @@
         help="Show Babel state"/>
 
     <COMMAND name="randomize-router-id"
-        help="Acak 32 bit teratas router ID tiap start (default no)">
+        help="Randomize the top 32 bits of the router ID on each start (default no)" help-id="Acak 32 bit teratas router ID tiap start (default no)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -54,7 +54,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no randomize-router-id"
-        help="Hapus randomize-router-id (default BIRD no)">
+        help="Delete randomize-router-ID (BIRD default no)" help-id="Hapus randomize-router-id (default BIRD no)">
         <CONFIG operation="unset" pattern="^randomize-router-id"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh top-del randomize-router-id
@@ -62,7 +62,7 @@
     </COMMAND>
 
     <COMMAND name="ipv6-sadr"
-        help="Aktifkan dukungan SADR/SSR di channel ipv6 (default off)">
+        help="Enable support SADR/SSR in channel IPv6 (default off)" help-id="Aktifkan dukungan SADR/SSR di channel ipv6 (default off)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -72,7 +72,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv6-sadr"
-        help="Hapus ipv6-sadr (channel ipv6 reguler)">
+        help="Delete IPv6-SADR (regular IPv6 channel)" help-id="Hapus ipv6-sadr (channel ipv6 reguler)">
         <CONFIG operation="unset" pattern="^ipv6-sadr"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh top-del ipv6-sadr
@@ -80,9 +80,9 @@
     </COMMAND>
 
     <COMMAND name="ipv4-table"
-        help="Tabel channel ipv4">
+        help="IPv4 channel table" help-id="Tabel channel ipv4">
         <PARAM name="Value"
-            help="Nama tabel ipv4 (global -> table-add ipv4; master4 sah)"
+            help="IPv4 table name (global -> table-add IPv4; master4 valid)" help-id="Nama tabel ipv4 (global -> table-add ipv4; master4 sah)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -90,19 +90,19 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv4-table"
-        help="Hapus ipv4-table">
+        help="Delete IPv4-table" help-id="Hapus ipv4-table">
         <CONFIG operation="unset" pattern="^ipv4-table"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh chan-del ipv4 table
         </ACTION>
     </COMMAND>
     <COMMAND name="ipv4-import"
-        help="Import filter channel ipv4 (all|none|filter NAMA)">
+        help="Import filter channel IPv4 (all|none|filter NAME)" help-id="Import filter channel ipv4 (all|none|filter NAMA)">
         <PARAM name="Value"
             help="all|none|filter"
             ptype="STRING"/>
         <PARAM name="FilterName"
-            help="Nama filter (bila Value=filter)"
+            help="Filter name (if Value=filter)" help-id="Nama filter (bila Value=filter)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -111,19 +111,19 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv4-import"
-        help="Hapus ipv4-import">
+        help="Delete IPv4-import" help-id="Hapus ipv4-import">
         <CONFIG operation="unset" pattern="^ipv4-import"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh chan-del ipv4 import
         </ACTION>
     </COMMAND>
     <COMMAND name="ipv4-export"
-        help="Export filter channel ipv4 (all|none|filter NAMA)">
+        help="Export filter channel IPv4 (all|none|filter NAME)" help-id="Export filter channel ipv4 (all|none|filter NAMA)">
         <PARAM name="Value"
             help="all|none|filter"
             ptype="STRING"/>
         <PARAM name="FilterName"
-            help="Nama filter (bila Value=filter)"
+            help="Filter name (if Value=filter)" help-id="Nama filter (bila Value=filter)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -132,7 +132,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv4-export"
-        help="Hapus ipv4-export">
+        help="Delete IPv4-export" help-id="Hapus ipv4-export">
         <CONFIG operation="unset" pattern="^ipv4-export"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh chan-del ipv4 export
@@ -140,9 +140,9 @@
     </COMMAND>
 
     <COMMAND name="ipv6-table"
-        help="Tabel channel ipv6">
+        help="IPv6 channel table" help-id="Tabel channel ipv6">
         <PARAM name="Value"
-            help="Nama tabel ipv6/ipv6-sadr (global -> table-add ipv6; master6 sah)"
+            help="IPv6/IPv6-SADR table name (global -> table-add IPv6; master6 valid)" help-id="Nama tabel ipv6/ipv6-sadr (global -> table-add ipv6; master6 sah)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -150,19 +150,19 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv6-table"
-        help="Hapus ipv6-table">
+        help="Delete IPv6-table" help-id="Hapus ipv6-table">
         <CONFIG operation="unset" pattern="^ipv6-table"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh chan-del ipv6 table
         </ACTION>
     </COMMAND>
     <COMMAND name="ipv6-import"
-        help="Import filter channel ipv6 (all|none|filter NAMA)">
+        help="Import filter channel IPv6 (all|none|filter NAME)" help-id="Import filter channel ipv6 (all|none|filter NAMA)">
         <PARAM name="Value"
             help="all|none|filter"
             ptype="STRING"/>
         <PARAM name="FilterName"
-            help="Nama filter (bila Value=filter)"
+            help="Filter name (if Value=filter)" help-id="Nama filter (bila Value=filter)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -171,19 +171,19 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv6-import"
-        help="Hapus ipv6-import">
+        help="Delete IPv6-import" help-id="Hapus ipv6-import">
         <CONFIG operation="unset" pattern="^ipv6-import"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh chan-del ipv6 import
         </ACTION>
     </COMMAND>
     <COMMAND name="ipv6-export"
-        help="Export filter channel ipv6 (all|none|filter NAMA)">
+        help="Export filter channel IPv6 (all|none|filter NAME)" help-id="Export filter channel ipv6 (all|none|filter NAMA)">
         <PARAM name="Value"
             help="all|none|filter"
             ptype="STRING"/>
         <PARAM name="FilterName"
-            help="Nama filter (bila Value=filter)"
+            help="Filter name (if Value=filter)" help-id="Nama filter (bila Value=filter)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -192,7 +192,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ipv6-export"
-        help="Hapus ipv6-export">
+        help="Delete IPv6-export" help-id="Hapus ipv6-export">
         <CONFIG operation="unset" pattern="^ipv6-export"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh chan-del ipv6 export
@@ -200,9 +200,9 @@
     </COMMAND>
 
     <COMMAND name="debug"
-        help="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
+        help="This Debug protocol (all, off, or states,routes,filters,interfaces,events,packets)" help-id="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
         <PARAM name="Value"
-            help="all|off|kelas,kelas,..."
+            help="all|off|class,class,..." help-id="all|off|kelas,kelas,..."
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -210,7 +210,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no debug"
-        help="Matikan debug protokol ini (default BIRD off)">
+        help="Disable this debug protocol (BIRD default off)" help-id="Matikan debug protokol ini (default BIRD off)">
         <CONFIG operation="unset" pattern="^debug"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh debug-del
@@ -218,7 +218,7 @@
     </COMMAND>
 
     <COMMAND name="mrtdump"
-        help="MRTdump protokol ini (all, off, atau states,messages)">
+        help="This MRTdump protocol (all, off, or states,messages)" help-id="MRTdump protokol ini (all, off, atau states,messages)">
         <PARAM name="Value"
             help="all|off|states,messages"
             ptype="STRING"/>
@@ -228,7 +228,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no mrtdump"
-        help="Matikan mrtdump protokol ini (default BIRD off)">
+        help="Disable this mrtdump protocol (BIRD default off)" help-id="Matikan mrtdump protokol ini (default BIRD off)">
         <CONFIG operation="unset" pattern="^mrtdump"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh mrtdump-del
@@ -236,13 +236,13 @@
     </COMMAND>
 
     <COMMAND name="interface"
-        help="Interface Babel (masuk ke interface view)"
+        help="Interface Babel (enter interface view)" help-id="Interface Babel (masuk ke interface view)"
         view="configure-bird-babel-iface-view"
         viewid="babel_iface=${Pattern}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Pattern"
-            help="Pola interface (mis. ge* atau wlan0)"
+            help="Interface pattern (e.g. ge* or wlan0)" help-id="Pola interface (mis. ge* atau wlan0)"
             ptype="STRING"/>
         <CONFIG pattern="^${__line}$"/>
         <ACTION>
@@ -250,9 +250,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no interface"
-        help="Hapus interface Babel (semua opsi interface itu)">
+        help="Delete interface Babel (all options that interface)" help-id="Hapus interface Babel (semua opsi interface itu)">
         <PARAM name="Pattern"
-            help="Pola interface"
+            help="Interface pattern" help-id="Pola interface"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
         <ACTION>
@@ -261,7 +261,7 @@
     </COMMAND>
 
     <COMMAND name="show babel"
-        help="Tampilkan intent + section + status birdc instance ini (via show protocols)">
+        help="Show the intent + section + birdc status of this instance (via show protocols)" help-id="Tampilkan intent + section + status birdc instance ini (via show protocols)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh show
@@ -289,7 +289,7 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="type"
-        help="Tipe interface (default wired)">
+        help="Interface type (default wired)" help-id="Tipe interface (default wired)">
         <PARAM name="Value"
             help="wired|wireless|tunnel"
             ptype="STRING"/>
@@ -299,7 +299,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no type"
-        help="Hapus type (default BIRD wired)">
+        help="Delete type (BIRD default wired)" help-id="Hapus type (default BIRD wired)">
         <CONFIG operation="unset" pattern="^type"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" type
@@ -307,7 +307,7 @@
     </COMMAND>
 
     <COMMAND name="rxcost"
-        help="Biaya RX nominal interface (default 96 wired / 256 wireless)">
+        help="Nominal RX interface cost (default 96 wired / 256 wireless)" help-id="Biaya RX nominal interface (default 96 wired / 256 wireless)">
         <PARAM name="Value"
             help="0..65535"
             ptype="UINT"/>
@@ -317,7 +317,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rxcost"
-        help="Hapus rxcost">
+        help="Delete rxcost" help-id="Hapus rxcost">
         <CONFIG operation="unset" pattern="^rxcost"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" rxcost
@@ -325,7 +325,7 @@
     </COMMAND>
 
     <COMMAND name="limit"
-        help="Berapa dari 16 Hello terakhir harus diterima agar tetangga up (wired; default 12)">
+        help="How many of the last 16 Hellos must be received for the neighbor to be up (wired; default 12)" help-id="Berapa dari 16 Hello terakhir harus diterima agar tetangga up (wired; default 12)">
         <PARAM name="Value"
             help="0..16"
             ptype="UINT"/>
@@ -335,7 +335,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no limit"
-        help="Hapus limit (default BIRD 12)">
+        help="Delete limit (BIRD default 12)" help-id="Hapus limit (default BIRD 12)">
         <CONFIG operation="unset" pattern="^limit"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" limit
@@ -343,9 +343,9 @@
     </COMMAND>
 
     <COMMAND name="hello-interval"
-        help="Interval kirim Hello periodik (default 4 detik)">
+        help="Periodic Hello send interval (default: 4 seconds)" help-id="Interval kirim Hello periodik (default 4 detik)">
         <PARAM name="Value"
-            help="Waktu BIRD (mis. 4, 4s, 500ms)"
+            help="BIRD time (e.g. 4, 4s, 500ms)" help-id="Waktu BIRD (mis. 4, 4s, 500ms)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -353,7 +353,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no hello-interval"
-        help="Hapus hello-interval (default BIRD 4 detik)">
+        help="Delete hello-interval (BIRD default 4 seconds)" help-id="Hapus hello-interval (default BIRD 4 detik)">
         <CONFIG operation="unset" pattern="^hello-interval"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" hello-interval
@@ -361,9 +361,9 @@
     </COMMAND>
 
     <COMMAND name="update-interval"
-        help="Interval kirim update penuh periodik (default 4x hello interval)">
+        help="Periodic full update send interval (default: 4x hello interval)" help-id="Interval kirim update penuh periodik (default 4x hello interval)">
         <PARAM name="Value"
-            help="Waktu BIRD (mis. 16, 16s)"
+            help="BIRD time (e.g. 16, 16s)" help-id="Waktu BIRD (mis. 16, 16s)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -371,7 +371,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no update-interval"
-        help="Hapus update-interval (default 4x hello)">
+        help="Delete update-interval (default 4x hello)" help-id="Hapus update-interval (default 4x hello)">
         <CONFIG operation="unset" pattern="^update-interval"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" update-interval
@@ -389,7 +389,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no port"
-        help="Hapus port (default BIRD 6696)">
+        help="Delete port (BIRD default 6696)" help-id="Hapus port (default BIRD 6696)">
         <CONFIG operation="unset" pattern="^port"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" port
@@ -397,7 +397,7 @@
     </COMMAND>
 
     <COMMAND name="tx-class"
-        help="Nilai ToS/Class paket Babel keluar (0-255)">
+        help="ToS/Class value of outgoing Babel packets (0-255)" help-id="Nilai ToS/Class paket Babel keluar (0-255)">
         <PARAM name="Value"
             help="0..255"
             ptype="UINT"/>
@@ -407,7 +407,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-class"
-        help="Hapus tx-class">
+        help="Delete tx-class" help-id="Hapus tx-class">
         <CONFIG operation="unset" pattern="^tx-class"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" tx-class
@@ -415,7 +415,7 @@
     </COMMAND>
 
     <COMMAND name="tx-dscp"
-        help="Nilai DSCP paket Babel keluar (0-63)">
+        help="DSCP value of outgoing Babel packets (0-63)" help-id="Nilai DSCP paket Babel keluar (0-63)">
         <PARAM name="Value"
             help="0..63"
             ptype="UINT"/>
@@ -425,7 +425,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-dscp"
-        help="Hapus tx-dscp">
+        help="Delete tx-DSCP" help-id="Hapus tx-dscp">
         <CONFIG operation="unset" pattern="^tx-dscp"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" tx-dscp
@@ -433,7 +433,7 @@
     </COMMAND>
 
     <COMMAND name="rx-buffer"
-        help="Ukuran buffer pemrosesan paket (default MTU interface; min 512 + overhead)">
+        help="Packet processing buffer size (default interface MTU; min 512 + overhead)" help-id="Ukuran buffer pemrosesan paket (default MTU interface; min 512 + overhead)">
         <PARAM name="Value"
             help="512..65535"
             ptype="UINT"/>
@@ -443,7 +443,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rx-buffer"
-        help="Hapus rx-buffer">
+        help="Delete rx-buffer" help-id="Hapus rx-buffer">
         <CONFIG operation="unset" pattern="^rx-buffer"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" rx-buffer
@@ -451,7 +451,7 @@
     </COMMAND>
 
     <COMMAND name="tx-length"
-        help="Panjang maks paket Babel yang dihasilkan (default MTU; min 512 + overhead)">
+        help="Maximum length of generated Babel packets (default MTU; min 512 + overhead)" help-id="Panjang maks paket Babel yang dihasilkan (default MTU; min 512 + overhead)">
         <PARAM name="Value"
             help="512..65535"
             ptype="UINT"/>
@@ -461,7 +461,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-length"
-        help="Hapus tx-length">
+        help="Delete tx-length" help-id="Hapus tx-length">
         <CONFIG operation="unset" pattern="^tx-length"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" tx-length
@@ -479,7 +479,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no check-link"
-        help="Hapus check-link (default BIRD yes)">
+        help="Delete check-link (BIRD default yes)" help-id="Hapus check-link (default BIRD yes)">
         <CONFIG operation="unset" pattern="^check-link"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" check-link
@@ -487,9 +487,9 @@
     </COMMAND>
 
     <COMMAND name="next-hop-ipv4"
-        help="Next hop yang diiklankan untuk route IPv4 (default preferred IPv4 interface)">
+        help="Next hop advertised for IPv4 routes (default preferred IPv4 interface)" help-id="Next hop yang diiklankan untuk route IPv4 (default preferred IPv4 interface)">
         <PARAM name="Value"
-            help="Alamat IPv4"
+            help="IPv4 address" help-id="Alamat IPv4"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -497,7 +497,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no next-hop-ipv4"
-        help="Hapus next-hop-ipv4">
+        help="Delete next-hop-IPv4" help-id="Hapus next-hop-ipv4">
         <CONFIG operation="unset" pattern="^next-hop-ipv4"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" next-hop-ipv4
@@ -505,9 +505,9 @@
     </COMMAND>
 
     <COMMAND name="next-hop-ipv6"
-        help="Next hop yang diiklankan untuk route IPv6 (default link-local source)">
+        help="Next hop advertised for IPv6 routes (default link-local source)" help-id="Next hop yang diiklankan untuk route IPv6 (default link-local source)">
         <PARAM name="Value"
-            help="Alamat IPv6"
+            help="IPv6 address" help-id="Alamat IPv6"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -515,7 +515,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no next-hop-ipv6"
-        help="Hapus next-hop-ipv6">
+        help="Delete next-hop-IPv6" help-id="Hapus next-hop-ipv6">
         <CONFIG operation="unset" pattern="^next-hop-ipv6"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" next-hop-ipv6
@@ -523,7 +523,7 @@
     </COMMAND>
 
     <COMMAND name="extended-next-hop"
-        help="Terima &amp; kirim route IPv4 dengan next hop IPv6 (RFC 9229; default yes)">
+        help="Accept &amp; send route IPv4 with next hop IPv6 (RFC 9229; default yes)" help-id="Terima &amp; kirim route IPv4 dengan next hop IPv6 (RFC 9229; default yes)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -533,7 +533,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no extended-next-hop"
-        help="Hapus extended-next-hop (default BIRD yes)">
+        help="Delete extended-next-hop (BIRD default yes)" help-id="Hapus extended-next-hop (default BIRD yes)">
         <CONFIG operation="unset" pattern="^extended-next-hop"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" extended-next-hop
@@ -541,7 +541,7 @@
     </COMMAND>
 
     <COMMAND name="rtt-cost"
-        help="Biaya RTT tambahan per tetangga (default 0 disabled; 96 untuk tunnel)">
+        help="Additional RTT cost per neighbor (default 0 disabled; 96 for tunnel)" help-id="Biaya RTT tambahan per tetangga (default 0 disabled; 96 untuk tunnel)">
         <PARAM name="Value"
             help="0..65535"
             ptype="UINT"/>
@@ -551,7 +551,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rtt-cost"
-        help="Hapus rtt-cost (default BIRD 0)">
+        help="Delete rtt-cost (BIRD default 0)" help-id="Hapus rtt-cost (default BIRD 0)">
         <CONFIG operation="unset" pattern="^rtt-cost"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" rtt-cost
@@ -559,9 +559,9 @@
     </COMMAND>
 
     <COMMAND name="rtt-min"
-        help="RTT minimum biaya RTT mulai diterapkan (default 10ms)">
+        help="Minimum RTT at which the RTT cost starts to apply (default 10ms)" help-id="RTT minimum biaya RTT mulai diterapkan (default 10ms)">
         <PARAM name="Value"
-            help="Waktu BIRD (mis. 10ms)"
+            help="BIRD time (e.g. 10ms)" help-id="Waktu BIRD (mis. 10ms)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -569,7 +569,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rtt-min"
-        help="Hapus rtt-min (default BIRD 10ms)">
+        help="Delete rtt-min (BIRD default 10ms)" help-id="Hapus rtt-min (default BIRD 10ms)">
         <CONFIG operation="unset" pattern="^rtt-min"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" rtt-min
@@ -577,9 +577,9 @@
     </COMMAND>
 
     <COMMAND name="rtt-max"
-        help="RTT biaya RTT penuh diterapkan (default 120ms)">
+        help="RTT at which the full RTT cost applies (default 120ms)" help-id="RTT biaya RTT penuh diterapkan (default 120ms)">
         <PARAM name="Value"
-            help="Waktu BIRD (mis. 120ms)"
+            help="BIRD time (e.g. 120ms)" help-id="Waktu BIRD (mis. 120ms)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -587,7 +587,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rtt-max"
-        help="Hapus rtt-max (default BIRD 120ms)">
+        help="Delete rtt-max (BIRD default 120ms)" help-id="Hapus rtt-max (default BIRD 120ms)">
         <CONFIG operation="unset" pattern="^rtt-max"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" rtt-max
@@ -605,7 +605,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rtt-decay"
-        help="Hapus rtt-decay (default BIRD 42)">
+        help="Delete rtt-decay (BIRD default 42)" help-id="Hapus rtt-decay (default BIRD 42)">
         <CONFIG operation="unset" pattern="^rtt-decay"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" rtt-decay
@@ -613,7 +613,7 @@
     </COMMAND>
 
     <COMMAND name="send-timestamps"
-        help="Kirim timestamp untuk perhitungan RTT (default yes)">
+        help="Send timestamp for calculation RTT (default yes)" help-id="Kirim timestamp untuk perhitungan RTT (default yes)">
         <PARAM name="Value"
             help="on|off"
             ptype="STRING"/>
@@ -623,7 +623,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no send-timestamps"
-        help="Hapus send-timestamps (default BIRD yes)">
+        help="Delete send-timestamps (BIRD default yes)" help-id="Hapus send-timestamps (default BIRD yes)">
         <CONFIG operation="unset" pattern="^send-timestamps"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" send-timestamps
@@ -631,7 +631,7 @@
     </COMMAND>
 
     <COMMAND name="authentication"
-        help="Autentikasi MAC RFC 8967 (default none; mac wajib ada password)">
+        help="MAC RFC 8967 authentication (default none; the MAC must have a password)" help-id="Autentikasi MAC RFC 8967 (default none; mac wajib ada password)">
         <PARAM name="Value"
             help="none|mac|mac-permissive"
             ptype="STRING"/>
@@ -641,7 +641,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no authentication"
-        help="Hapus authentication (default BIRD none)">
+        help="Delete authentication (BIRD default none)" help-id="Hapus authentication (default BIRD none)">
         <CONFIG operation="unset" pattern="^authentication"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh interface-unset "${babel_iface}" authentication
@@ -649,9 +649,9 @@
     </COMMAND>
 
     <COMMAND name="password"
-        help="Password autentikasi MAC (tanpa spasi; panjang HARUS cocok key size algoritma)">
+        help="MAC authentication password (no spaces; length must match the algorithm's key size)" help-id="Password autentikasi MAC (tanpa spasi; panjang HARUS cocok key size algoritma)">
         <PARAM name="Value"
-            help="Teks password (tanpa spasi)"
+            help="Password text (without space)" help-id="Teks password (tanpa spasi)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -659,7 +659,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password"
-        help="Hapus password (sub-opsi password ikut dihapus)">
+        help="Delete password (sub-options password also deleted)" help-id="Hapus password (sub-opsi password ikut dihapus)">
         <CONFIG operation="unset" pattern="^password"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-del "${babel_iface}"
@@ -667,9 +667,9 @@
     </COMMAND>
 
     <COMMAND name="password-id"
-        help="ID kunci password (butuh password)">
+        help="ID key password (requires password)" help-id="ID kunci password (butuh password)">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
             help="0..255"
@@ -680,7 +680,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-id"
-        help="Hapus password-id">
+        help="Delete password-ID" help-id="Hapus password-id">
         <CONFIG operation="unset" pattern="^password-id"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" id
@@ -688,12 +688,12 @@
     </COMMAND>
 
     <COMMAND name="password-generate-from"
-        help="Awal masa berlaku pembangkitan password (YYYY-MM-DD saja)">
+        help="Password generation start (YYYY-MM-DD only)" help-id="Awal masa berlaku pembangkitan password (YYYY-MM-DD saja)">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="Tanggal (mis. 2026-11-16)"
+            help="Date (e.g. 2026-11-16)" help-id="Tanggal (mis. 2026-11-16)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -701,7 +701,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-generate-from"
-        help="Hapus password-generate-from">
+        help="Delete password-generate-from" help-id="Hapus password-generate-from">
         <CONFIG operation="unset" pattern="^password-generate-from"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" generate-from
@@ -709,12 +709,12 @@
     </COMMAND>
 
     <COMMAND name="password-generate-to"
-        help="Akhir masa berlaku pembangkitan password">
+        help="Password generation expiry" help-id="Akhir masa berlaku pembangkitan password">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="Tanggal (mis. 2027-11-16)"
+            help="Date (e.g. 2027-11-16)" help-id="Tanggal (mis. 2027-11-16)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -722,7 +722,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-generate-to"
-        help="Hapus password-generate-to">
+        help="Delete password-generate-to" help-id="Hapus password-generate-to">
         <CONFIG operation="unset" pattern="^password-generate-to"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" generate-to
@@ -730,12 +730,12 @@
     </COMMAND>
 
     <COMMAND name="password-accept-from"
-        help="Awal masa berlaku penerimaan password">
+        help="Password acceptance start" help-id="Awal masa berlaku penerimaan password">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="Tanggal (mis. 2026-11-16)"
+            help="Date (e.g. 2026-11-16)" help-id="Tanggal (mis. 2026-11-16)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -743,7 +743,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-accept-from"
-        help="Hapus password-accept-from">
+        help="Delete password-accept-from" help-id="Hapus password-accept-from">
         <CONFIG operation="unset" pattern="^password-accept-from"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" accept-from
@@ -751,12 +751,12 @@
     </COMMAND>
 
     <COMMAND name="password-accept-to"
-        help="Akhir masa berlaku penerimaan password">
+        help="Password acceptance expiry" help-id="Akhir masa berlaku penerimaan password">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="Tanggal (mis. 2027-11-16)"
+            help="Date (e.g. 2027-11-16)" help-id="Tanggal (mis. 2027-11-16)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -764,7 +764,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-accept-to"
-        help="Hapus password-accept-to">
+        help="Delete password-accept-to" help-id="Hapus password-accept-to">
         <CONFIG operation="unset" pattern="^password-accept-to"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" accept-to
@@ -772,12 +772,12 @@
     </COMMAND>
 
     <COMMAND name="password-from"
-        help="Shorthand generate-from + accept-from sekaligus">
+        help="Shorthand for generate-from + accept-from together" help-id="Shorthand generate-from + accept-from sekaligus">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="Tanggal (mis. 2026-11-16)"
+            help="Date (e.g. 2026-11-16)" help-id="Tanggal (mis. 2026-11-16)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -785,7 +785,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-from"
-        help="Hapus password-from">
+        help="Delete password-from" help-id="Hapus password-from">
         <CONFIG operation="unset" pattern="^password-from"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" from
@@ -793,12 +793,12 @@
     </COMMAND>
 
     <COMMAND name="password-to"
-        help="Shorthand generate-to + accept-to sekaligus">
+        help="Shorthand for generate-to + accept-to together" help-id="Shorthand generate-to + accept-to sekaligus">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
-            help="Tanggal (mis. 2027-11-16)"
+            help="Date (e.g. 2027-11-16)" help-id="Tanggal (mis. 2027-11-16)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -806,7 +806,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-to"
-        help="Hapus password-to">
+        help="Delete password-to" help-id="Hapus password-to">
         <CONFIG operation="unset" pattern="^password-to"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" to
@@ -814,9 +814,9 @@
     </COMMAND>
 
     <COMMAND name="password-algorithm"
-        help="Algoritma MAC password (keyed md5/sha1 TIDAK ada di Babel)">
+        help="Algorithm MAC password (keyed MD5/sha1 no in Babel)" help-id="Algoritma MAC password (keyed md5/sha1 TIDAK ada di Babel)">
         <PARAM name="Password"
-            help="Teks password yang sama (tanpa spasi)"
+            help="The same password text (without spaces)" help-id="Teks password yang sama (tanpa spasi)"
             ptype="STRING"/>
         <PARAM name="Value"
             help="hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512"
@@ -827,7 +827,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password-algorithm"
-        help="Hapus password-algorithm">
+        help="Delete password-algorithm" help-id="Hapus password-algorithm">
         <CONFIG operation="unset" pattern="^password-algorithm"/>
         <ACTION>
             ${RT_SBIN}/titian-babel.sh password-unset "${babel_iface}" algorithm

@@ -34,7 +34,7 @@
 
 <VIEW name="configure-view">
     <COMMAND name="router frr"
-            help="FRR routing suite — masuk ke view FRR (handoff vtysh)"
+            help="FRR routing suite — enter view FRR (handoff vtysh)" help-id="FRR routing suite — masuk ke view FRR (handoff vtysh)"
             view="configure-frr-view"
             viewid="sysview=frr"
             ptype="SUBCOMMAND"
@@ -67,7 +67,7 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="vtysh"
-        help="Masuk ke CLI native FRR (vtysh) — ketik 'exit' di vtysh untuk kembali ke klish; running-config disinkronkan ke /cfg saat keluar">
+        help="Enter the native FRR CLI (vtysh) — type 'exit' in vtysh to return to klish; the running-config is synchronized to /cfg on exit" help-id="Masuk ke CLI native FRR (vtysh) — ketik 'exit' di vtysh untuk kembali ke klish; running-config disinkronkan ke /cfg saat keluar">
         <ACTION>
             ${RT_SBIN}/titian-frr.sh vtysh
         </ACTION>
@@ -76,7 +76,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show frr"
-        help="Status + versi FRR (enable intent, service, zebra pid)"
+        help="Status + FRR version (enable intent, service, zebra pid)" help-id="Status + versi FRR (enable intent, service, zebra pid)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -84,7 +84,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show frr version"
-        help="Versi FRR + daemon that jalan"
+        help="FRR version + running daemons" help-id="Versi FRR + daemon that jalan"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -94,7 +94,7 @@
     <COMMAND name="show frr bgp"
         help="BGP FRR (vtysh show ip bgp)"/>
     <COMMAND name="show frr bgp summary"
-        help="Ringkasan sesi BGP FRR (vtysh show ip bgp summary)"
+        help="BGP FRR session summary (vtysh show ip bgp summary)" help-id="Ringkasan sesi BGP FRR (vtysh show ip bgp summary)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -102,9 +102,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show frr ospf"
-        help="OSPF FRR (vtysh show ip ospf)"/>
+        help="OSPF FRR (vtysh show IP OSPF)" help-id="OSPF FRR (vtysh show ip ospf)"/>
     <COMMAND name="show frr ospf neighbor"
-        help="Neighbor OSPF FRR (vtysh show ip ospf neighbor)"
+        help="Neighbor OSPF FRR (vtysh show IP OSPF neighbor)" help-id="Neighbor OSPF FRR (vtysh show ip ospf neighbor)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -112,7 +112,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ip bgp"
-        help="Tabel BGP FRR (vtysh show ip bgp)"
+        help="BGP table FRR (vtysh show IP BGP)" help-id="Tabel BGP FRR (vtysh show ip bgp)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -120,7 +120,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ip bgp summary"
-        help="Ringkasan sesi BGP FRR (vtysh show ip bgp summary)"
+        help="BGP FRR session summary (vtysh show ip bgp summary)" help-id="Ringkasan sesi BGP FRR (vtysh show ip bgp summary)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -128,7 +128,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ip ospf"
-        help="Status OSPF FRR (vtysh show ip ospf)"
+        help="OSPF FRR status (vtysh show IP OSPF)" help-id="Status OSPF FRR (vtysh show ip ospf)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -136,7 +136,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ip ospf neighbor"
-        help="Neighbor OSPF FRR (vtysh show ip ospf neighbor)"
+        help="Neighbor OSPF FRR (vtysh show IP OSPF neighbor)" help-id="Neighbor OSPF FRR (vtysh show ip ospf neighbor)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -144,7 +144,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show frr route"
-        help="Tabel route FRR / zebra (vtysh show ip route; `show ip route` yang biasa adalah tabel kernel)"
+        help="FRR / zebra route table (vtysh show ip route; the usual `show ip route` is the kernel table)" help-id="Tabel route FRR / zebra (vtysh show ip route; `show ip route` yang biasa adalah tabel kernel)"
         lock="false"
         interrupt="true">
         <ACTION>

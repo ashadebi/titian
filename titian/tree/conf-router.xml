@@ -17,7 +17,7 @@
 
 <VIEW name="configure-view">
     <COMMAND name="router"
-        help="Routing daemon configuration (bird / frr)"/>
+        help="Routing daemon configuration (BIRD / FRR)" help-id="Routing daemon configuration (bird / frr)"/>
 
     <COMMAND name="no router"
         help="Negate router configuration"/>
@@ -27,7 +27,7 @@
         help="Negate FRR router configuration"/>
 
     <COMMAND name="router bird"
-        help="BIRD routing daemon (BGP/OSPF/static) — masuk ke bird view"
+        help="BIRD routing daemon (BGP/OSPF/static) — enter BIRD view" help-id="BIRD routing daemon (BGP/OSPF/static) — masuk ke bird view"
         view="configure-bird-view"
         viewid="sysview=bird"
         ptype="SUBCOMMAND"
@@ -39,14 +39,14 @@
     </COMMAND>
 
     <COMMAND name="router bird enable"
-        help="Enable BIRD (pending commit — service naik saat commit; diblokir if FRR jalan)">
+        help="Enable BIRD (pending commit — service starts at commit; blocked if FRR running)" help-id="Enable BIRD (pending commit — service naik saat commit; diblokir if FRR jalan)">
         <CONFIG priority="0x1500" pattern="^${__line}$"/>
         <ACTION>
             ${RT_SBIN}/titian-bird.sh bird-enable
         </ACTION>
     </COMMAND>
     <COMMAND name="no router bird enable"
-        help="Disable BIRD (pending commit — service berhenti saat commit)">
+        help="Disable BIRD (pending commit — service stops at commit)" help-id="Disable BIRD (pending commit — service berhenti saat commit)">
         <CONFIG operation="unset" pattern="^router bird enable"/>
         <ACTION>
             ${RT_SBIN}/titian-bird.sh bird-disable
@@ -54,9 +54,9 @@
     </COMMAND>
 
     <COMMAND name="router bird threads"
-        help="BIRD 3 worker threads (hanya bird3; at bird2 ditolak)">
+        help="BIRD 3 worker threads (only bird3; at bird2 rejected)" help-id="BIRD 3 worker threads (hanya bird3; at bird2 ditolak)">
         <PARAM name="count"
-            help="jumlah thread 1-32"
+            help="Thread count 1-32" help-id="jumlah thread 1-32"
             ptype="UINT"/>
         <CONFIG pattern="^${__line}$"/>
         <ACTION>
@@ -65,14 +65,14 @@
     </COMMAND>
 
     <COMMAND name="router frr enable"
-        help="Enable FRR (pending commit — service naik saat commit; diblokir if BIRD jalan)">
+        help="Enable FRR (pending commit — service starts at commit; blocked if BIRD is running)" help-id="Enable FRR (pending commit — service naik saat commit; diblokir if BIRD jalan)">
         <CONFIG priority="0x1510" pattern="^${__line}$"/>
         <ACTION>
             ${RT_SBIN}/titian-frr.sh frr-enable
         </ACTION>
     </COMMAND>
     <COMMAND name="no router frr enable"
-        help="Disable FRR (pending commit — service berhenti saat commit)">
+        help="Disable FRR (pending commit — service stops at commit)" help-id="Disable FRR (pending commit — service berhenti saat commit)">
         <CONFIG operation="unset" pattern="^router frr enable"/>
         <ACTION>
             ${RT_SBIN}/titian-frr.sh frr-disable

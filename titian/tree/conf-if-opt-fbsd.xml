@@ -33,9 +33,9 @@
     </COMMAND>
 
     <COMMAND name="tso"
-        help="TSO (TCP segmentation offload, ifconfig tso/-tso): NIC memotong segmen TCP besar jadi packet MTU. Efek: hemat CPU for traffic that berasal from box ini; not memengaruhi packet that at-forward. Tradeoff: off hanya if dicurigai bug driver/NIC. Default: on (if didukung driver).">
+        help="TSO (TCP segmentation offload, ifconfig tso/-tso): the NIC splits large TCP segments into MTU-sized packets. Effect: saves CPU for traffic originating from this box; does not affect forwarded packets. Tradeoff: turn off only if a driver/NIC bug is suspected. Default: on (if supported by the driver)." help-id="TSO (TCP segmentation offload, ifconfig tso/-tso): NIC memotong segmen TCP besar jadi packet MTU. Efek: hemat CPU for traffic that berasal from box ini; not memengaruhi packet that at-forward. Tradeoff: off hanya if dicurigai bug driver/NIC. Default: on (if didukung driver).">
         <PARAM name="tso_method"
-            help="on = aktif (default) | off = nonaktif"
+            help="on = active (default) | off = inactive" help-id="on = aktif (default) | off = nonaktif"
             ptype="SUBCOMMAND"
             mode="switch">
             <PARAM name="on"
@@ -62,9 +62,9 @@
     </COMMAND>
 
     <COMMAND name="lro"
-        help="LRO (large receive offload, ifconfig lro/-lro): HARDWARE menggabung packet receive. Efek: hemat CPU receive. Tradeoff: Must off at router/bridge — agregasi hardware can merusak semantik forwarding. Default: off.">
+        help="LRO (large receive offload, ifconfig lro/-lro): the HARDWARE merges received packets. Effect: saves CPU on receive. Tradeoff: must be off at a router/bridge — hardware aggregation can break forwarding semantics. Default: off." help-id="LRO (large receive offload, ifconfig lro/-lro): HARDWARE menggabung packet receive. Efek: hemat CPU receive. Tradeoff: Must off at router/bridge — agregasi hardware can merusak semantik forwarding. Default: off.">
         <PARAM name="lro_method"
-            help="on = aktif | off = nonaktif (default for router)"
+            help="on = active | off = inactive (default for router)" help-id="on = aktif | off = nonaktif (default for router)"
             ptype="SUBCOMMAND"
             mode="switch">
             <PARAM name="on"
@@ -91,9 +91,9 @@
     </COMMAND>
 
     <COMMAND name="rx"
-        help="RX checksumming (ifconfig rxcsum/-rxcsum): NIC menghitung checksum packet enter. Efek: hemat CPU receive. Tradeoff: hampir no ; off hanya if dicurigai bug checksum driver. Default: on (if didukung driver).">
+        help="RX checksumming (ifconfig rxcsum/-rxcsum): the NIC calculates the checksum of incoming packets. Effect: saves CPU on receive. Tradeoff: almost none; off only if a driver checksum bug is suspected. Default: on (if supported by the driver)." help-id="RX checksumming (ifconfig rxcsum/-rxcsum): NIC menghitung checksum packet enter. Efek: hemat CPU receive. Tradeoff: hampir no ; off hanya if dicurigai bug checksum driver. Default: on (if didukung driver).">
         <PARAM name="rx_method"
-            help="on = aktif (default) | off = nonaktif"
+            help="on = active (default) | off = inactive" help-id="on = aktif (default) | off = nonaktif"
             ptype="SUBCOMMAND"
             mode="switch">
             <PARAM name="on"
@@ -121,9 +121,9 @@
     </COMMAND>
 
     <COMMAND name="tx"
-        help="TX checksumming (ifconfig txcsum/-txcsum): NIC menghitung checksum packet exit. Efek: hemat CPU transmit. Tradeoff: hampir no ; off hanya if dicurigai bug checksum driver. Default: on (if didukung driver).">
+        help="TX checksumming (ifconfig txcsum/-txcsum): the NIC calculates the checksum of outgoing packets. Effect: saves CPU on transmit. Tradeoff: almost none; off only if a driver checksum bug is suspected. Default: on (if supported by the driver)." help-id="TX checksumming (ifconfig txcsum/-txcsum): NIC menghitung checksum packet exit. Efek: hemat CPU transmit. Tradeoff: hampir no ; off hanya if dicurigai bug checksum driver. Default: on (if didukung driver).">
         <PARAM name="tx_method"
-            help="on = aktif (default) | off = nonaktif"
+            help="on = active (default) | off = inactive" help-id="on = aktif (default) | off = nonaktif"
             ptype="SUBCOMMAND"
             mode="switch">
             <PARAM name="on"

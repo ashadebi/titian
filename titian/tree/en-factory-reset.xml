@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+<!--=======================================================
+TITIAN — factory-reset (view exec, bukan configure view,
+karena ini operasi, bukan konfigurasi — mengikuti pola save
+dan checkpoint/rollback).
+
+factory-reset menghapus SEMUA konfigurasi Titian dan kembali
+ke default pabrik (kosong): startup-config + intent + netstate
++ bird.d + checkpoint + bird.conf + frr.conf + blok rc.conf
+milik Titian, di /etc maupun /cfg. IREVERSIBEL — dua langkah
+(mengikuti pola birdc `down` / `graceful-restart`):
+  factory-reset          — HANYA menampilkan ringkasan apa yang
+                           akan dihapus + perangkat /cfg + perintah
+                           konfirmasi; TIDAK menghapus apa pun.
+  factory-reset confirm  — EKSEKUSI: backup otomatis dulu
+                           (tarball di /cfg — gagal backup = batal),
+                           baru hapus, pulihkan default dari
+                           *.sample bila ada, buang blok Titian dari
+                           rc.conf, lalu restart service titian +
+                           birdc configure (best-effort).
+TIDAK PERNAH dihapus: binary/XML Titian, struktur /cfg, firewall.conf,
+rc.local (+hook newsyslog), sshd_config, password root, disk lain.
+Perintah `write-memory` klish tetap dihapus (keputusan user 18 Nov
+2026) dan TIDAK dihidupkan lagi oleh fitur ini.
+=======================================================-->
+
+<VIEW name="enable-view">
+
+    <!-- Induk (dua langkah: tanpa `confirm` tidak ada yang jalan) -->
+    <COMMAND name="factory-reset"
+             help="Delete ALL Titian configuration, back to factory defaults — this command ONLY shows a summary + confirmation; execution: factory-reset confirm" help-id="Hapus SEMUA konfigurasi Titian, kembali ke default pabrik — perintah ini HANYA menampilkan ringkasan + konfirmasi; eksekusi: factory-reset confirm"
+             lock="false"
+             interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-factory-reset.sh arm
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="factory-reset confirm"
+             help="EXECUTE factory-reset: automatic backup, delete startup-config + all generated configuration, restore defaults, restart service (irreversible)" help-id="EKSEKUSI factory-reset: backup otomatis, hapus startup-config + semua konfigurasi hasil generate, pulihkan default, restart service (ireversibel)"
+             lock="false"
+             interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-factory-reset.sh confirm
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

@@ -32,7 +32,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -45,13 +45,13 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="pipe"
-        help="Pipe (masuk ke pipe view)"
+        help="Pipe (enter pipe view)" help-id="Pipe (masuk ke pipe view)"
         view="configure-bird-pipe-detail-view"
         viewid="pipe_name=${Name}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Name"
-            help="Nama pipe (mis. pipe-as1-as2)"
+            help="Pipe name (e.g. pipe-as1-as2)" help-id="Nama pipe (mis. pipe-as1-as2)"
             ptype="STRING"/>
         <CONFIG priority="0x1555" pattern="^${__line}$"/>
         <ACTION>
@@ -59,9 +59,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no pipe"
-        help="Hapus pipe ini">
+        help="Delete this pipe" help-id="Hapus pipe ini">
         <PARAM name="Name"
-            help="Nama pipe"
+            help="Pipe name" help-id="Nama pipe"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^pipe ${Name}"/>
         <ACTION>
@@ -87,9 +87,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="table"
-        help="Tabel primer pipe ini">
+        help="This primary pipe table" help-id="Tabel primer pipe ini">
         <PARAM name="Name"
-            help="Nama tabel BIRD (mis. master4)"
+            help="BIRD table name (e.g. master4)" help-id="Nama tabel BIRD (mis. master4)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -98,9 +98,9 @@
     </COMMAND>
 
     <COMMAND name="peer-table"
-        help="Tabel sekunder yang dihubungkan pipe ini">
+        help="Secondary table connected to this pipe" help-id="Tabel sekunder yang dihubungkan pipe ini">
         <PARAM name="Name"
-            help="Nama tabel BIRD (mis. as2)"
+            help="BIRD table name (e.g. as2)" help-id="Nama tabel BIRD (mis. as2)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -108,9 +108,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="debug"
-        help="Debug pipe ini (all|off|states,routes,filters,interfaces,events,packets)">
+        help="This Debug pipe (all|off|states,routes,filters,interfaces,events,packets)" help-id="Debug pipe ini (all|off|states,routes,filters,interfaces,events,packets)">
         <PARAM name="Value"
-            help="Kelas debug (all|off|daftar koma)"
+            help="Debug class (all|off|comma-separated list)" help-id="Kelas debug (all|off|daftar koma)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -118,7 +118,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no debug"
-        help="Matikan debug pipe ini (default BIRD off)">
+        help="Disable this debug pipe (BIRD default off)" help-id="Matikan debug pipe ini (default BIRD off)">
         <CONFIG operation="unset" pattern="^debug"/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh debug-del "${pipe_name}"
@@ -126,9 +126,9 @@
     </COMMAND>
 
     <COMMAND name="mrtdump"
-        help="MRTdump pipe ini (all|off|states,messages)">
+        help="This MRTdump pipe (all|off|states,messages)" help-id="MRTdump pipe ini (all|off|states,messages)">
         <PARAM name="Value"
-            help="Kelas mrtdump (all|off|states,messages)"
+            help="Mrtdump class (all|off|states,messages)" help-id="Kelas mrtdump (all|off|states,messages)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -136,7 +136,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no mrtdump"
-        help="Matikan mrtdump pipe ini (default BIRD off)">
+        help="Disable this mrtdump pipe (BIRD default off)" help-id="Matikan mrtdump pipe ini (default BIRD off)">
         <CONFIG operation="unset" pattern="^mrtdump"/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh mrtdump-del "${pipe_name}"
@@ -144,14 +144,14 @@
     </COMMAND>
 
     <COMMAND name="disabled"
-        help="Nonaktifkan pipe ini (tidak di-start saat configure)">
+        help="Disable this pipe (not started when configure)" help-id="Nonaktifkan pipe ini (tidak di-start saat configure)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" disabled on
         </ACTION>
     </COMMAND>
     <COMMAND name="no disabled"
-        help="Aktifkan kembali pipe ini (default BIRD)">
+        help="This Re-enable pipe (BIRD default)" help-id="Aktifkan kembali pipe ini (default BIRD)">
         <CONFIG operation="unset" pattern="^disabled"/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" disabled
@@ -159,9 +159,9 @@
     </COMMAND>
 
     <COMMAND name="from"
-        help="Ambil opsi dari template pipe (template-add pipe &lt;NAMA&gt; dulu di router bird)">
+        help="Take options from template pipe (template-add pipe &lt;NAME&gt; first in router BIRD)" help-id="Ambil opsi dari template pipe (template-add pipe &lt;NAMA&gt; dulu di router bird)">
         <PARAM name="Name"
-            help="Nama template pipe"
+            help="Pipe template name" help-id="Nama template pipe"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -169,7 +169,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no from"
-        help="Lepas template pipe (opsi ditulis eksplisit)">
+        help="Remove the pipe template (options are written explicitly)" help-id="Lepas template pipe (opsi ditulis eksplisit)">
         <CONFIG operation="unset" pattern="^from"/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" from
@@ -180,23 +180,23 @@
         help="Filter secondary -&gt; primary (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="import all"
-        help="Import semua route dari peer table">
+        help="Import all routes from peer table" help-id="Import semua route dari peer table">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import all
         </ACTION>
     </COMMAND>
     <COMMAND name="import none"
-        help="Import tidak ada route dari peer table">
+        help="Import no route from peer table" help-id="Import tidak ada route dari peer table">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" import none
         </ACTION>
     </COMMAND>
     <COMMAND name="import filter"
-        help="Import hanya route yang lolos filter bernama">
+        help="Import only routes that pass the named filter" help-id="Import hanya route yang lolos filter bernama">
         <PARAM name="Name"
-            help="Nama filter"
+            help="Filter name" help-id="Nama filter"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -204,9 +204,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="import where"
-        help="Import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        help="Import via filter inline (concise-form expression, e.g. net~10.0.0.0/8)" help-id="Import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
         <PARAM name="Cond"
-            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            help="Concise-form filter expression (e.g. net~10.0.0.0/8)" help-id="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -214,7 +214,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no import"
-        help="Hapus import pipe (default BIRD: import all)">
+        help="Delete import pipe (BIRD default: import all)" help-id="Hapus import pipe (default BIRD: import all)">
         <CONFIG operation="unset" pattern="^import"/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" import
@@ -225,23 +225,23 @@
         help="Filter primary -&gt; secondary (all / none / filter NAME / where COND)"/>
 
     <COMMAND name="export all"
-        help="Export semua route ke peer table">
+        help="Export all routes to peer table" help-id="Export semua route ke peer table">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export all
         </ACTION>
     </COMMAND>
     <COMMAND name="export none"
-        help="Export tidak ada route ke peer table">
+        help="Export no route to peer table" help-id="Export tidak ada route ke peer table">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-set "${pipe_name}" export none
         </ACTION>
     </COMMAND>
     <COMMAND name="export filter"
-        help="Export hanya route yang lolos filter bernama">
+        help="Export only routes that pass the named filter" help-id="Export hanya route yang lolos filter bernama">
         <PARAM name="Name"
-            help="Nama filter"
+            help="Filter name" help-id="Nama filter"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -249,9 +249,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="export where"
-        help="Export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        help="Export via filter inline (concise-form expression, e.g. net~10.0.0.0/8)" help-id="Export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
         <PARAM name="Cond"
-            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            help="Concise-form filter expression (e.g. net~10.0.0.0/8)" help-id="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -259,7 +259,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no export"
-        help="Hapus export pipe (default BIRD: export none)">
+        help="Delete export pipe (BIRD default: export none)" help-id="Hapus export pipe (default BIRD: export none)">
         <CONFIG operation="unset" pattern="^export"/>
         <ACTION>
             ${RT_SBIN}/titian-pipe.sh pipe-unset "${pipe_name}" export
@@ -269,7 +269,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show pipe"
-        help="Status pipe BIRD (intent + section + protokol BIRD)"
+        help="Pipe BIRD status (intent + section + BIRD protocol)" help-id="Status pipe BIRD (intent + section + protokol BIRD)"
         lock="false"
         interrupt="true">
         <ACTION>

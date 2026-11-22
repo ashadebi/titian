@@ -127,5 +127,131 @@
             sed -i '' '/^pool /d' /etc/titian/ipoe.conf 2>/dev/null || sed -i '/^pool /d' /etc/titian/ipoe.conf
         </ACTION>
     </COMMAND>
+
+    <!-- RADIUS MAC-auth (19 Nov 2026). IPoE tanpa username/password:
+         auth berbasis MAC (MAB). RADIUS adalah otoritas: saat commit,
+         tiap MAC yang dideklarasikan diverifikasi ke RADIUS; hanya yang
+         Accept yang masuk allowlist DHCP (class radius-allowed).
+         Backend: ${RT_SBIN}/titian-dhcp.sh + titian-radius-check.py.
+         Pola klish mengikuti PPPoE (radius-server / radius-secret). -->
+    <COMMAND name="radius-server"
+        help="Server RADIUS for auth MAC IPoE" help-id="Server RADIUS untuk auth MAC IPoE">
+        <PARAM name="Server"
+            help="RADIUS server IPv4 address" help-id="alamat IPv4 server RADIUS"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh set-radius-server "${Server}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-server"
+        help="Delete server RADIUS (back to DHCP open)" help-id="Delete server RADIUS (back to DHCP terbuka)">
+        <CONFIG operation="unset" pattern="^radius-server"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh del-radius-server
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="radius-secret"
+        help="Shared secret RADIUS (saved in ipoe.conf, mode 600)" help-id="Shared secret RADIUS (disimpan di ipoe.conf, mode 600)">
+        <PARAM name="Secret"
+            help="shared secret"
+            ptype="STRING"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh set-radius-secret "${Secret}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-secret"
+        help="Delete shared secret RADIUS">
+        <CONFIG operation="unset" pattern="^radius-secret"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh del-radius-secret
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="radius-mac"
+        help="Allowed MAC (verified to RADIUS when commit)" help-id="MAC yang diizinkan (diverifikasi ke RADIUS saat commit)">
+        <PARAM name="Mac"
+            help="MAC address (aa:bb:cc:dd:ee:ff)" help-id="alamat MAC (aa:bb:cc:dd:ee:ff)"
+            ptype="MAC_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh add-radius-mac "${Mac}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-mac"
+        help="Delete MAC from list RADIUS" help-id="Hapus MAC dari daftar RADIUS">
+        <PARAM name="Mac"
+            help="MAC address (aa:bb:cc:dd:ee:ff)" help-id="alamat MAC (aa:bb:cc:dd:ee:ff)"
+            ptype="MAC_ADDR"/>
+        <CONFIG operation="unset" pattern="^radius-mac"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh del-radius-mac "${Mac}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="radius-mac-auth"
+          help="Enable RADIUS MAC-auth (only MAC passed RADIUS can lease)" help-id="Aktifkan RADIUS MAC-auth (hanya MAC lolos RADIUS dapat lease)">
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh set-radius-mac-auth
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no radius-mac-auth"
+          help="Disable RADIUS MAC-auth (DHCP open, without RADIUS)" help-id="Matikan RADIUS MAC-auth (DHCP terbuka, tanpa RADIUS)">
+        <CONFIG operation="unset" pattern="^radius-mac-auth"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh del-radius-mac-auth
+        </ACTION>
+    </COMMAND>
+
+    <!-- NAS-IP untuk RADIUS accounting IPoE (19 Nov 2026): NAS-IP-Address
+         yang dikirim titian-ipoe-acct.py ke FreeRADIUS. Harus sama dengan
+         nasname NAS di myRadDASH (mis. 103.50.128.18). Bila tidak diset,
+         accounting memakai IP sumber UDP lokal + warning. -->
+    <COMMAND name="nas-ip"
+        help="NAS-IP-Address for RADIUS accounting IPoE (same as nasname in myRadDASH)" help-id="NAS-IP-Address untuk RADIUS accounting IPoE (sama dengan nasname di myRadDASH)">
+        <PARAM name="Ip"
+            help="NAS IPv4 address (e.g. 103.50.128.18)" help-id="alamat IPv4 NAS (mis. 103.50.128.18)"
+            ptype="IP_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh set-nas-ip "${Ip}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no nas-ip"
+        help="Delete the NAS-IP (accounting uses the local source IP)" help-id="Hapus NAS-IP (accounting pakai IP sumber lokal)">
+        <CONFIG operation="unset" pattern="^nas-ip"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh del-nas-ip
+        </ACTION>
+    </COMMAND>
+
+    <!-- Blocked MAC / kick IPoE (19 Nov 2026). `blocked-mac` menambah MAC
+         ke daftar blokir (deny booting di dhcpd.conf — klien itu tidak
+         mendapat lease). `kick` (enable view) = hapus lease aktif via
+         OMAPI + blokir + restart dhcpd. `unblock` (enable view) =
+         hapus dari daftar blokir. -->
+    <COMMAND name="blocked-mac"
+        help="Block MAC (deny booting — does not get a lease; see also: ipoe kick)" help-id="Blokir MAC (deny booting — tidak mendapat lease; lihat juga: ipoe kick)">
+        <PARAM name="Mac"
+            help="MAC address (aa:bb:cc:dd:ee:ff)" help-id="alamat MAC (aa:bb:cc:dd:ee:ff)"
+            ptype="MAC_ADDR"/>
+        <CONFIG/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh add-blocked-mac "${Mac}"
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="no blocked-mac"
+        help="Unblock MAC" help-id="Buka blokir MAC">
+        <PARAM name="Mac"
+            help="MAC address (aa:bb:cc:dd:ee:ff)" help-id="alamat MAC (aa:bb:cc:dd:ee:ff)"
+            ptype="MAC_ADDR"/>
+        <CONFIG operation="unset" pattern="^blocked-mac"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh del-blocked-mac "${Mac}"
+        </ACTION>
+    </COMMAND>
 </VIEW>
 </CLISH_MODULE>

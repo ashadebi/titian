@@ -28,7 +28,7 @@
 
     <PTYPE name="WG_IFACE"
         pattern="wg[0-9]+$"
-        help="wg[N] (interface WireGuard)"/>
+        help="wg[N] (WireGuard interface)" help-id="wg[N] (interface WireGuard)"/>
 
 <VIEW name="configure-view">
     <COMMAND name="wireguard"
@@ -46,7 +46,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no wireguard"
-            help="Delete SELURUH konfigurasi WireGuard interface ini">
+            help="Delete the ENTIRE WireGuard configuration of this interface" help-id="Delete SELURUH konfigurasi WireGuard interface ini">
         <PARAM name="Name"
             help="name interface"
             ptype="WG_IFACE"/>
@@ -78,14 +78,14 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="enable"
-          help="Enable interface WireGuard ini (pending commit)">
+          help="Enable this WireGuard interface (pending commit)" help-id="Enable interface WireGuard ini (pending commit)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh set-enable "${wg}" yes
         </ACTION>
     </COMMAND>
     <COMMAND name="no enable"
-          help="Disable interface WireGuard ini (pending commit)">
+          help="Disable this WireGuard interface (pending commit)" help-id="Disable interface WireGuard ini (pending commit)">
         <CONFIG operation="unset" pattern="^enable"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh set-enable "${wg}" no
@@ -93,9 +93,9 @@
     </COMMAND>
 
     <COMMAND name="address"
-        help="Alamat IP interface WireGuard">
+        help="WireGuard interface IP address" help-id="Alamat IP interface WireGuard">
         <PARAM name="Addr"
-            help="alamat/prefix (example 10.6.0.1/24)"
+            help="address/prefix (example 10.6.0.1/24)" help-id="alamat/prefix (example 10.6.0.1/24)"
             ptype="IP_ADDR_MASK"/>
         <CONFIG/>
         <ACTION>
@@ -103,7 +103,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no address"
-        help="Delete alamat IP interface">
+        help="Delete interface IP address" help-id="Delete alamat IP interface">
         <CONFIG operation="unset" pattern="^address"/>
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh del-address "${wg}"
@@ -129,7 +129,7 @@
     </COMMAND>
 
     <COMMAND name="generate-key"
-        help="Create keypair baru (private key tersimpan mode 600; public key ditampilkan sekali)">
+        help="Create keypair new (private key stored mode 600; public key shown once)" help-id="Create keypair baru (private key tersimpan mode 600; public key ditampilkan sekali)">
         <ACTION>
             ${RT_SBIN}/titian-wireguard.sh generate-key "${wg}"
         </ACTION>
@@ -177,7 +177,7 @@
     <COMMAND name="allowed-ips"
         help="Allowed IPs peer (CIDR)">
         <PARAM name="Nets"
-            help="prefix that boleh lewat peer ini"
+            help="prefixes that may pass via this peer" help-id="prefix that boleh lewat peer ini"
             ptype="IP_ADDR_MASK"/>
         <CONFIG/>
         <ACTION>
@@ -195,7 +195,7 @@
     <COMMAND name="endpoint"
         help="Endpoint peer (host:port)">
         <PARAM name="Ep"
-            help="alamat:port (example 203.0.113.5:51820)"
+            help="address:port (example 203.0.113.5:51820)" help-id="alamat:port (example 203.0.113.5:51820)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -211,9 +211,9 @@
     </COMMAND>
 
     <COMMAND name="persistent-keepalive"
-        help="Persistent keepalive (detik, 0 = mati)">
+        help="Persistent keepalive (seconds, 0 = off)" help-id="Persistent keepalive (detik, 0 = mati)">
         <PARAM name="Secs"
-            help="detik"
+            help="seconds" help-id="detik"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -231,7 +231,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show wireguard"
-        help="Status all interface WireGuard (wg show)"
+        help="All WireGuard interface status (wg show)" help-id="Status all interface WireGuard (wg show)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -239,7 +239,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show wireguard interface"
-        help="Status satu interface WireGuard"
+        help="Status of one WireGuard interface" help-id="Status satu interface WireGuard"
         lock="false"
         interrupt="true">
         <PARAM name="Name"

@@ -18,6 +18,21 @@
         <ACTION builtin="clish_overview"/>
     </COMMAND>
 
+    <!-- help all: daftar semua perintah top-level (dipager).
+         `?` di prompt dirender klish sendiri dan TIDAK BISA dipager
+         (tanpa hook di klish 2.2.5); perintah ini alternatif yang dipager,
+         isinya sama dengan `?` di prompt (dibaca dari XML enable-view saat
+         runtime). Perintah `help` bawaan di atas TIDAK diubah: ia hanya
+         menampilkan ringkasan 9 baris (bukan daftar perintah). -->
+    <COMMAND name="help all"
+             help="List of all top-level commands (paged)" help-id="Daftar semua perintah top-level (dipager)"
+             lock="false"
+             interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-help.sh all
+        </ACTION>
+    </COMMAND>
+
 <!-- enable mode commands -->
   <COMMAND name="logout"
           help="Turn off privileged / Exit commands">
@@ -75,9 +90,9 @@
 
 <!-- Bird view: diaktifkan kembali (dulu dikomentari di titian) -->
     <COMMAND name="bird"
-               help="Enter bird"/>
+               help="Enter BIRD" help-id="Enter bird"/>
     <COMMAND name="bird terminal"
-               help="Enter bird terminal"
+               help="Enter BIRD terminal" help-id="Enter bird terminal"
                view="bird-view">
     </COMMAND>
 

@@ -10,6 +10,19 @@
     <COMMAND name="show"
         help="Show running system information"/>
 
+    <!-- show help: daftar sub-perintah show (dipager).
+         `?` (help inline) dirender klish sendiri dan TIDAK BISA dipager
+         (tanpa hook di klish 2.2.5); perintah ini alternatif yang dipager,
+         isinya sama dengan `show ?` (dibaca dari XML enable-view saat runtime). -->
+    <COMMAND name="show help"
+        help="Subcommand show list (paged)" help-id="Daftar sub-perintah show (dipager)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-help.sh show
+        </ACTION>
+    </COMMAND>
+
     <COMMAND name="show ipv6"
         help="IPv6 information"/>
 
@@ -22,7 +35,7 @@
             ptype="SUBCOMMAND"/>
         <CONFIG operation="dump" file="/tmp/titian-show-run.conf"/>
         <ACTION>
-            ${RT_SBIN}/titian-pager.sh /tmp/titian-show-run.conf ${no-more}
+            ${RT_SBIN}/titian-show-config.sh running ${no-more}
             rm -f /tmp/titian-show-run.conf
         </ACTION>
     </COMMAND>
@@ -35,7 +48,7 @@
             optional="true"
             ptype="SUBCOMMAND"/>
         <ACTION>
-            ${RT_SBIN}/titian-pager.sh ${RT_ROOT}/etc/startup-config ${no-more}
+            ${RT_SBIN}/titian-show-config.sh startup ${no-more}
         </ACTION>
     </COMMAND>
 
@@ -53,7 +66,7 @@
         lock="false"
         interrupt="true">
         <PARAM name="ip"
-                help="ip address or mask"
+                help="IP address or mask" help-id="ip address or mask"
                 optional="true"
                 ptype="IP_ADDR_ANY"/>
         <ACTION>
@@ -66,7 +79,7 @@
         lock="false"
         interrupt="true">
         <PARAM name="ip"
-                help="ipv6 address or prefix"
+                help="IPv6 address or prefix" help-id="ipv6 address or prefix"
                 optional="true"
                 ptype="IP6_ADDR_ANY"/>
         <ACTION>
@@ -76,7 +89,7 @@
 
 <!-- Show short if summary + ip (helper: tampilkan inet DAN inet6) -->
     <COMMAND name="show interfaces"
-            help="Interfaces and Ip information"
+            help="Interfaces and IP information" help-id="Interfaces and Ip information"
             lock="false"
             interrupt="true">
         <ACTION>
@@ -113,7 +126,7 @@
      sengaja tidak dibuat (tabrakan prefix dengan "interfaces",
      lihat catatan di atas). -->
     <COMMAND name="show interfaces tuning"
-            help="Interface tuning values + meaning (mtu/qlen/speed/offload/coalesce)"
+            help="Interface tuning values + meaning (MTU/qlen/speed/offload/coalesce)" help-id="Interface tuning values + meaning (mtu/qlen/speed/offload/coalesce)"
             lock="false"
             interrupt="true">
         <PARAM name="iface"
@@ -205,6 +218,47 @@
             interrupt="true">
         <ACTION>
             pwd
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show date"
+            help="Show date/time + time zone (see also: system time-zone for set zona)" help-id="Tampilkan tanggal/waktu + zona waktu (lihat juga: system time-zone untuk mengatur zona)"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-clock.sh show
+        </ACTION>
+    </COMMAND>
+
+    <!-- IPoE: lease aktif + MAC diblokir + sesi dilaporkan ke myRadDASH.
+         (19 Nov 2026: monitoring IPoE + kick.) -->
+    <COMMAND name="show ipoe"
+            help="IPoE information (leases / blocked / sessions)"/>
+
+    <COMMAND name="show ipoe leases"
+            help="Active DHCP lease (IPoE) — IP, MAC, lease end" help-id="Lease DHCP aktif (IPoE) — IP, MAC, akhir lease"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh list-leases
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show ipoe blocked"
+            help="Blocked MAC (kick IPoE — deny booting)" help-id="MAC yang diblokir (kick IPoE — deny booting)"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh list-blocked
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="show ipoe sessions"
+            help="IPoE session reported to myRadDASH (RADIUS accounting)" help-id="Sesi IPoE yang dilaporkan ke myRadDASH (RADIUS accounting)"
+            lock="false"
+            interrupt="true">
+        <ACTION>
+            python3 ${RT_SBIN}/titian-ipoe-acct.py status
         </ACTION>
     </COMMAND>
 

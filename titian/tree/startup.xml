@@ -91,6 +91,41 @@ HOTKEYS
 	</ACTION>
 </VAR>
 
+<!--Get checkpoint names (untuk completion rollback / checkpoint delete) -->
+<VAR name="Get_checkpoints" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-checkpoint-names.sh
+	</ACTION>
+</VAR>
+
+<!--Get community list names (untuk completion community list delete) -->
+<VAR name="Get_comm_lists" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-comm-lists.sh
+	</ACTION>
+</VAR>
+
+<!--Get community values in use (untuk completion community export/import delete) -->
+<VAR name="Get_comm_values" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-comm-values.sh
+	</ACTION>
+</VAR>
+
+<!--Get custom BGP protocol names (untuk completion protocol-name) -->
+<VAR name="Get_bgp_protonames" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-bgp-protocols.sh
+	</ACTION>
+</VAR>
+
+<!--Get BGP neighbor IPs (untuk completion neighbor / no neighbor) -->
+<VAR name="Get_bgp_neighbors" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-bgp-neighbors.sh
+	</ACTION>
+</VAR>
+
 <!--// 
 	var var an.
 //-->

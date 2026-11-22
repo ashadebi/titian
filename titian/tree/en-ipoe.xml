@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+<!--=======================================================
+TITIAN — operasi IPoE (enable view, bukan configure view,
+karena ini aksi, bukan konfigurasi — mengikuti pola
+update/factory-reset).
+
+  ipoe kick <mac>      Putus layanan IPoE untuk satu MAC: hapus lease
+                       aktif (via OMAPI, tanpa restart dhcpd) + blokir
+                       MAC (deny booting) + regenerate dhcpd.conf +
+                       restart dhcpd. Klien kehilangan IP dan TIDAK
+                       BISA mendapat lease baru sampai di-unblock.
+                       (Juga bisa dipicu dari myRadDASH via CoA
+                       Disconnect ke listener UDP 3799 — lihat
+                       titian-coa.py; myRadDASH: POST /nas/:id/disconnect.)
+  ipoe unblock <mac>   Buka blokir MAC (bisa dapat lease lagi).
+  ipoe push-sessions   Dorong event sesi IPoE ke myRadDASH via RADIUS
+                       accounting (Start untuk lease baru, Stop untuk
+                       lease yang hilang). Sesi tampil di myRadDASH
+                       GET /v0/sessions. (Otomatisasi berkala: cron /
+                       hook — belum ada; jalankan manual / via CoA.)
+
+Backend: ${RT_SBIN}/titian-dhcp.sh (kick/unblock) +
+${RT_SBIN}/titian-ipoe-acct.py (push-sessions) +
+${RT_SBIN}/titian-coa.py (listener CoA, UDP 3799).
+=======================================================-->
+
+<VIEW name="enable-view">
+
+    <!-- Induk telanjang (wajib klish: keluarga perintah multi-kata
+         butuh prefix ini agar ipoe kick/unblock ter-resolve,
+         mengikuti pola update/show di tree lain) -->
+    <COMMAND name="ipoe"
+             help="Operasi IPoE (kick / unblock / push-sessions)"/>
+
+    <COMMAND name="ipoe kick"
+             help="Disconnect the IPoE service for one MAC: delete the active lease + block the MAC (deny booting) — destructive for that client" help-id="Putus layanan IPoE untuk satu MAC: hapus lease aktif + blokir MAC (deny booting) — destruktif untuk klien itu"
+             lock="false"
+             interrupt="true">
+        <PARAM name="Mac"
+            help="client MAC address (aa:bb:cc:dd:ee:ff)" help-id="alamat MAC klien (aa:bb:cc:dd:ee:ff)"
+            ptype="MAC_ADDR"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh kick "${Mac}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ipoe unblock"
+             help="Unblock an IPoE MAC (the client can get a lease again)" help-id="Buka blokir MAC IPoE (klien bisa dapat lease lagi)"
+             lock="false"
+             interrupt="true">
+        <PARAM name="Mac"
+            help="client MAC address (aa:bb:cc:dd:ee:ff)" help-id="alamat MAC klien (aa:bb:cc:dd:ee:ff)"
+            ptype="MAC_ADDR"/>
+        <ACTION>
+            ${RT_SBIN}/titian-dhcp.sh unblock "${Mac}"
+        </ACTION>
+    </COMMAND>
+
+    <COMMAND name="ipoe push-sessions"
+             help="Push IPoE session events to myRadDASH via RADIUS accounting (Start/Stop)" help-id="Dorong event sesi IPoE ke myRadDASH via RADIUS accounting (Start/Stop)"
+             lock="false"
+             interrupt="true">
+        <ACTION>
+            python3 ${RT_SBIN}/titian-ipoe-acct.py push
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

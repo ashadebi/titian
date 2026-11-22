@@ -33,15 +33,15 @@
 				ptype="SUBCOMMAND"/>
 		</PARAM>
 		<PARAM name="dst"
-			help="Hostname or IP-address to ping"
+			help="Or IP-address to ping hostname" help-id="Hostname or IP-address to ping"
 			ptype="STRING"/>
 		<PARAM name="source"
-			help="Source IP-address (ip) or interface (ip and arp)"
+			help="Source IP-address (IP) or interface (IP and arp)" help-id="Source IP-address (ip) or interface (ip and arp)"
 			optional="true"
 			mode="subcommand"
 			ptype="SUBCOMMAND">
 			<PARAM name="src"
-				help="Source IP-address (ip) or interface name (ip and arp)"
+				help="Source IP-address (IP) or interface name (IP and arp)" help-id="Source IP-address (ip) or interface name (ip and arp)"
 				ptype="STRING"/>
 		</PARAM>
 		<PARAM name="repeat"
@@ -82,7 +82,7 @@
 			mode="subcommand"
 			ptype="SUBCOMMAND">
 			<PARAM name="period"
-				help="Interval between packets"
+				help="Between packets interval" help-id="Interval between packets"
 				ptype="STRING"/>
 		</PARAM>
 		<PARAM name="flood"
@@ -168,7 +168,7 @@
 				ptype="SUBCOMMAND"/>
 		</PARAM>
 		<PARAM name="dst"
-			help="Hostname or IP-address to trace the route"
+			help="Or IP-address to trace the route hostname" help-id="Hostname or IP-address to trace the route"
 			ptype="STRING"/>
 		<PARAM name="resolve"
 			help="Resolve names"

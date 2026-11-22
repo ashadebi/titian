@@ -15,7 +15,7 @@
         view="configure-lagg-view"
         viewid="iface=${iface_lagg}">
         <PARAM name="iface_lagg"
-            help="Lagg interface"
+            help="LAGG interface" help-id="Lagg interface"
             completion="${Get_if_lagg}"
             ptype="IFACE_LAGG"/>
         <CONFIG priority="0x2001" pattern="^${__line}$"/>
@@ -29,7 +29,7 @@
     </COMMAND>
 
         <COMMAND name="no interface lagg"
-                help="delete lagg interface">
+                help="delete LAGG interface" help-id="delete lagg interface">
                 <PARAM name="iface_lagg"
                         help=""
                         completion="${Get_if_lagg}"
@@ -107,7 +107,7 @@
                 help="IP address"
                 ptype="IP_ADDR_MASK_OPT"/>
         <PARAM name="peer"
-                help="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
+                help="Peer address for point-to-point link (ex: IP address 103.50.128.1 peer 10.10.10.10)" help-id="Peer address for point-to-point link (ex: ip address 103.50.128.1 peer 10.10.10.10)"
                 optional="true"
                 mode="subcommand"
                 ptype="SUBCOMMAND">
@@ -186,7 +186,7 @@
     </COMMAND>
 
     <COMMAND name="mtu"
-              help="MTU: ukuran packet terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path.">
+              help="MTU: packet terbesar size via interface (live + persistent). 1500 = default Ethernet; 9000 = jumbo, must supported entire path." help-id="MTU: ukuran packet terbesar lewat interface (live + persisten). 1500 = default Ethernet; 9000 = jumbo, wajib didukung seluruh path.">
             <PARAM name="mtu"
                 help="range 68-9000"
                 ptype="MTU"/>
@@ -213,7 +213,7 @@
     </COMMAND>
 
     <COMMAND name="laggport"
-              help="Add member interface to lagg group">
+              help="Add member interface to LAGG group" help-id="Add member interface to lagg group">
         <PARAM name="member"
               help="Member interface"
               completion="${Get_if_eth}"
@@ -230,7 +230,7 @@
     </COMMAND>
 
     <COMMAND name="no laggport"
-              help="Remove member interface from lagg group">
+              help="Remove member interface from LAGG group" help-id="Remove member interface from lagg group">
         <PARAM name="member"
               help="Member interface"
               completion="${Get_if_eth}"

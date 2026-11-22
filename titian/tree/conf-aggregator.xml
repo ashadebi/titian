@@ -46,7 +46,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -59,18 +59,18 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="import"
-        help="Channel import (all|none|filter NAME)"/>
+        help="Import channel (all|none|filter NAME)" help-id="Channel import (all|none|filter NAME)"/>
 
     <COMMAND name="export"
-        help="Channel export (all|none|filter NAME)"/>
+        help="Export channel (all|none|filter NAME)" help-id="Channel export (all|none|filter NAME)"/>
 
     <COMMAND name="show"
         help="Show aggregator state"/>
 
     <COMMAND name="table"
-        help="Tabel sumber route yang diagregasi (default BIRD bila kosong)">
+        help="Aggregated source table route (BIRD default if empty)" help-id="Tabel sumber route yang diagregasi (default BIRD bila kosong)">
         <PARAM name="Value"
-            help="Nama tabel (master4|master6 atau tabel dari global -> table-add)"
+            help="Table name (master4|master6 or table from global -> table-add)" help-id="Nama tabel (master4|master6 atau tabel dari global -> table-add)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -78,7 +78,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no table"
-        help="Hapus table (default BIRD)">
+        help="Delete table (BIRD default)" help-id="Hapus table (default BIRD)">
         <CONFIG operation="unset" pattern="^table"/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh table-del "${aggregator_inst}"
@@ -86,23 +86,23 @@
     </COMMAND>
 
     <COMMAND name="import all"
-        help="Import semua route hasil merge">
+        help="Import all routes merged" help-id="Import semua route hasil merge">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" import all
         </ACTION>
     </COMMAND>
     <COMMAND name="import none"
-        help="Import tidak ada route hasil merge">
+        help="Import no merged routes" help-id="Import tidak ada route hasil merge">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" import none
         </ACTION>
     </COMMAND>
     <COMMAND name="import filter"
-        help="Import route hasil merge lewat filter bernama">
+        help="Import route merged via filter named" help-id="Import route hasil merge lewat filter bernama">
         <PARAM name="Name"
-            help="Nama filter"
+            help="Filter name" help-id="Nama filter"
             completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
@@ -112,23 +112,23 @@
     </COMMAND>
 
     <COMMAND name="export all"
-        help="Export semua route ke agregasi">
+        help="Export all routes to aggregation" help-id="Export semua route ke agregasi">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" export all
         </ACTION>
     </COMMAND>
     <COMMAND name="export none"
-        help="Export tidak ada route ke agregasi">
+        help="Export no route to aggregation" help-id="Export tidak ada route ke agregasi">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh chan-set "${aggregator_inst}" export none
         </ACTION>
     </COMMAND>
     <COMMAND name="export filter"
-        help="Export route ke agregasi lewat filter bernama">
+        help="Export route to aggregation via filter named" help-id="Export route ke agregasi lewat filter bernama">
         <PARAM name="Name"
-            help="Nama filter"
+            help="Filter name" help-id="Nama filter"
             completion="${Get_bgp_filters}"
             ptype="STRING"/>
         <CONFIG/>
@@ -138,9 +138,9 @@
     </COMMAND>
 
     <COMMAND name="aggregate-on"
-        help="Atribut sortir bucket (WAJIB; elemen pertama net, dipisah koma tanpa spasi)">
+        help="Bucket sort attribute (MUST; element first net, comma-separated without space)" help-id="Atribut sortir bucket (WAJIB; elemen pertama net, dipisah koma tanpa spasi)">
         <PARAM name="Value"
-            help="Daftar mis. net,bgp_path.len (net wajib pertama)"
+            help="List, e.g. net,bgp_path.len (net must be first)" help-id="Daftar mis. net,bgp_path.len (net wajib pertama)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -148,7 +148,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no aggregate-on"
-        help="Hapus aggregate-on">
+        help="Delete aggregate-on" help-id="Hapus aggregate-on">
         <CONFIG operation="unset" pattern="^aggregate-on"/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh aggregate-on-del "${aggregator_inst}"
@@ -156,36 +156,36 @@
     </COMMAND>
 
     <COMMAND name="merge-line"
-        help="Tambah satu baris kode BIRD mentah ke blok merge by (maks 8 kata/baris)">
+        help="Add one line of raw BIRD code to the merge by block (max 8 words/line)" help-id="Tambah satu baris kode BIRD mentah ke blok merge by (maks 8 kata/baris)">
         <PARAM name="W1"
-            help="Kata pertama baris (mis. for, if, accept;)"
+            help="First word of the line (e.g. for, if, accept;)" help-id="Kata pertama baris (mis. for, if, accept;)"
             ptype="STRING"/>
         <PARAM name="W2"
-            help="Kata kedua (opsional)"
+            help="Second word (optional)" help-id="Kata kedua (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W3"
-            help="Kata ketiga (opsional)"
+            help="Third word (optional)" help-id="Kata ketiga (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W4"
-            help="Kata keempat (opsional)"
+            help="Fourth word (optional)" help-id="Kata keempat (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W5"
-            help="Kata kelima (opsional)"
+            help="Fifth word (optional)" help-id="Kata kelima (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W6"
-            help="Kata keenam (opsional)"
+            help="Sixth word (optional)" help-id="Kata keenam (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W7"
-            help="Kata ketujuh (opsional)"
+            help="Seventh word (optional)" help-id="Kata ketujuh (opsional)"
             ptype="STRING"
             optional="true"/>
         <PARAM name="W8"
-            help="Kata kedelapan (opsional)"
+            help="Eighth word (optional)" help-id="Kata kedelapan (opsional)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -194,9 +194,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="merge-line-del"
-        help="Hapus baris merge-by ke-N (1-based, lihat urutan di show aggregator)">
+        help="Delete the Nth merge-by line (1-based, see the order in show aggregator)" help-id="Hapus baris merge-by ke-N (1-based, lihat urutan di show aggregator)">
         <PARAM name="N"
-            help="Nomor baris (1..)"
+            help="Line number (1..)" help-id="Nomor baris (1..)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -204,7 +204,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no merge-line"
-        help="Hapus SEMUA baris merge-by (merge by kosong — set ulang sebelum generate)">
+        help="Delete ALL merge-by lines (merge by empty — reset before generate)" help-id="Hapus SEMUA baris merge-by (merge by kosong — set ulang sebelum generate)">
         <CONFIG operation="unset" pattern="^merge-line"/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh merge-line-clear "${aggregator_inst}"
@@ -212,9 +212,9 @@
     </COMMAND>
 
     <COMMAND name="peer-table"
-        help="Tabel tujuan route hasil agregasi (boleh sama dengan table)">
+        help="Destination table route aggregation result (may be the same as table)" help-id="Tabel tujuan route hasil agregasi (boleh sama dengan table)">
         <PARAM name="Value"
-            help="Nama tabel (master4|master6 atau tabel dari global -> table-add)"
+            help="Table name (master4|master6 or table from global -> table-add)" help-id="Nama tabel (master4|master6 atau tabel dari global -> table-add)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -222,7 +222,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no peer-table"
-        help="Hapus peer-table (default BIRD)">
+        help="Delete peer-table (BIRD default)" help-id="Hapus peer-table (default BIRD)">
         <CONFIG operation="unset" pattern="^peer-table"/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh peer-table-del "${aggregator_inst}"
@@ -230,7 +230,7 @@
     </COMMAND>
 
     <COMMAND name="show aggregator"
-        help="Tampilkan intent + section + status birdc instance ini">
+        help="Show the intent + section + birdc status of this instance" help-id="Tampilkan intent + section + status birdc instance ini">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-aggregator.sh show

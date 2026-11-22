@@ -10,11 +10,11 @@
 <VIEW name="enable-view">
 
     <COMMAND name="show interfaces lagg"
-            help="Lagg status and configuration"
+            help="LAGG status and configuration" help-id="Lagg status and configuration"
             lock="false"
             interrupt="true">
         <PARAM name="iface"
-                help="Interface lagg"
+                help="Interface LAGG" help-id="Interface lagg"
                 completion="${Get_if_lagg}"
                 ptype="IFACE_LAGG"/>
         <PARAM name="detail"

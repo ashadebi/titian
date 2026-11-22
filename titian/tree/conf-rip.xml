@@ -56,7 +56,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -69,13 +69,13 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="import"
-        help="Channel import (all|none|filter NAME)"/>
+        help="Import channel (all|none|filter NAME)" help-id="Channel import (all|none|filter NAME)"/>
 
     <COMMAND name="export"
-        help="Channel export (all|none|filter NAME)"/>
+        help="Export channel (all|none|filter NAME)" help-id="Channel export (all|none|filter NAME)"/>
 
     <COMMAND name="infinity"
-        help="Jarak infinity RIP (default BIRD 16)">
+        help="RIP infinity distance (BIRD default: 16)" help-id="Jarak infinity RIP (default BIRD 16)">
         <PARAM name="Value"
             help="Infinity (1..255, default 16)"
             ptype="UINT"/>
@@ -85,7 +85,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no infinity"
-        help="Kembali ke infinity default BIRD (16)">
+        help="Back to the BIRD default infinity (16)" help-id="Kembali ke infinity default BIRD (16)">
         <CONFIG operation="unset" pattern="^infinity"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh infinity-del "${rip_inst}"
@@ -93,14 +93,14 @@
     </COMMAND>
 
     <COMMAND name="ecmp"
-        help="Izinkan route ECMP (default BIRD: enabled bila Kernel mendukung)">
+        help="Allow route ECMP (BIRD default: enabled if Kernel supports)" help-id="Izinkan route ECMP (default BIRD: enabled bila Kernel mendukung)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh ecmp-set "${rip_inst}" on
         </ACTION>
     </COMMAND>
     <COMMAND name="no ecmp"
-        help="Matikan ECMP">
+        help="Disable ECMP" help-id="Matikan ECMP">
         <CONFIG operation="unset" pattern="^ecmp"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh ecmp-del "${rip_inst}"
@@ -108,9 +108,9 @@
     </COMMAND>
 
     <COMMAND name="ecmp-limit"
-        help="Batas maks nexthop ECMP (butuh ecmp on)">
+        help="Max nexthop ECMP limit (requires ecmp on)" help-id="Batas maks nexthop ECMP (butuh ecmp on)">
         <PARAM name="Value"
-            help="Limit (1..256, default BIRD 16)"
+            help="Limit (1..256, BIRD default 16)" help-id="Limit (1..256, default BIRD 16)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -118,7 +118,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ecmp-limit"
-        help="Kembali ke ecmp-limit default BIRD (16)">
+        help="Back to the BIRD default ecmp-limit (16)" help-id="Kembali ke ecmp-limit default BIRD (16)">
         <CONFIG operation="unset" pattern="^ecmp-limit"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh ecmp-limit-del "${rip_inst}"
@@ -126,7 +126,7 @@
     </COMMAND>
 
     <COMMAND name="preference"
-        help="Preference route channel (best-route selection antar-protokol)">
+        help="Preference route channel (best-route selection inter-protocol)" help-id="Preference route channel (best-route selection antar-protokol)">
         <PARAM name="Value"
             help="Preference (0..65535)"
             ptype="UINT"/>
@@ -136,7 +136,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no preference"
-        help="Kembali ke preference default BIRD (tergantung protokol)">
+        help="Back to the BIRD default preference (depending on protocol)" help-id="Kembali ke preference default BIRD (tergantung protokol)">
         <CONFIG operation="unset" pattern="^preference"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh preference-del "${rip_inst}"
@@ -144,7 +144,7 @@
     </COMMAND>
 
     <COMMAND name="import-keep-filtered"
-        help="Simpan juga route yang ditolak import filter (hidden, bisa dilihat show route filtered)">
+        help="Also save routes rejected by the import filter (hidden, can be seen via show route filtered)" help-id="Simpan juga route yang ditolak import filter (hidden, bisa dilihat show route filtered)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh import-keep-filtered-set "${rip_inst}" on
@@ -158,12 +158,12 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="import-limit"
-        help="Batas jumlah route import channel (Bab 3.5-8; default BIRD tanpa limit)">
+        help="Route count import channel limit (Chapter 3.5-8; BIRD default without limit)" help-id="Batas jumlah route import channel (Bab 3.5-8; default BIRD tanpa limit)">
         <PARAM name="Value"
-            help="Jumlah route maks (0..4294967295) atau off"
+            help="Route count max (0..4294967295) or off" help-id="Jumlah route maks (0..4294967295) atau off"
             ptype="STRING"/>
         <PARAM name="Action"
-            help="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
+            help="Action if limit exceeded: warn|block|restart|disable (optional)" help-id="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -172,7 +172,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no import-limit"
-        help="Hapus import-limit (dan action-nya)">
+        help="Delete import-limit (and its action)" help-id="Hapus import-limit (dan action-nya)">
         <CONFIG operation="unset" pattern="^import-limit"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh limit-del "${rip_inst}" import
@@ -180,12 +180,12 @@
     </COMMAND>
 
     <COMMAND name="receive-limit"
-        help="Batas jumlah route receive channel (Bab 3.5-9; default BIRD tanpa limit)">
+        help="Route count receive channel limit (Chapter 3.5-9; BIRD default without limit)" help-id="Batas jumlah route receive channel (Bab 3.5-9; default BIRD tanpa limit)">
         <PARAM name="Value"
-            help="Jumlah route maks (0..4294967295) atau off"
+            help="Route count max (0..4294967295) or off" help-id="Jumlah route maks (0..4294967295) atau off"
             ptype="STRING"/>
         <PARAM name="Action"
-            help="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
+            help="Action if limit exceeded: warn|block|restart|disable (optional)" help-id="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -194,7 +194,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no receive-limit"
-        help="Hapus receive-limit (dan action-nya)">
+        help="Delete receive-limit (and its action)" help-id="Hapus receive-limit (dan action-nya)">
         <CONFIG operation="unset" pattern="^receive-limit"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh limit-del "${rip_inst}" receive
@@ -202,12 +202,12 @@
     </COMMAND>
 
     <COMMAND name="export-limit"
-        help="Batas jumlah route export channel (Bab 3.5-10; default BIRD tanpa limit)">
+        help="Route count export channel limit (Chapter 3.5-10; BIRD default without limit)" help-id="Batas jumlah route export channel (Bab 3.5-10; default BIRD tanpa limit)">
         <PARAM name="Value"
-            help="Jumlah route maks (0..4294967295) atau off"
+            help="Route count max (0..4294967295) or off" help-id="Jumlah route maks (0..4294967295) atau off"
             ptype="STRING"/>
         <PARAM name="Action"
-            help="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
+            help="Action if limit exceeded: warn|block|restart|disable (optional)" help-id="Aksi bila limit terlampaui: warn|block|restart|disable (opsional)"
             ptype="STRING"
             optional="true"/>
         <CONFIG/>
@@ -216,7 +216,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no export-limit"
-        help="Hapus export-limit (dan action-nya)">
+        help="Delete export-limit (and its action)" help-id="Hapus export-limit (dan action-nya)">
         <CONFIG operation="unset" pattern="^export-limit"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh limit-del "${rip_inst}" export
@@ -225,9 +225,9 @@
 
 
     <COMMAND name="debug"
-        help="Debug protokol (all|off|states,routes,filters,interfaces,events,packets)">
+        help="Debug protocol (all|off|states,routes,filters,interfaces,events,packets)" help-id="Debug protokol (all|off|states,routes,filters,interfaces,events,packets)">
         <PARAM name="Value"
-            help="Kelas debug (all|off|daftar koma)"
+            help="Debug class (all|off|comma-separated list)" help-id="Kelas debug (all|off|daftar koma)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -235,7 +235,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no debug"
-        help="Matikan debug protokol (default BIRD off)">
+        help="Disable debug protocol (BIRD default off)" help-id="Matikan debug protokol (default BIRD off)">
         <CONFIG operation="unset" pattern="^debug"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh debug-del "${rip_inst}"
@@ -243,9 +243,9 @@
     </COMMAND>
 
     <COMMAND name="mrtdump"
-        help="Dump MRT protokol (all|off|states|messages)">
+        help="MRT dump protocol (all|off|states|messages)" help-id="Dump MRT protokol (all|off|states|messages)">
         <PARAM name="Value"
-            help="Kelas mrtdump (all|off|states|messages)"
+            help="Mrtdump class (all|off|states|messages)" help-id="Kelas mrtdump (all|off|states|messages)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -253,7 +253,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no mrtdump"
-        help="Matikan mrtdump protokol (default BIRD off)">
+        help="Disable mrtdump protocol (BIRD default off)" help-id="Matikan mrtdump protokol (default BIRD off)">
         <CONFIG operation="unset" pattern="^mrtdump"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh mrtdump-del "${rip_inst}"
@@ -261,9 +261,9 @@
     </COMMAND>
 
     <COMMAND name="router-id"
-        help="Router id khusus protokol ini (default: router id global BIRD)">
+        help="This Router ID specific protocol (default: router ID global BIRD)" help-id="Router id khusus protokol ini (default: router id global BIRD)">
         <PARAM name="IP"
-            help="Alamat IPv4 router id"
+            help="Router ID IPv4 address" help-id="Alamat IPv4 router id"
             ptype="IP_ADDR"/>
         <CONFIG/>
         <ACTION>
@@ -271,7 +271,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no router-id"
-        help="Hapus router id protokol (kembali ke router id global BIRD)">
+        help="Delete router ID protocol (back to router ID global BIRD)" help-id="Hapus router id protokol (kembali ke router id global BIRD)">
         <CONFIG operation="unset" pattern="^router-id"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh router-id-del "${rip_inst}"
@@ -279,9 +279,9 @@
     </COMMAND>
 
     <COMMAND name="description"
-        help="Label/deskripsi protokol ini">
+        help="Label/this description protocol" help-id="Label/deskripsi protokol ini">
         <PARAM name="Text"
-            help="Teks deskripsi"
+            help="Description text" help-id="Teks deskripsi"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -289,7 +289,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no description"
-        help="Hapus deskripsi protokol">
+        help="Delete description protocol" help-id="Hapus deskripsi protokol">
         <CONFIG operation="unset" pattern="^description"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh description-del "${rip_inst}"
@@ -297,14 +297,14 @@
     </COMMAND>
 
     <COMMAND name="disabled"
-        help="Nonaktifkan protokol ini (tidak di-start saat configure)">
+        help="Disable this protocol (not started when configure)" help-id="Nonaktifkan protokol ini (tidak di-start saat configure)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh disabled-set "${rip_inst}" on
         </ACTION>
     </COMMAND>
     <COMMAND name="no disabled"
-        help="Aktifkan kembali protokol ini (default BIRD)">
+        help="This Re-enable protocol (BIRD default)" help-id="Aktifkan kembali protokol ini (default BIRD)">
         <CONFIG operation="unset" pattern="^disabled"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh disabled-del "${rip_inst}"
@@ -312,9 +312,9 @@
     </COMMAND>
 
     <COMMAND name="from"
-        help="Ambil opsi dari template RIP (template-add rip &lt;NAMA&gt; dulu di router bird)">
+        help="Take options from template RIP (template-add RIP &lt;NAME&gt; first in router BIRD)" help-id="Ambil opsi dari template RIP (template-add rip &lt;NAMA&gt; dulu di router bird)">
         <PARAM name="Name"
-            help="Nama template RIP"
+            help="RIP template name" help-id="Nama template RIP"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -322,7 +322,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no from"
-        help="Lepas template RIP (opsi ditulis eksplisit)">
+        help="Remove the RIP template (options are written explicitly)" help-id="Lepas template RIP (opsi ditulis eksplisit)">
         <CONFIG operation="unset" pattern="^from"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh from-del "${rip_inst}"
@@ -330,23 +330,23 @@
     </COMMAND>
 
     <COMMAND name="import all"
-        help="Channel: import semua route (default)">
+        help="Channel: import all routes (default)" help-id="Channel: import semua route (default)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" import all
         </ACTION>
     </COMMAND>
     <COMMAND name="import none"
-        help="Channel: jangan import route">
+        help="Channel: do not import route" help-id="Channel: jangan import route">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" import none
         </ACTION>
     </COMMAND>
     <COMMAND name="import filter"
-        help="Channel: import via filter bernama">
+        help="Channel: import via filter named" help-id="Channel: import via filter bernama">
         <PARAM name="Name"
-            help="Nama filter BIRD (mis. F-RIP-IN)"
+            help="BIRD filter name (e.g. F-RIP-IN)" help-id="Nama filter BIRD (mis. F-RIP-IN)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -354,9 +354,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="import where"
-        help="Channel: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        help="Channel: import via filter inline (concise-form expression, e.g. net~10.0.0.0/8)" help-id="Channel: import via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
         <PARAM name="Cond"
-            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            help="Concise-form filter expression (e.g. net~10.0.0.0/8)" help-id="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -365,23 +365,23 @@
     </COMMAND>
 
     <COMMAND name="export all"
-        help="Channel: export semua route (default)">
+        help="Channel: export all routes (default)" help-id="Channel: export semua route (default)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" export all
         </ACTION>
     </COMMAND>
     <COMMAND name="export none"
-        help="Channel: jangan export route">
+        help="Channel: do not export route" help-id="Channel: jangan export route">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh chan-set "${rip_inst}" export none
         </ACTION>
     </COMMAND>
     <COMMAND name="export filter"
-        help="Channel: export via filter bernama">
+        help="Channel: export via filter named" help-id="Channel: export via filter bernama">
         <PARAM name="Name"
-            help="Nama filter BIRD (mis. F-RIP-OUT)"
+            help="BIRD filter name (e.g. F-RIP-OUT)" help-id="Nama filter BIRD (mis. F-RIP-OUT)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -389,9 +389,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="export where"
-        help="Channel: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
+        help="Channel: export via filter inline (concise-form expression, e.g. net~10.0.0.0/8)" help-id="Channel: export via filter inline (ekspresi bentuk ringkas, mis. net~10.0.0.0/8)">
         <PARAM name="Cond"
-            help="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
+            help="Concise-form filter expression (e.g. net~10.0.0.0/8)" help-id="Ekspresi filter bentuk ringkas (mis. net~10.0.0.0/8)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -400,9 +400,9 @@
     </COMMAND>
 
     <COMMAND name="export-rip-metric"
-        help="rip_metric route non-RIP yang diekspor ke RIP (hanya bila export all)">
+        help="rip_metric for non-RIP routes exported to RIP (only if export all)" help-id="rip_metric route non-RIP yang diekspor ke RIP (hanya bila export all)">
         <PARAM name="Value"
-            help="Metric (0..255, default BIRD 1)"
+            help="Metric (0..255, BIRD default 1)" help-id="Metric (0..255, default BIRD 1)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -410,7 +410,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no export-rip-metric"
-        help="Kembali ke rip_metric default BIRD (1)">
+        help="Back to the BIRD default rip_metric (1)" help-id="Kembali ke rip_metric default BIRD (1)">
         <CONFIG operation="unset" pattern="^export-rip-metric"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh export-rip-metric-del "${rip_inst}"
@@ -418,9 +418,9 @@
     </COMMAND>
 
     <COMMAND name="export-rip-tag"
-        help="rip_tag route non-RIP yang diekspor ke RIP (hanya bila export all)">
+        help="rip_tag for non-RIP routes exported to RIP (only if export all)" help-id="rip_tag route non-RIP yang diekspor ke RIP (hanya bila export all)">
         <PARAM name="Value"
-            help="Tag (0..65535, default BIRD 0)"
+            help="Tag (0..65535, BIRD default 0)" help-id="Tag (0..65535, default BIRD 0)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -428,7 +428,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no export-rip-tag"
-        help="Kembali ke rip_tag default BIRD (0)">
+        help="Back to the BIRD default rip_tag (0)" help-id="Kembali ke rip_tag default BIRD (0)">
         <CONFIG operation="unset" pattern="^export-rip-tag"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh export-rip-tag-del "${rip_inst}"
@@ -436,13 +436,13 @@
     </COMMAND>
 
     <COMMAND name="interface"
-        help="Opsi RIP per interface (masuk ke interface view)"
+        help="RIP options per interface (enter interface view)" help-id="Opsi RIP per interface (masuk ke interface view)"
         view="configure-bird-rip-interface-view"
         viewid="rip_if_ctx=${rip_inst}:${Pattern}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Pattern"
-            help="Pola interface BIRD (mis. ge*, bridge0)"
+            help="BIRD interface pattern (e.g. ge*, bridge0)" help-id="Pola interface BIRD (mis. ge*, bridge0)"
             ptype="STRING"/>
         <CONFIG priority="0x1560" pattern="^${__line}$"/>
         <ACTION>
@@ -450,9 +450,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no interface"
-        help="Hapus semua opsi RIP interface ini">
+        help="Delete all this options RIP interface" help-id="Hapus semua opsi RIP interface ini">
         <PARAM name="Pattern"
-            help="Pola interface BIRD"
+            help="BIRD interface pattern" help-id="Pola interface BIRD"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
         <ACTION>
@@ -478,9 +478,9 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="metric"
-        help="Metric ditambahkan ke route yang diterima via interface ini">
+        help="Metric added to routes received via this interface" help-id="Metric ditambahkan ke route yang diterima via interface ini">
         <PARAM name="Value"
-            help="Metric (1..255, default BIRD 1)"
+            help="Metric (1..255, BIRD default 1)" help-id="Metric (1..255, default BIRD 1)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -488,7 +488,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no metric"
-        help="Kembali ke metric default BIRD (1)">
+        help="Back to the BIRD default metric (1)" help-id="Kembali ke metric default BIRD (1)">
         <CONFIG operation="unset" pattern="^metric"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" metric
@@ -496,7 +496,7 @@
     </COMMAND>
 
     <COMMAND name="mode"
-        help="Mode pengiriman update (RIPng selalu multicast)">
+        help="Update sending mode (RIPng always multicast)" help-id="Mode pengiriman update (RIPng selalu multicast)">
         <PARAM name="Value"
             help="multicast|broadcast"
             ptype="STRING"/>
@@ -506,7 +506,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no mode"
-        help="Kembali ke mode default BIRD">
+        help="Back to the BIRD default mode" help-id="Kembali ke mode default BIRD">
         <CONFIG operation="unset" pattern="^mode"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" mode
@@ -514,14 +514,14 @@
     </COMMAND>
 
     <COMMAND name="passive"
-        help="Interface pasif: terima update, tidak kirim pesan">
+        help="Passive interface: accepts updates, does not send messages" help-id="Interface pasif: terima update, tidak kirim pesan">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" passive on
         </ACTION>
     </COMMAND>
     <COMMAND name="no passive"
-        help="Interface aktif (default BIRD)">
+        help="Active interface (BIRD default)" help-id="Interface aktif (default BIRD)">
         <CONFIG operation="unset" pattern="^passive"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" passive off
@@ -529,9 +529,9 @@
     </COMMAND>
 
     <COMMAND name="address"
-        help="Alamat tujuan multicast/broadcast (default 224.0.0.9 / ff02::9)">
+        help="Destination address multicast/broadcast (default 224.0.0.9 / ff02::9)" help-id="Alamat tujuan multicast/broadcast (default 224.0.0.9 / ff02::9)">
         <PARAM name="IP"
-            help="Alamat IP (keluarga sama dengan instance)"
+            help="IP address (same family as the instance)" help-id="Alamat IP (keluarga sama dengan instance)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -539,7 +539,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no address"
-        help="Kembali ke address default BIRD">
+        help="Back to the BIRD default address" help-id="Kembali ke address default BIRD">
         <CONFIG operation="unset" pattern="^address"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" address
@@ -557,7 +557,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no port"
-        help="Kembali ke port default BIRD">
+        help="Back to the BIRD default port" help-id="Kembali ke port default BIRD">
         <CONFIG operation="unset" pattern="^port"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" port
@@ -565,9 +565,9 @@
     </COMMAND>
 
     <COMMAND name="version"
-        help="Versi RIP per interface (RIP IPv4 saja; RIPng tidak mendukung)">
+        help="RIP version per interface (RIP IPv4 only; RIPng does not support it)" help-id="Versi RIP per interface (RIP IPv4 saja; RIPng tidak mendukung)">
         <PARAM name="Value"
-            help="1|2 (default BIRD 2)"
+            help="1|2 (BIRD default 2)" help-id="1|2 (default BIRD 2)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -575,7 +575,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no version"
-        help="Kembali ke version default BIRD (2)">
+        help="Back to the BIRD default version (2)" help-id="Kembali ke version default BIRD (2)">
         <CONFIG operation="unset" pattern="^version"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" version
@@ -583,14 +583,14 @@
     </COMMAND>
 
     <COMMAND name="version-only"
-        help="Hanya terima paket RIP dengan versi yang dikonfigurasi (default BIRD no; RIP IPv4 saja)">
+        help="Only accept RIP packets with the configured version (BIRD default: no; RIP IPv4 only)" help-id="Hanya terima paket RIP dengan versi yang dikonfigurasi (default BIRD no; RIP IPv4 saja)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" version-only on
         </ACTION>
     </COMMAND>
     <COMMAND name="no version-only"
-        help="Terima semua versi RIP (default BIRD)">
+        help="Accept all RIP versions (BIRD default)" help-id="Terima semua versi RIP (default BIRD)">
         <CONFIG operation="unset" pattern="^version-only"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" version-only off
@@ -598,14 +598,14 @@
     </COMMAND>
 
     <COMMAND name="split-horizon"
-        help="Jangan sebarkan route kembali ke interface asalnya (default BIRD yes)">
+        help="Do not advertise routes back to their originating interface (BIRD default: yes)" help-id="Jangan sebarkan route kembali ke interface asalnya (default BIRD yes)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" split-horizon on
         </ACTION>
     </COMMAND>
     <COMMAND name="no split-horizon"
-        help="Matikan split horizon">
+        help="Disable split horizon" help-id="Matikan split horizon">
         <CONFIG operation="unset" pattern="^split-horizon"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" split-horizon off
@@ -613,14 +613,14 @@
     </COMMAND>
 
     <COMMAND name="poison-reverse"
-        help="Sebarkan balik dengan metric infinity (default BIRD yes)">
+        help="Advertise back with metric infinity (BIRD default yes)" help-id="Sebarkan balik dengan metric infinity (default BIRD yes)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" poison-reverse on
         </ACTION>
     </COMMAND>
     <COMMAND name="no poison-reverse"
-        help="Matikan poison reverse">
+        help="Disable poison reverse" help-id="Matikan poison reverse">
         <CONFIG operation="unset" pattern="^poison-reverse"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" poison-reverse off
@@ -628,14 +628,14 @@
     </COMMAND>
 
     <COMMAND name="demand-circuit"
-        help="Triggered RIP RFC 2091: tanpa update periodik (wajib aktif di kedua sisi)">
+        help="Triggered RIP RFC 2091: without periodic updates (must active in both sides)" help-id="Triggered RIP RFC 2091: tanpa update periodik (wajib aktif di kedua sisi)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" demand-circuit on
         </ACTION>
     </COMMAND>
     <COMMAND name="no demand-circuit"
-        help="Matikan demand circuit (default BIRD)">
+        help="Disable demand circuit (BIRD default)" help-id="Matikan demand circuit (default BIRD)">
         <CONFIG operation="unset" pattern="^demand-circuit"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" demand-circuit off
@@ -643,14 +643,14 @@
     </COMMAND>
 
     <COMMAND name="check-zero"
-        help="Buang paket RIPv1 dengan field reserved non-zero (default BIRD yes)">
+        help="Discard RIPv1 packets with non-zero reserved fields (BIRD default: yes)" help-id="Buang paket RIPv1 dengan field reserved non-zero (default BIRD yes)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" check-zero on
         </ACTION>
     </COMMAND>
     <COMMAND name="no check-zero"
-        help="Matikan check zero">
+        help="Disable check zero" help-id="Matikan check zero">
         <CONFIG operation="unset" pattern="^check-zero"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" check-zero off
@@ -658,9 +658,9 @@
     </COMMAND>
 
     <COMMAND name="update-time"
-        help="Interval update periodik (default BIRD 30 detik)">
+        help="Periodic update interval (BIRD default: 30 seconds)" help-id="Interval update periodik (default BIRD 30 detik)">
         <PARAM name="Value"
-            help="Detik (1..86400)"
+            help="Seconds (1..86400)" help-id="Detik (1..86400)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -668,7 +668,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no update-time"
-        help="Kembali ke update time default BIRD (30)">
+        help="Back to the BIRD default update time (30)" help-id="Kembali ke update time default BIRD (30)">
         <CONFIG operation="unset" pattern="^update-time"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" update-time
@@ -676,9 +676,9 @@
     </COMMAND>
 
     <COMMAND name="timeout-time"
-        help="Route kedaluwarsa sesudah selama ini tanpa pengumuman (default BIRD 180 detik)">
+        help="Routes expire after this long without announcement (BIRD default: 180 seconds)" help-id="Route kedaluwarsa sesudah selama ini tanpa pengumuman (default BIRD 180 detik)">
         <PARAM name="Value"
-            help="Detik (1..86400)"
+            help="Seconds (1..86400)" help-id="Detik (1..86400)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -686,7 +686,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no timeout-time"
-        help="Kembali ke timeout time default BIRD (180)">
+        help="Back to the BIRD default timeout time (180)" help-id="Kembali ke timeout time default BIRD (180)">
         <CONFIG operation="unset" pattern="^timeout-time"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" timeout-time
@@ -694,9 +694,9 @@
     </COMMAND>
 
     <COMMAND name="garbage-time"
-        help="Interval antara route kedaluwarsa dan penghapusan entry (default BIRD 120 detik)">
+        help="Interval between route expiry and entry deletion (BIRD default: 120 seconds)" help-id="Interval antara route kedaluwarsa dan penghapusan entry (default BIRD 120 detik)">
         <PARAM name="Value"
-            help="Detik (1..86400)"
+            help="Seconds (1..86400)" help-id="Detik (1..86400)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -704,7 +704,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no garbage-time"
-        help="Kembali ke garbage time default BIRD (120)">
+        help="Back to the BIRD default garbage time (120)" help-id="Kembali ke garbage time default BIRD (120)">
         <CONFIG operation="unset" pattern="^garbage-time"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" garbage-time
@@ -712,9 +712,9 @@
     </COMMAND>
 
     <COMMAND name="ecmp-weight"
-        help="Bobot relatif nexthop via interface ini untuk route ECMP">
+        help="Relative nexthop weight via this interface for route ECMP" help-id="Bobot relatif nexthop via interface ini untuk route ECMP">
         <PARAM name="Value"
-            help="Weight (1..256, default BIRD 1)"
+            help="Weight (1..256, BIRD default 1)" help-id="Weight (1..256, default BIRD 1)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -722,7 +722,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ecmp-weight"
-        help="Kembali ke ecmp weight default BIRD (1)">
+        help="Back to the BIRD default ecmp weight (1)" help-id="Kembali ke ecmp weight default BIRD (1)">
         <CONFIG operation="unset" pattern="^ecmp-weight"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" ecmp-weight
@@ -730,7 +730,7 @@
     </COMMAND>
 
     <COMMAND name="ttl-security"
-        help="GTSM: kirim TTL 255 &amp; drop paket TTL &lt;255 (default yes RIPng / no RIP)">
+        help="GTSM: send TTL 255 &amp; drop packets with TTL &lt;255 (default: yes for RIPng / no for RIP)" help-id="GTSM: kirim TTL 255 &amp; drop paket TTL &lt;255 (default yes RIPng / no RIP)">
         <PARAM name="Value"
             help="on|off|tx-only"
             ptype="STRING"/>
@@ -740,7 +740,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no ttl-security"
-        help="Kembali ke ttl-security default BIRD">
+        help="Back to the BIRD default TTL-security" help-id="Kembali ke ttl-security default BIRD">
         <CONFIG operation="unset" pattern="^ttl-security"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" ttl-security
@@ -748,7 +748,7 @@
     </COMMAND>
 
     <COMMAND name="tx-class"
-        help="Type-of-Service paket RIP keluar">
+        help="Type-of-Service of outgoing RIP packets" help-id="Type-of-Service paket RIP keluar">
         <PARAM name="Value"
             help="ToS (0..255)"
             ptype="UINT"/>
@@ -758,7 +758,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-class"
-        help="Hapus tx-class interface ini">
+        help="Delete this tx-class interface" help-id="Hapus tx-class interface ini">
         <CONFIG operation="unset" pattern="^tx-class"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" tx-class
@@ -766,7 +766,7 @@
     </COMMAND>
 
     <COMMAND name="tx-dscp"
-        help="DSCP paket RIP keluar">
+        help="DSCP of outgoing RIP packets" help-id="DSCP paket RIP keluar">
         <PARAM name="Value"
             help="DSCP (0..63)"
             ptype="UINT"/>
@@ -776,7 +776,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-dscp"
-        help="Hapus tx-dscp interface ini">
+        help="Delete this tx-DSCP interface" help-id="Hapus tx-dscp interface ini">
         <CONFIG operation="unset" pattern="^tx-dscp"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" tx-dscp
@@ -784,7 +784,7 @@
     </COMMAND>
 
     <COMMAND name="rx-buffer"
-        help="Ukuran buffer pemrosesan paket (default 532 RIP / MTU RIPng)">
+        help="Packet processing buffer size (default 532 RIP / MTU RIPng)" help-id="Ukuran buffer pemrosesan paket (default 532 RIP / MTU RIPng)">
         <PARAM name="Value"
             help="Byte (1..65535)"
             ptype="UINT"/>
@@ -794,7 +794,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no rx-buffer"
-        help="Kembali ke rx-buffer default BIRD">
+        help="Back to the BIRD default rx-buffer" help-id="Kembali ke rx-buffer default BIRD">
         <CONFIG operation="unset" pattern="^rx-buffer"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" rx-buffer
@@ -802,7 +802,7 @@
     </COMMAND>
 
     <COMMAND name="tx-length"
-        help="Panjang maks paket RIP yang dibuat (default 532 RIP / MTU RIPng)">
+        help="Maximum length of RIP packets created (default 532 RIP / MTU RIPng)" help-id="Panjang maks paket RIP yang dibuat (default 532 RIP / MTU RIPng)">
         <PARAM name="Value"
             help="Byte (1..65535)"
             ptype="UINT"/>
@@ -812,7 +812,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-length"
-        help="Kembali ke tx-length default BIRD">
+        help="Back to the BIRD default tx-length" help-id="Kembali ke tx-length default BIRD">
         <CONFIG operation="unset" pattern="^tx-length"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" tx-length
@@ -820,14 +820,14 @@
     </COMMAND>
 
     <COMMAND name="check-link"
-        help="Perhatikan hardware link state (default BIRD yes)">
+        help="Perhatikan hardware link state (BIRD default yes)" help-id="Perhatikan hardware link state (default BIRD yes)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" check-link on
         </ACTION>
     </COMMAND>
     <COMMAND name="no check-link"
-        help="Abaikan hardware link state">
+        help="Ignore hardware link state" help-id="Abaikan hardware link state">
         <CONFIG operation="unset" pattern="^check-link"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-set "${rip_if_ctx}" check-link off
@@ -835,7 +835,7 @@
     </COMMAND>
 
     <COMMAND name="authentication"
-        help="Metode autentikasi paket RIP (default none; algo kunci default keyed-MD5)">
+        help="RIP packet authentication method (default none; default key algorithm keyed-MD5)" help-id="Metode autentikasi paket RIP (default none; algo kunci default keyed-MD5)">
         <PARAM name="Value"
             help="none|plaintext|cryptographic"
             ptype="STRING"/>
@@ -845,7 +845,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no authentication"
-        help="Kembali ke authentication none (default BIRD)">
+        help="Back to authentication none (BIRD default)" help-id="Kembali ke authentication none (default BIRD)">
         <CONFIG operation="unset" pattern="^authentication"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh interface-unset "${rip_if_ctx}" authentication
@@ -853,13 +853,13 @@
     </COMMAND>
 
     <COMMAND name="password"
-        help="Kunci autentikasi RIP (masuk ke password view: id + rotasi + algorithm)"
+        help="RIP authentication key (enter password view: ID + rotation + algorithm)" help-id="Kunci autentikasi RIP (masuk ke password view: id + rotasi + algorithm)"
         view="configure-bird-rip-password-view"
         viewid="rip_pw_ctx=${rip_if_ctx}:${Text}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Text"
-            help="Password (tanpa spasi, tanpa &quot; dan tanpa backslash)"
+            help="Password (without space, without &quot; and without backslash)" help-id="Password (tanpa spasi, tanpa &quot; dan tanpa backslash)"
             ptype="STRING"/>
         <CONFIG priority="0x1561" pattern="^${__line}$"/>
         <ACTION>
@@ -867,9 +867,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password"
-        help="Hapus kunci ini (+ semua sub-opsinya)">
+        help="Delete this key (+ all its sub-options)" help-id="Hapus kunci ini (+ semua sub-opsinya)">
         <PARAM name="Text"
-            help="Password yang dihapus"
+            help="Deleted password" help-id="Password yang dihapus"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^password ${Text}"/>
         <ACTION>
@@ -895,7 +895,7 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="id"
-        help="ID kunci (untuk rotasi)">
+        help="ID key (for rotation)" help-id="ID kunci (untuk rotasi)">
         <PARAM name="Value"
             help="ID (0..4294967295)"
             ptype="UINT"/>
@@ -905,7 +905,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no id"
-        help="Hapus id kunci ini">
+        help="Delete this ID key" help-id="Hapus id kunci ini">
         <CONFIG operation="unset" pattern="^id"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" id
@@ -913,9 +913,9 @@
     </COMMAND>
 
     <COMMAND name="generate-from"
-        help="Kunci mulai di-generate pada tanggal ini">
+        help="Key generation starts on this date" help-id="Kunci mulai di-generate pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
+            help="YYYY-MM-DD only (BIRD rejects date+time)" help-id="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -923,7 +923,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no generate-from"
-        help="Hapus generate-from kunci ini">
+        help="Delete this generate-from key" help-id="Hapus generate-from kunci ini">
         <CONFIG operation="unset" pattern="^generate-from"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" generate-from
@@ -931,9 +931,9 @@
     </COMMAND>
 
     <COMMAND name="generate-to"
-        help="Kunci berhenti di-generate pada tanggal ini">
+        help="Key generation stops on this date" help-id="Kunci berhenti di-generate pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
+            help="YYYY-MM-DD only (BIRD rejects date+time)" help-id="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -941,7 +941,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no generate-to"
-        help="Hapus generate-to kunci ini">
+        help="Delete this generate-to key" help-id="Hapus generate-to kunci ini">
         <CONFIG operation="unset" pattern="^generate-to"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" generate-to
@@ -949,9 +949,9 @@
     </COMMAND>
 
     <COMMAND name="accept-from"
-        help="Kunci mulai diterima pada tanggal ini">
+        help="Key acceptance starts on this date" help-id="Kunci mulai diterima pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
+            help="YYYY-MM-DD only (BIRD rejects date+time)" help-id="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -959,7 +959,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no accept-from"
-        help="Hapus accept-from kunci ini">
+        help="Delete this accept-from key" help-id="Hapus accept-from kunci ini">
         <CONFIG operation="unset" pattern="^accept-from"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" accept-from
@@ -967,9 +967,9 @@
     </COMMAND>
 
     <COMMAND name="accept-to"
-        help="Kunci berhenti diterima pada tanggal ini">
+        help="Key acceptance stops on this date" help-id="Kunci berhenti diterima pada tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
+            help="YYYY-MM-DD only (BIRD rejects date+time)" help-id="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -977,7 +977,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no accept-to"
-        help="Hapus accept-to kunci ini">
+        help="Delete this accept-to key" help-id="Hapus accept-to kunci ini">
         <CONFIG operation="unset" pattern="^accept-to"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" accept-to
@@ -985,9 +985,9 @@
     </COMMAND>
 
     <COMMAND name="from"
-        help="Kunci berlaku mulai tanggal ini">
+        help="Key valid from this date" help-id="Kunci berlaku mulai tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
+            help="YYYY-MM-DD only (BIRD rejects date+time)" help-id="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -995,7 +995,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no from"
-        help="Hapus from kunci ini">
+        help="Delete this from key" help-id="Hapus from kunci ini">
         <CONFIG operation="unset" pattern="^from"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" from
@@ -1003,9 +1003,9 @@
     </COMMAND>
 
     <COMMAND name="to"
-        help="Kunci berlaku sampai tanggal ini">
+        help="Key valid until this date" help-id="Kunci berlaku sampai tanggal ini">
         <PARAM name="Value"
-            help="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
+            help="YYYY-MM-DD only (BIRD rejects date+time)" help-id="YYYY-MM-DD saja (BIRD menolak tanggal+jam)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -1013,7 +1013,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no to"
-        help="Hapus to kunci ini">
+        help="Delete this to key" help-id="Hapus to kunci ini">
         <CONFIG operation="unset" pattern="^to"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" to
@@ -1021,9 +1021,9 @@
     </COMMAND>
 
     <COMMAND name="algorithm"
-        help="Algoritma kunci ini (default keyed-MD5)">
+        help="This Algorithm key (default keyed-MD5)" help-id="Algoritma kunci ini (default keyed-MD5)">
         <PARAM name="Value"
-            help="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512"
+            help="keyed-MD5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512" help-id="keyed-md5|keyed-sha1|hmac-sha1|hmac-sha256|hmac-sha384|hmac-sha512|blake2s128|blake2s256|blake2b256|blake2b512"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -1031,7 +1031,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no algorithm"
-        help="Kembali ke algorithm default (keyed-MD5)">
+        help="Back to algorithm default (keyed-MD5)" help-id="Kembali ke algorithm default (keyed-MD5)">
         <CONFIG operation="unset" pattern="^algorithm"/>
         <ACTION>
             ${RT_SBIN}/titian-rip.sh password-unset "${rip_pw_ctx}" algorithm
@@ -1041,7 +1041,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show rip"
-        help="Status RIP/RIPng BIRD (intent + section + protokol BIRD)"
+        help="RIP/RIPng BIRD status (intent + section + BIRD protocol)" help-id="Status RIP/RIPng BIRD (intent + section + protokol BIRD)"
         lock="false"
         interrupt="true">
         <ACTION>

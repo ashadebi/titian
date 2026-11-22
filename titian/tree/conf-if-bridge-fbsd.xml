@@ -21,7 +21,7 @@
 <VIEW name="configure-view">
 
     <COMMAND name="interface bridge"
-        help="Bridge interface L2 (if_bridge) — join vxlan/vlan/ethernet to satu segmen"
+        help="Bridge interface L2 (if_bridge) — join VXLAN/VLAN/ethernet to one segment" help-id="Bridge interface L2 (if_bridge) — join vxlan/vlan/ethernet to satu segmen"
         view="configure-bridge-view"
         viewid="iface=${iface_bridge}">
         <PARAM name="iface_bridge"
@@ -52,44 +52,44 @@
     depth="1">
 
     <COMMAND name="no"
-        help="negasi perintah">
+        help="Negation of the command" help-id="negasi perintah">
         <PARAM name="subcommand"
-            help="perintah that dinegasi"
+            help="Negated command" help-id="perintah that dinegasi"
             ptype="SUBCOMMAND"/>
     </COMMAND>
 
     <COMMAND name="ip"
-        help="konfigurasi IP">
+        help="IP configuration" help-id="konfigurasi IP">
         <PARAM name="subcommand"
-            help="sub-perintah IP"
+            help="subcommand IP" help-id="sub-perintah IP"
             ptype="SUBCOMMAND"/>
     </COMMAND>
 
     <COMMAND name="no ip"
-        help="negasi konfigurasi IP">
+        help="Negation of IP configuration" help-id="negasi konfigurasi IP">
         <PARAM name="subcommand"
-            help="sub-perintah IP that dinegasi"
+            help="Negated IP subcommand" help-id="sub-perintah IP that dinegasi"
             ptype="SUBCOMMAND"/>
     </COMMAND>
 
     <COMMAND name="ipv6"
-        help="konfigurasi IPv6">
+        help="IPv6 configuration" help-id="konfigurasi IPv6">
         <PARAM name="subcommand"
-            help="sub-perintah IPv6"
+            help="subcommand IPv6" help-id="sub-perintah IPv6"
             ptype="SUBCOMMAND"/>
     </COMMAND>
 
     <COMMAND name="no ipv6"
-        help="negasi konfigurasi IPv6">
+        help="Negation of IPv6 configuration" help-id="negasi konfigurasi IPv6">
         <PARAM name="subcommand"
-            help="sub-perintah IPv6 that dinegasi"
+            help="Negated IPv6 subcommand" help-id="sub-perintah IPv6 that dinegasi"
             ptype="SUBCOMMAND"/>
     </COMMAND>
 
     <COMMAND name="member"
-        help="Add anggota bridge (vxlan/vlan/ethernet/lagg — jadi satu segmen L2)">
+        help="Add member bridge (VXLAN/VLAN/ethernet/LAGG — becomes one segment L2)" help-id="Add anggota bridge (vxlan/vlan/ethernet/lagg — jadi satu segmen L2)">
         <PARAM name="member"
-            help="Interface anggota (show 'show interfaces')"
+            help="Member interface (show 'show interfaces')" help-id="Interface anggota (show 'show interfaces')"
             completion="${Get_if_all}"
             ptype="IFACE_SYS"/>
         <CONFIG pattern="^${__line}$"/>
@@ -99,9 +99,9 @@
     </COMMAND>
 
     <COMMAND name="no member"
-        help="Detach anggota from bridge">
+        help="Detach member from bridge" help-id="Detach anggota from bridge">
         <PARAM name="member"
-            help="Interface anggota"
+            help="Member interface" help-id="Interface anggota"
             completion="${Get_if_all}"
             ptype="IFACE_SYS"/>
         <CONFIG operation="unset" pattern="^member ${member}$"/>
@@ -111,9 +111,9 @@
     </COMMAND>
 
     <COMMAND name="description"
-        help="Deskripsi bridge">
+        help="Bridge description" help-id="Deskripsi bridge">
         <PARAM name="desc"
-            help="Teks deskripsi"
+            help="Description text" help-id="Teks deskripsi"
             ptype="STRING"/>
         <CONFIG pattern="^${__line}$"/>
         <ACTION>
@@ -122,7 +122,7 @@
     </COMMAND>
 
     <COMMAND name="no description"
-        help="Delete deskripsi bridge">
+        help="Delete the bridge description" help-id="Delete deskripsi bridge">
         <CONFIG operation="unset" pattern="^description"/>
         <ACTION>
             ifconfig "${iface}" description ""
@@ -141,7 +141,7 @@
     </COMMAND>
 
     <COMMAND name="no mtu"
-        help="Kembalikan MTU default (1500)">
+        help="Restore the default MTU (1500)" help-id="Kembalikan MTU default (1500)">
         <CONFIG operation="unset" pattern="^mtu"/>
         <ACTION>
             ifconfig "${iface}" mtu 1500
@@ -165,9 +165,9 @@
     </COMMAND>
 
     <COMMAND name="ip address"
-            help="Alamat IPv4 bridge (CIDR)">
+            help="Bridge IPv4 address (CIDR)" help-id="Alamat IPv4 bridge (CIDR)">
             <PARAM name="ip"
-                help="Alamat IPv4 (CIDR, example 198.51.100.1/24)"
+                help="IPv4 address (CIDR, example 198.51.100.1/24)" help-id="Alamat IPv4 (CIDR, example 198.51.100.1/24)"
                 ptype="IP_ADDR_MASK_OPT"/>
         <PARAM name="peer"
                 help="Peer address for point-to-point"
@@ -175,7 +175,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
             <PARAM name="peer_ip"
-                help="Alamat peer (PtP)"
+                help="Peer address (PtP)" help-id="Alamat peer (PtP)"
                 ptype="IP_ADDR"/>
         </PARAM>
         <CONFIG pattern="ip address ${ip}" splitter="false"/>
@@ -185,10 +185,10 @@
     </COMMAND>
 
     <COMMAND name="no ip address"
-           help="Delete alamat IPv4 bridge"
+           help="Delete bridge IPv4 address" help-id="Delete alamat IPv4 bridge"
            lock="false">
            <PARAM name="ip"
-                help="Alamat IPv4 (CIDR)"
+                help="IPv4 address (CIDR)" help-id="Alamat IPv4 (CIDR)"
                 ptype="IP_ADDR_MASK_OPT"/>
         <PARAM name="peer"
                 help="Peer address for point-to-point"
@@ -196,7 +196,7 @@
                 mode="subcommand"
                 ptype="SUBCOMMAND">
             <PARAM name="peer_ip"
-                help="Alamat peer (PtP)"
+                help="Peer address (PtP)" help-id="Alamat peer (PtP)"
                 ptype="IP_ADDR"/>
         </PARAM>
         <CONFIG operation="unset" pattern="^ip address ${ip}"/>
@@ -206,9 +206,9 @@
     </COMMAND>
 
     <COMMAND name="ipv6 address"
-            help="Alamat IPv6 bridge (CIDR)">
+            help="Bridge IPv6 address (CIDR)" help-id="Alamat IPv6 bridge (CIDR)">
             <PARAM name="ip"
-                help="Alamat IPv6 (CIDR)"
+                help="IPv6 address (CIDR)" help-id="Alamat IPv6 (CIDR)"
                 ptype="IP6_ADDR_MASK"/>
         <CONFIG pattern="^${__line}$"/>
         <ACTION>
@@ -217,9 +217,9 @@
     </COMMAND>
 
     <COMMAND name="no ipv6 address"
-           help="Delete alamat IPv6 bridge">
+           help="Delete bridge IPv6 address" help-id="Delete alamat IPv6 bridge">
            <PARAM name="ip"
-                help="Alamat IPv6 (CIDR)"
+                help="IPv6 address (CIDR)" help-id="Alamat IPv6 (CIDR)"
                 ptype="IP6_ADDR_MASK"/>
         <CONFIG operation="unset" pattern="^ipv6 address ${ip}"/>
         <ACTION>
@@ -228,7 +228,7 @@
     </COMMAND>
 
     <COMMAND name="exit"
-        help="Exit from mode konfigurasi bridge">
+        help="Exit from bridge configuration mode" help-id="Exit from mode konfigurasi bridge">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
 
@@ -243,7 +243,7 @@
     <COMMAND name="show bridge"
         help="Display bridge + anggotanya">
         <PARAM name="bridge"
-            help="Bridge (bridge[N], kosong = all)"
+            help="Bridge (bridge[N], empty = all)" help-id="Bridge (bridge[N], kosong = all)"
             optional="true"
             ptype="IFACE_BRIDGE"/>
         <ACTION>

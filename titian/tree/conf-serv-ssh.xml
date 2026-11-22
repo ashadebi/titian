@@ -65,7 +65,7 @@
     </COMMAND>
 
     <COMMAND name="allow-root"
-          help="Enable root login over ssh">
+          help="Enable root login over SSH" help-id="Enable root login over ssh">
         <CONFIG/>
         <ACTION>
             Cur_set=$(egrep -v "^#" /etc/ssh/sshd_config |grep PermitRootLogin |awk '{print $2}')
@@ -81,7 +81,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no allow-root"
-          help="Disable root login over ssh">
+          help="Disable root login over SSH" help-id="Disable root login over ssh">
         <CONFIG operation="unset" pattern="^allow-root"/>
             <ACTION>
             Cur_set=$(egrep -v "^#" /etc/ssh/sshd_config |grep PermitRootLogin |awk '{print $2}')

@@ -12,11 +12,11 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show interfaces vxlan"
-        help="status VXLAN + VNI + local/remote + FDB"
+        help="VXLAN + VNI + local/remote + FDB status" help-id="status VXLAN + VNI + local/remote + FDB"
         lock="false"
         interrupt="true">
         <PARAM name="iface"
-            help="VXLAN interface (kosong = all)"
+            help="VXLAN interface (empty = all)" help-id="VXLAN interface (kosong = all)"
             completion="${Get_if_vxlan}"
             optional="true"
             ptype="IFACE_VXLAN"/>

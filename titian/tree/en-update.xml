@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CLISH_MODULE xmlns="http://clish.sourceforge.net/XMLSchema"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://clish.sourceforge.net/XMLSchema
+                     http://clish.sourceforge.net/XMLSchema/clish.xsd">
+<!--=======================================================
+TITIAN — update dari GitHub Releases (view exec, bukan configure
+view, karena ini operasi, bukan konfigurasi — mengikuti pola
+save/checkpoint).
+
+  update check           READ-ONLY: rilis terbaru GitHub vs versi
+                         ter-install (pkg info titian). Laporan:
+                         UPDATE TERSEDIA / SUDAH TERBARU /
+                         TIDAK DAPAT DIHUBUNGI.
+  update install         ARM: tampilkan versi baru + ringkasan +
+                         perintah konfirmasi. TIDAK download /
+                         install / restart.
+  update install confirm EKSEKUSI: download .pkg -> verifikasi sha256
+                         -> pkg add -f -> restart service titian ->
+                         verifikasi config (startup-config vs /cfg,
+                         bird.conf md5, BGP Established).
+
+Sumber: api.github.com/repos/ashadebi/titian/releases/latest (tanpa
+auth). Tag: titian-bsdrp-<versi>. Asset: titian-bsdrp-<versi>.pkg
+(URL dari browser_download_url — JANGAN konstruksi manual).
+Checksum sha256 dari body rilis atau asset .pkg.sha256; bila tidak
+dipublikasikan / tidak cocok -> GAGAL LANTANG, jangan install.
+TIDAK ADA cron auto-apply. Konfigurasi /cfg TIDAK disentuh.
+=======================================================-->
+
+<VIEW name="enable-view">
+
+    <!-- Induk telanjang (wajib klish: keluarga perintah multi-kata
+         butuh prefix ini agar update check/install ter-resolve,
+         mengikuti pola community/show/generate di tree lain) -->
+    <COMMAND name="update"
+             help="Update Titian from GitHub Releases (check / install)" help-id="Update Titian dari GitHub Releases (check / install)"/>
+
+    <COMMAND name="update check"
+             help="Check the latest GitHub release vs the installed version (read-only — does not change anything)" help-id="Cek rilis terbaru GitHub vs versi ter-install (read-only — tidak mengubah apa pun)">
+        <ACTION>
+            ${RT_SBIN}/titian-update.sh check
+        </ACTION>
+    </COMMAND>
+
+    <!-- Dua langkah (mengikuti pola factory-reset): tanpa
+         `update install confirm` tidak ada yang di-download/di-install. -->
+    <COMMAND name="update install"
+             help="Show the new version + update summary (does NOT download/install — execute: update install confirm)" help-id="Tampilkan versi baru + ringkasan update (TIDAK download/install — eksekusi: update install confirm)"
+             lock="false"
+             interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-update.sh install
+        </ACTION>
+    </COMMAND>
+    <COMMAND name="update install confirm"
+             help="EXECUTION update: download .pkg, verify sha256, pkg add -f, restart service titian, verify config (restart service — mildly destructive)" help-id="EKSEKUSI update: download .pkg, verifikasi sha256, pkg add -f, restart service titian, verifikasi config (restart service — destruktif ringan)"
+             lock="false"
+             interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-update.sh install-confirm
+        </ACTION>
+    </COMMAND>
+
+</VIEW>
+</CLISH_MODULE>

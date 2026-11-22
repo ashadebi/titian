@@ -12,7 +12,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show routing"
-        help="Routing daemon aktif: BIRD (varian+versi+status+pid) and FRR"
+        help="Routing daemon active: BIRD (variant+version+status+pid) and FRR" help-id="Routing daemon aktif: BIRD (varian+versi+status+pid) and FRR"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -21,7 +21,7 @@
     </COMMAND>
 
     <COMMAND name="show version"
-        help="Versi BSDRP + bird_version + versi FRR"
+        help="BSDRP version + bird_version + FRR version" help-id="Versi BSDRP + bird_version + versi FRR"
         lock="false"
         interrupt="true">
         <ACTION>

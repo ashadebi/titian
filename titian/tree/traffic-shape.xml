@@ -22,31 +22,37 @@
     <!--=======================================================-->
     <PTYPE name="TS_NAME"
         pattern="^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"
-        help="name pipe/queue/sched/rule [A-Za-z0-9_-]+ (maks 32)"/>
+        help="name pipe/queue/sched/rule [A-Za-z0-9_-]+ (max 32)" help-id="name pipe/queue/sched/rule [A-Za-z0-9_-]+ (maks 32)"/>
     <PTYPE name="TS_RATE"
         pattern="^[0-9]+(Kbit/s|Mbit/s|Gbit/s|bit/s)$"
-        help="bandwidth, mis. 10Mbit/s, 512Kbit/s, 1Gbit/s"/>
+        help="bandwidth, e.g. 10Mbit/s, 512Kbit/s, 1Gbit/s" help-id="bandwidth, mis. 10Mbit/s, 512Kbit/s, 1Gbit/s"/>
     <PTYPE name="TS_UINT"
         pattern="^[0-9]+$"
         help="bilangan bulat >= 0"/>
     <PTYPE name="TS_FLOAT"
         pattern="^(0(\.[0-9]*)?|1(\.0*)?)$"
-        help="angka 0..1 (mis. 0.002)"/>
+        help="Number 0..1 (e.g. 0.002)" help-id="angka 0..1 (mis. 0.002)"/>
     <PTYPE name="TS_PLR"
         pattern="^(0(\.[0-9]*)?|1(\.0*)?)$"
-        help="packet loss rate 0..1 (mis. 0.01)"/>
+        help="packet loss rate 0..1 (e.g. 0.01)" help-id="packet loss rate 0..1 (mis. 0.01)"/>
     <PTYPE name="TS_MASK"
         pattern="^(dst-ip|src-ip|dst-ip6|src-ip6|dst-port|src-port|proto|flow-id|all)$"
         help="dst-ip | src-ip | dst-ip6 | src-ip6 | dst-port | src-port | proto | flow-id | all"/>
     <PTYPE name="TS_MASKVAL"
         pattern="^(/([0-9]|[1-9][0-9]|1[0-2][0-9])|0x[0-9a-fA-F]+|[0-9]+)$"
-        help="value mask: /N bit (mis. /32) or angka 0x... (default = full mask)"/>
+        help="value mask: /N bit (e.g. /32) or number 0x... (default = full mask)" help-id="value mask: /N bit (mis. /32) or angka 0x... (default = full mask)"/>
     <PTYPE name="TS_DIR"
         pattern="^(in|out)$"
         help="in | out"/>
     <PTYPE name="TS_SCHEDTYPE"
         pattern="^(fifo|wf2q\+|rr|qfq|fq_codel|fq_pie)$"
         help="fifo | wf2q+ | rr | qfq | fq_codel | fq_pie"/>
+    <PTYPE name="TS_PROFNAME"
+        pattern="^[A-Za-z0-9][A-Za-z0-9_-]{0,11}$"
+        help="profile packet name (max 12 characters, [A-Za-z0-9_-])" help-id="nama profile paket (maks 12 karakter, [A-Za-z0-9_-])"/>
+    <PTYPE name="TS_SIDE"
+        pattern="^(uplink|customer)$"
+        help="uplink (interface facing upstream) | customer (interface facing customers)" help-id="uplink (interface menghadap upstream) | customer (interface menghadap pelanggan)"/>
 
     <!--==================== configure-view ====================-->
     <VIEW name="configure-view">
@@ -197,6 +203,31 @@
             </ACTION>
         </COMMAND>
 
+        <COMMAND name="profile"
+                help="Configure a BRAS package profile (bandwidth + burst, dummynet)"
+                view="configure-ts-profile-view"
+                viewid="ts_profile=${Name}"
+                ptype="SUBCOMMAND"
+                mode="subcommand">
+            <PARAM name="Name"
+                help="name profile (max 12 characters)" help-id="name profile (maks 12 karakter)"
+                ptype="TS_PROFNAME"/>
+            <CONFIG priority="0x1312" pattern="^profile ${Name}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh check-profile "${Name}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no profile"
+                help="Delete a BRAS package profile (and its bindings)">
+            <PARAM name="Name"
+                help="name profile"
+                ptype="TS_PROFNAME"/>
+            <CONFIG operation="unset" pattern="^profile ${Name}"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh del-profile "${Name}"
+            </ACTION>
+        </COMMAND>
+
     </VIEW>
 
     <!--============== configure-ts-pipe-view ==============-->
@@ -218,7 +249,7 @@
         <COMMAND name="bandwidth"
                 help="Bandwidth cap for this pipe">
             <PARAM name="Rate"
-                help="mis. 10Mbit/s"
+                help="e.g. 10Mbit/s" help-id="mis. 10Mbit/s"
                 ptype="TS_RATE"/>
             <CONFIG/>
             <ACTION>
@@ -228,7 +259,7 @@
         <COMMAND name="queue"
                 help="Queue slots for this pipe">
             <PARAM name="Slots"
-                help="jumlah slot antrean"
+                help="queue slot count" help-id="jumlah slot antrean"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -248,7 +279,7 @@
         <COMMAND name="plr"
                 help="Packet loss rate 0..1">
             <PARAM name="Rate"
-                help="mis. 0.01"
+                help="e.g. 0.01" help-id="mis. 0.01"
                 ptype="TS_PLR"/>
             <CONFIG/>
             <ACTION>
@@ -258,7 +289,7 @@
         <COMMAND name="burst"
                 help="Burst bytes allowed after idle (0 = none)">
             <PARAM name="Bytes"
-                help="ukuran burst in byte"
+                help="burst size in bytes" help-id="ukuran burst in byte"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -300,7 +331,7 @@
         <COMMAND name="aqm codel"
                 help="CoDel queue management (defaults: target 5ms, interval 100ms)">
             <PARAM name="Target" help="target ms" ptype="TS_UINT" optional="true"/>
-            <PARAM name="Interval" help="interval ms" ptype="TS_UINT" optional="true"/>
+            <PARAM name="Interval" help="ms interval" help-id="interval ms" ptype="TS_UINT" optional="true"/>
             <CONFIG/>
             <ACTION>
                 _c="aqm codel"
@@ -319,6 +350,126 @@
                 [ -n "${Target}" ] &amp;&amp; _c="$_c target ${Target}"
                 [ -n "${Tupdate}" ] &amp;&amp; _c="$_c tupdate ${Tupdate}"
                 ${RT_SBIN}/titian-traffic-shape.sh set-pipe-field "${ts_pipe}" aqm-clause "$_c"
+            </ACTION>
+        </COMMAND>
+
+    </VIEW>
+
+    <!--============ configure-ts-profile-view ============-->
+    <VIEW name="configure-ts-profile-view"
+        prompt="${SYSTEM_NAME}(config-ts-profile-${ts_profile})# "
+        depth="2">
+
+        <NAMESPACE ref="configure-ts-view"
+            help="false"
+            completion="true"/>
+
+        <COMMAND name="exit"
+            help="Exit profile mode"
+            lock="false">
+            <ACTION builtin="clish_nested_up"/>
+        </COMMAND>
+        <HOTKEY key="^Z" cmd="exit"/>
+
+        <COMMAND name="no"
+            help="Negate a command or set its defaults"/>
+
+        <COMMAND name="download"
+                help="Download bandwidth cap (e.g. 10Mbit/s)" help-id="Download bandwidth cap (mis. 10Mbit/s)">
+            <PARAM name="Rate"
+                help="rate (e.g. 10Mbit/s)" help-id="rate (mis. 10Mbit/s)"
+                ptype="TS_RATE"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-profile-field "${ts_profile}" download "${Rate}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="download-burst"
+                help="Download burst allowance in bytes (dummynet: bytes allowed past cap after idle)">
+            <PARAM name="Bytes"
+                help="burst bytes (e.g. 1000000)" help-id="burst bytes (mis. 1000000)"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-profile-field "${ts_profile}" download-burst "${Bytes}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="upload"
+                help="Upload bandwidth cap (e.g. 10Mbit/s)" help-id="Upload bandwidth cap (mis. 10Mbit/s)">
+            <PARAM name="Rate"
+                help="rate (e.g. 10Mbit/s)" help-id="rate (mis. 10Mbit/s)"
+                ptype="TS_RATE"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-profile-field "${ts_profile}" upload "${Rate}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="upload-burst"
+                help="Upload burst allowance in bytes (dummynet: bytes allowed past cap after idle)">
+            <PARAM name="Bytes"
+                help="burst bytes (e.g. 1000000)" help-id="burst bytes (mis. 1000000)"
+                ptype="TS_UINT"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh set-profile-field "${ts_profile}" upload-burst "${Bytes}"
+            </ACTION>
+        </COMMAND>
+
+        <COMMAND name="bind"
+                help="Bind this profile to a target (interface or IP)"/>
+
+        <COMMAND name="bind interface"
+                help="Apply profile to a whole interface/VLAN (down=out, up=in)">
+            <PARAM name="If"
+                help="interface (e.g. vlan100, ge0)" help-id="interface (mis. vlan100, ge0)"
+                ptype="IFACE_SYS"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh bind-interface "${ts_profile}" "${If}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="bind ip"
+                help="Apply profile to an IP/CIDR on an interface (default side uplink: down=in dst, up=out src)">
+            <PARAM name="Addr"
+                help="IP or CIDR customer (e.g. 10.99.42.100/32)" help-id="IP atau CIDR pelanggan (mis. 10.99.42.100/32)"
+                ptype="FW_CIDR_OR_ANY"/>
+            <PARAM name="If"
+                help="interface (e.g. ge0)" help-id="interface (mis. ge0)"
+                ptype="IFACE_SYS"/>
+            <PARAM name="Side"
+                help="uplink | customer"
+                ptype="TS_SIDE"
+                optional="true"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh bind-ip "${ts_profile}" "${Addr}" "${If}" "${Side}"
+            </ACTION>
+        </COMMAND>
+
+        <COMMAND name="no bind"
+                help="Unbind this profile from a target"/>
+
+        <COMMAND name="no bind interface"
+                help="Remove profile binding from an interface/VLAN">
+            <PARAM name="If"
+                help="interface"
+                ptype="IFACE_SYS"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh unbind-interface "${ts_profile}" "${If}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no bind ip"
+                help="Remove profile binding from an IP on an interface">
+            <PARAM name="Addr"
+                help="IP or CIDR customer" help-id="IP atau CIDR pelanggan"
+                ptype="FW_CIDR_OR_ANY"/>
+            <PARAM name="If"
+                help="interface"
+                ptype="IFACE_SYS"/>
+            <CONFIG/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh unbind-ip "${ts_profile}" "${Addr}" "${If}"
             </ACTION>
         </COMMAND>
 
@@ -353,7 +504,7 @@
         <COMMAND name="bandwidth"
                 help="Bandwidth cap for this scheduler">
             <PARAM name="Rate"
-                help="mis. 10Mbit/s"
+                help="e.g. 10Mbit/s" help-id="mis. 10Mbit/s"
                 ptype="TS_RATE"/>
             <CONFIG/>
             <ACTION>
@@ -373,7 +524,7 @@
         <COMMAND name="limit"
                 help="Hard packet limit of all sub-queues (fq_codel/fq_pie only, default 10240)">
             <PARAM name="Packets"
-                help="jumlah packet"
+                help="packet count" help-id="jumlah packet"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -383,7 +534,7 @@
         <COMMAND name="flows"
                 help="Number of flow sub-queues (fq_codel/fq_pie only, default 1024)">
             <PARAM name="Count"
-                help="jumlah flow"
+                help="flow count" help-id="jumlah flow"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -435,7 +586,7 @@
                 help="dst-ip | src-ip | dst-ip6 | src-ip6 | dst-port | src-port | proto | flow-id | all"
                 ptype="TS_MASK"/>
             <PARAM name="Value"
-                help="value mask: /N or angka (kosong = full)"
+                help="value mask: /N or number (empty = full)" help-id="value mask: /N or angka (kosong = full)"
                 ptype="TS_MASKVAL"
                 optional="true"/>
             <CONFIG/>
@@ -446,7 +597,7 @@
         <COMMAND name="weight"
                 help="WF2Q+ weight (1-100)">
             <PARAM name="Weight"
-                help="bobot antrean"
+                help="weight queue" help-id="bobot antrean"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -456,7 +607,7 @@
         <COMMAND name="queue"
                 help="Queue slots for this queue">
             <PARAM name="Slots"
-                help="jumlah slot antrean"
+                help="queue slot count" help-id="jumlah slot antrean"
                 ptype="TS_UINT"/>
             <CONFIG/>
             <ACTION>
@@ -498,7 +649,7 @@
         <COMMAND name="aqm codel"
                 help="CoDel queue management (defaults: target 5ms, interval 100ms)">
             <PARAM name="Target" help="target ms" ptype="TS_UINT" optional="true"/>
-            <PARAM name="Interval" help="interval ms" ptype="TS_UINT" optional="true"/>
+            <PARAM name="Interval" help="ms interval" help-id="interval ms" ptype="TS_UINT" optional="true"/>
             <CONFIG/>
             <ACTION>
                 _c="aqm codel"
@@ -594,7 +745,7 @@
         <COMMAND name="proto"
                 help="Match protocol">
             <PARAM name="Proto"
-                help="tcp | udp | icmp | all"
+                help="TCP | UDP | ICMP | all" help-id="tcp | udp | icmp | all"
                 ptype="FW_PROTO"/>
             <CONFIG/>
             <ACTION>
@@ -602,7 +753,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="dport"
-                help="Match destination port (needs proto tcp/udp)">
+                help="Match destination port (needs proto TCP/UDP)" help-id="Match destination port (needs proto tcp/udp)">
             <PARAM name="Port"
                 help="1-65535"
                 ptype="DSTPORT"/>
@@ -666,6 +817,18 @@
                 interrupt="true">
             <ACTION>
                 ${RT_SBIN}/titian-traffic-shape.sh stats
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show traffic-shape profile"
+                help="Show BRAS package profiles (all, or one by name)"
+                lock="false"
+                interrupt="true">
+            <PARAM name="Name"
+                help="Profile name (empty = all)" help-id="name profile (kosong = semua)"
+                ptype="TS_PROFNAME"
+                optional="true"/>
+            <ACTION>
+                ${RT_SBIN}/titian-traffic-shape.sh show-profile "${Name}"
             </ACTION>
         </COMMAND>
 

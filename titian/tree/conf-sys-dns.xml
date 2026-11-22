@@ -10,7 +10,7 @@
     <COMMAND name="system domain-name"
         help="Set system domain name">
         <PARAM name="domain"
-            help="ex: gmedia.net.id"
+            help="ex: gmedia.net.ID" help-id="ex: gmedia.net.id"
             ptype="STRING"/>
         <CONFIG priority="0x1010" splitter="true"/>
         <ACTION>
@@ -58,7 +58,7 @@
 
 <!-- IP resolvers -->
     <COMMAND name="nameserver"
-            help="resolvers ip address">
+            help="resolvers IP address" help-id="resolvers ip address">
             <PARAM name="ip"
                   help="IP address"
                   ptype="IP_ADDR"/>

@@ -53,7 +53,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -66,13 +66,13 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="interface"
-        help="Opsi BFD per interface (masuk ke interface view)"
+        help="BFD options per interface (enter interface view)" help-id="Opsi BFD per interface (masuk ke interface view)"
         view="configure-bird-bfd-interface-view"
         viewid="bfd_iface=${Pattern}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Pattern"
-            help="Pola interface BIRD (mis. bridge0, ge*, *)"
+            help="BIRD interface pattern (e.g. bridge0, ge*, *)" help-id="Pola interface BIRD (mis. bridge0, ge*, *)"
             ptype="STRING"/>
         <CONFIG priority="0x1540" pattern="^${__line}$"/>
         <ACTION>
@@ -80,9 +80,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no interface"
-        help="Hapus semua opsi BFD interface ini">
+        help="Delete all BFD options of this interface" help-id="Hapus semua opsi BFD interface ini">
         <PARAM name="Pattern"
-            help="Pola interface BIRD"
+            help="BIRD interface pattern" help-id="Pola interface BIRD"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^interface ${Pattern}"/>
         <ACTION>
@@ -91,13 +91,13 @@
     </COMMAND>
 
     <COMMAND name="neighbor"
-        help="Sesi BFD eksplisit ke neighbor ini (masuk ke neighbor view)"
+        help="Explicit BFD session to this neighbor (enter the neighbor view)" help-id="Sesi BFD eksplisit ke neighbor ini (masuk ke neighbor view)"
         view="configure-bird-bfd-neighbor-view"
         viewid="bfd_neighbor=${IP}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="IP"
-            help="Alamat IP neighbor"
+            help="Neighbor IP address" help-id="Alamat IP neighbor"
             ptype="IP_ADDR"/>
         <CONFIG priority="0x1541" pattern="^${__line}$"/>
         <ACTION>
@@ -105,9 +105,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no neighbor"
-        help="Hapus sesi BFD eksplisit ke neighbor ini">
+        help="Delete the explicit BFD session to this neighbor" help-id="Hapus sesi BFD eksplisit ke neighbor ini">
         <PARAM name="IP"
-            help="Alamat IP neighbor"
+            help="Neighbor IP address" help-id="Alamat IP neighbor"
             ptype="IP_ADDR"/>
         <CONFIG operation="unset" pattern="^neighbor ${IP}"/>
         <ACTION>
@@ -116,7 +116,7 @@
     </COMMAND>
 
     <COMMAND name="multihop"
-        help="Opsi BFD untuk sesi multihop (masuk ke multihop view)"
+        help="Options BFD for session multihop (enter multihop view)" help-id="Opsi BFD untuk sesi multihop (masuk ke multihop view)"
         view="configure-bird-bfd-multihop-view"
         viewid="bfd_mh=multihop"
         ptype="SUBCOMMAND"
@@ -128,12 +128,12 @@
     </COMMAND>
 
     <COMMAND name="accept"
-        help="Terima request sesi BFD keluarga + jenis ini saja (tanpa baris accept = terima semua, default BIRD)">
+        help="Accept BFD session requests for only this family + type (without accept lines = accept all, BIRD default)" help-id="Terima request sesi BFD keluarga + jenis ini saja (tanpa baris accept = terima semua, default BIRD)">
         <PARAM name="Family"
-            help="Keluarga alamat: ipv4 atau ipv6"
+            help="Address family: IPv4 or IPv6" help-id="Keluarga alamat: ipv4 atau ipv6"
             ptype="STRING"/>
         <PARAM name="Type"
-            help="Jenis sesi: direct atau multihop"
+            help="Session type: direct or multihop" help-id="Jenis sesi: direct atau multihop"
             ptype="STRING"/>
         <CONFIG pattern="^accept ${Family} ${Type}$"/>
         <ACTION>
@@ -141,12 +141,12 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no accept"
-        help="Hapus penerimaan kombinasi ini (hapus semua baris = kembali terima semua)">
+        help="Delete this combination acceptance (deleting all lines = accept all again)" help-id="Hapus penerimaan kombinasi ini (hapus semua baris = kembali terima semua)">
         <PARAM name="Family"
-            help="Keluarga alamat: ipv4 atau ipv6"
+            help="Address family: IPv4 or IPv6" help-id="Keluarga alamat: ipv4 atau ipv6"
             ptype="STRING"/>
         <PARAM name="Type"
-            help="Jenis sesi: direct atau multihop"
+            help="Session type: direct or multihop" help-id="Jenis sesi: direct atau multihop"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^accept ${Family} ${Type}$"/>
         <ACTION>
@@ -155,14 +155,14 @@
     </COMMAND>
 
     <COMMAND name="strict-bind"
-        help="Tiap interface BFD pakai socket listen sendiri (default BIRD: socket bersama)">
+        help="Each BFD interface uses its own listen socket (BIRD default: shared socket)" help-id="Tiap interface BFD pakai socket listen sendiri (default BIRD: socket bersama)">
         <CONFIG pattern="^strict-bind$"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh proto-set strict-bind on
         </ACTION>
     </COMMAND>
     <COMMAND name="no strict-bind"
-        help="Kembali ke socket listen bersama (default BIRD)">
+        help="Back to the shared listen socket (BIRD default)" help-id="Kembali ke socket listen bersama (default BIRD)">
         <CONFIG operation="unset" pattern="^strict-bind$"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh proto-set strict-bind off
@@ -170,14 +170,14 @@
     </COMMAND>
 
     <COMMAND name="zero-udp6-checksum-rx"
-        help="Terima datagram IPv6 dengan UDP checksum nol (hanya platform yang mendukung)">
+        help="Accept datagram IPv6 with UDP checksum zero (only platform that supports)" help-id="Terima datagram IPv6 dengan UDP checksum nol (hanya platform yang mendukung)">
         <CONFIG pattern="^zero-udp6-checksum-rx$"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh proto-set zero-udp6-checksum-rx on
         </ACTION>
     </COMMAND>
     <COMMAND name="no zero-udp6-checksum-rx"
-        help="Tolak datagram IPv6 dengan UDP checksum nol (default BIRD)">
+        help="Reject datagram IPv6 with UDP checksum zero (BIRD default)" help-id="Tolak datagram IPv6 dengan UDP checksum nol (default BIRD)">
         <CONFIG operation="unset" pattern="^zero-udp6-checksum-rx$"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh proto-set zero-udp6-checksum-rx off
@@ -199,9 +199,9 @@
     <HOTKEY key="^Z" cmd="exit"/>
 
     <COMMAND name="interval"
-        help="Interval kirim/terima BFD (shorthand min rx + min tx)">
+        help="BFD send/receive interval (shorthand min rx + min tx)" help-id="Interval kirim/terima BFD (shorthand min rx + min tx)">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, mis. 300)"
+            help="Interval in ms (1..60000, e.g. 300)" help-id="Interval dalam ms (1..60000, mis. 300)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -210,9 +210,9 @@
     </COMMAND>
 
     <COMMAND name="min-rx"
-        help="Minimum RX interval yang diumumkan ke peer">
+        help="Minimum RX interval announced to peer" help-id="Minimum RX interval yang diumumkan ke peer">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, default BIRD 10)"
+            help="Interval in ms (1..60000, BIRD default 10)" help-id="Interval dalam ms (1..60000, default BIRD 10)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -221,9 +221,9 @@
     </COMMAND>
 
     <COMMAND name="min-tx"
-        help="Desired TX interval saat sesi up">
+        help="Desired TX interval when the session is up" help-id="Desired TX interval saat sesi up">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, default BIRD 100)"
+            help="Interval in ms (1..60000, BIRD default 100)" help-id="Interval dalam ms (1..60000, default BIRD 100)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -232,9 +232,9 @@
     </COMMAND>
 
     <COMMAND name="idle-tx"
-        help="TX interval saat sesi belum up">
+        help="TX interval when the session is not up yet" help-id="TX interval saat sesi belum up">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, default BIRD 1000)"
+            help="Interval in ms (1..60000, BIRD default 1000)" help-id="Interval dalam ms (1..60000, default BIRD 1000)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -243,9 +243,9 @@
     </COMMAND>
 
     <COMMAND name="multiplier"
-        help="Jumlah paket hilang sebelum sesi dinyatakan down">
+        help="Number of lost packets before the session is declared down" help-id="Jumlah paket hilang sebelum sesi dinyatakan down">
         <PARAM name="Value"
-            help="Multiplier (1..255, default BIRD 5)"
+            help="Multiplier (1..255, BIRD default 5)" help-id="Multiplier (1..255, default BIRD 5)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -254,14 +254,14 @@
     </COMMAND>
 
     <COMMAND name="passive"
-        help="Mode pasif: jangan kirim BFD sampai menerima dari peer">
+        help="Passive mode: do not send BFD until receiving from the peer" help-id="Mode pasif: jangan kirim BFD sampai menerima dari peer">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" passive on
         </ACTION>
     </COMMAND>
     <COMMAND name="no passive"
-        help="Matikan mode pasif">
+        help="Disable passive mode" help-id="Matikan mode pasif">
         <CONFIG operation="unset" pattern="^passive"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh interface-set "${bfd_iface}" passive off
@@ -269,9 +269,9 @@
     </COMMAND>
 
     <COMMAND name="authentication"
-        help="Metode autentikasi paket BFD di interface ini (default none; algoritma berlaku untuk SEMUA password di interface ini)">
+        help="BFD packet authentication method on this interface (default none; algorithm applies to ALL passwords on this interface)" help-id="Metode autentikasi paket BFD di interface ini (default none; algoritma berlaku untuk SEMUA password di interface ini)">
         <PARAM name="Value"
-            help="none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1"
+            help="none|simple|keyed-MD5|keyed-sha1|meticulous-keyed-MD5|meticulous-keyed-sha1" help-id="none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -279,7 +279,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no authentication"
-        help="Hapus authentication (kembali default none). Ditolak bila password masih ada — hapus dulu: no password &lt;TEXT&gt;">
+        help="Delete authentication (back to default none). Rejected if a password still exists — delete it first: no password &lt;TEXT&gt;" help-id="Hapus authentication (kembali default none). Ditolak bila password masih ada — hapus dulu: no password &lt;TEXT&gt;">
         <CONFIG operation="unset" pattern="^authentication"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh interface-auth-del "${bfd_iface}"
@@ -287,13 +287,13 @@
     </COMMAND>
 
     <COMMAND name="password"
-        help="Kunci autentikasi BFD di interface ini (masuk ke password view: id + rotasi; butuh authentication sudah diset, bukan none)"
+        help="BFD authentication key on this interface (enter the password view: id + rotation; authentication must already be set, not none)" help-id="Kunci autentikasi BFD di interface ini (masuk ke password view: id + rotasi; butuh authentication sudah diset, bukan none)"
         view="configure-bird-bfd-password-view"
         viewid="bfd_pw_ctx=interface:${bfd_iface}:${Text}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Text"
-            help="Password (tanpa spasi, tanpa &quot;, tanpa backslash, tanpa titik-dua)"
+            help="Password (without space, without &quot;, without backslash, without colon)" help-id="Password (tanpa spasi, tanpa &quot;, tanpa backslash, tanpa titik-dua)"
             ptype="STRING"/>
         <CONFIG priority="0x1543" pattern="^${__line}$"/>
         <ACTION>
@@ -301,9 +301,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password"
-        help="Hapus kunci ini (+ semua sub-opsinya)">
+        help="Delete this key (+ all its sub-options)" help-id="Hapus kunci ini (+ semua sub-opsinya)">
         <PARAM name="Text"
-            help="Password yang dihapus"
+            help="Deleted password" help-id="Password yang dihapus"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^password ${Text}"/>
         <ACTION>
@@ -326,9 +326,9 @@
     <HOTKEY key="^Z" cmd="exit"/>
 
     <COMMAND name="interface"
-        help="Interface yang dipakai sesi ini (dev)">
+        help="Interface used by this session (dev)" help-id="Interface yang dipakai sesi ini (dev)">
         <PARAM name="Name"
-            help="Nama interface (mis. bridge0)"
+            help="Interface name (e.g. bridge0)" help-id="Nama interface (mis. bridge0)"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -337,9 +337,9 @@
     </COMMAND>
 
     <COMMAND name="local"
-        help="Alamat IP lokal sesi ini">
+        help="Local IP address of this session" help-id="Alamat IP lokal sesi ini">
         <PARAM name="IP"
-            help="Alamat IP lokal"
+            help="Local IP address" help-id="Alamat IP lokal"
             ptype="IP_ADDR"/>
         <CONFIG/>
         <ACTION>
@@ -348,14 +348,14 @@
     </COMMAND>
 
     <COMMAND name="multihop"
-        help="Sesi ini multihop (wajib local bila multihop)">
+        help="This session is multihop (local is required if multihop)" help-id="Sesi ini multihop (wajib local bila multihop)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh neighbor-set "${bfd_neighbor}" multihop on
         </ACTION>
     </COMMAND>
     <COMMAND name="no multihop"
-        help="Sesi ini bukan multihop (direct)">
+        help="This session is not multihop (direct)" help-id="Sesi ini bukan multihop (direct)">
         <CONFIG operation="unset" pattern="^multihop"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh neighbor-set "${bfd_neighbor}" multihop off
@@ -377,9 +377,9 @@
     <HOTKEY key="^Z" cmd="exit"/>
 
     <COMMAND name="interval"
-        help="Interval kirim/terima BFD multihop (shorthand min rx + min tx)">
+        help="Multihop BFD send/receive interval (shorthand min rx + min tx)" help-id="Interval kirim/terima BFD multihop (shorthand min rx + min tx)">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, mis. 300)"
+            help="Interval in ms (1..60000, e.g. 300)" help-id="Interval dalam ms (1..60000, mis. 300)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -390,7 +390,7 @@
     <COMMAND name="min-rx"
         help="Minimum RX interval multihop">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, default BIRD 10)"
+            help="Interval in ms (1..60000, BIRD default 10)" help-id="Interval dalam ms (1..60000, default BIRD 10)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -399,9 +399,9 @@
     </COMMAND>
 
     <COMMAND name="min-tx"
-        help="Desired TX interval multihop saat sesi up">
+        help="Desired multihop TX interval when the session is up" help-id="Desired TX interval multihop saat sesi up">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, default BIRD 100)"
+            help="Interval in ms (1..60000, BIRD default 100)" help-id="Interval dalam ms (1..60000, default BIRD 100)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -410,9 +410,9 @@
     </COMMAND>
 
     <COMMAND name="idle-tx"
-        help="TX interval multihop saat sesi belum up">
+        help="Multihop TX interval when the session is not up yet" help-id="TX interval multihop saat sesi belum up">
         <PARAM name="Value"
-            help="Interval dalam ms (1..60000, default BIRD 1000)"
+            help="Interval in ms (1..60000, BIRD default 1000)" help-id="Interval dalam ms (1..60000, default BIRD 1000)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -421,9 +421,9 @@
     </COMMAND>
 
     <COMMAND name="multiplier"
-        help="Jumlah paket hilang sebelum sesi multihop dinyatakan down">
+        help="Number of lost packets before the multihop session is declared down" help-id="Jumlah paket hilang sebelum sesi multihop dinyatakan down">
         <PARAM name="Value"
-            help="Multiplier (1..255, default BIRD 5)"
+            help="Multiplier (1..255, BIRD default 5)" help-id="Multiplier (1..255, default BIRD 5)"
             ptype="UINT"/>
         <CONFIG/>
         <ACTION>
@@ -432,14 +432,14 @@
     </COMMAND>
 
     <COMMAND name="passive"
-        help="Mode pasif multihop: jangan kirim BFD sampai menerima dari peer">
+        help="Passive multihop mode: do not send BFD until receiving from the peer" help-id="Mode pasif multihop: jangan kirim BFD sampai menerima dari peer">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh multihop-set passive on
         </ACTION>
     </COMMAND>
     <COMMAND name="no passive"
-        help="Matikan mode pasif multihop">
+        help="Disable passive multihop mode" help-id="Matikan mode pasif multihop">
         <CONFIG operation="unset" pattern="^passive"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh multihop-set passive off
@@ -447,9 +447,9 @@
     </COMMAND>
 
     <COMMAND name="authentication"
-        help="Metode autentikasi paket BFD multihop (default none; algoritma berlaku untuk SEMUA password multihop)">
+        help="BFD packet authentication method for multihop (default none; algorithm applies to ALL multihop passwords)" help-id="Metode autentikasi paket BFD multihop (default none; algoritma berlaku untuk SEMUA password multihop)">
         <PARAM name="Value"
-            help="none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1"
+            help="none|simple|keyed-MD5|keyed-sha1|meticulous-keyed-MD5|meticulous-keyed-sha1" help-id="none|simple|keyed-md5|keyed-sha1|meticulous-keyed-md5|meticulous-keyed-sha1"
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -457,7 +457,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no authentication"
-        help="Hapus authentication multihop (kembali default none). Ditolak bila password masih ada — hapus dulu: no password &lt;TEXT&gt;">
+        help="Delete multihop authentication (back to default none). Rejected if a password still exists — delete it first: no password &lt;TEXT&gt;" help-id="Hapus authentication multihop (kembali default none). Ditolak bila password masih ada — hapus dulu: no password &lt;TEXT&gt;">
         <CONFIG operation="unset" pattern="^authentication"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh multihop-auth-del
@@ -465,13 +465,13 @@
     </COMMAND>
 
     <COMMAND name="password"
-        help="Kunci autentikasi BFD multihop (masuk ke password view: id + rotasi; butuh authentication sudah diset, bukan none)"
+        help="BFD multihop authentication key (enter the password view: id + rotation; authentication must already be set, not none)" help-id="Kunci autentikasi BFD multihop (masuk ke password view: id + rotasi; butuh authentication sudah diset, bukan none)"
         view="configure-bird-bfd-password-view"
         viewid="bfd_pw_ctx=multihop:${Text}"
         ptype="SUBCOMMAND"
         mode="subcommand">
         <PARAM name="Text"
-            help="Password (tanpa spasi, tanpa &quot;, tanpa backslash, tanpa titik-dua)"
+            help="Password (without space, without &quot;, without backslash, without colon)" help-id="Password (tanpa spasi, tanpa &quot;, tanpa backslash, tanpa titik-dua)"
             ptype="STRING"/>
         <CONFIG priority="0x1544" pattern="^${__line}$"/>
         <ACTION>
@@ -479,9 +479,9 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no password"
-        help="Hapus kunci multihop ini (+ semua sub-opsinya)">
+        help="Delete this multihop key (+ all sub-options)" help-id="Hapus kunci multihop ini (+ semua sub-opsinya)">
         <PARAM name="Text"
-            help="Password yang dihapus"
+            help="Deleted password" help-id="Password yang dihapus"
             ptype="STRING"/>
         <CONFIG operation="unset" pattern="^password ${Text}"/>
         <ACTION>
@@ -510,7 +510,7 @@
         help="Negate a command or set its defaults"/>
 
     <COMMAND name="id"
-        help="ID kunci (untuk rotasi)">
+        help="ID key (for rotation)" help-id="ID kunci (untuk rotasi)">
         <PARAM name="Value"
             help="ID (0..4294967295)"
             ptype="UINT"/>
@@ -520,7 +520,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no id"
-        help="Hapus id kunci ini">
+        help="Delete this ID key" help-id="Hapus id kunci ini">
         <CONFIG operation="unset" pattern="^id"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" id
@@ -528,7 +528,7 @@
     </COMMAND>
 
     <COMMAND name="generate-from"
-        help="Kunci mulai di-generate pada tanggal ini (TANGGAL saja YYYY-MM-DD — BIRD menolak tanggal+jam)">
+        help="Key generation starts on this date (date only YYYY-MM-DD — BIRD rejects date+time)" help-id="Kunci mulai di-generate pada tanggal ini (TANGGAL saja YYYY-MM-DD — BIRD menolak tanggal+jam)">
         <PARAM name="Value"
             help="YYYY-MM-DD"
             ptype="STRING"/>
@@ -538,7 +538,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no generate-from"
-        help="Hapus generate-from kunci ini">
+        help="Delete this generate-from key" help-id="Hapus generate-from kunci ini">
         <CONFIG operation="unset" pattern="^generate-from"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" generate-from
@@ -546,7 +546,7 @@
     </COMMAND>
 
     <COMMAND name="generate-to"
-        help="Kunci berhenti di-generate pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        help="Key generation stops on this date (date only YYYY-MM-DD)" help-id="Kunci berhenti di-generate pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
         <PARAM name="Value"
             help="YYYY-MM-DD"
             ptype="STRING"/>
@@ -556,7 +556,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no generate-to"
-        help="Hapus generate-to kunci ini">
+        help="Delete this generate-to key" help-id="Hapus generate-to kunci ini">
         <CONFIG operation="unset" pattern="^generate-to"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" generate-to
@@ -564,7 +564,7 @@
     </COMMAND>
 
     <COMMAND name="accept-from"
-        help="Kunci mulai diterima pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        help="Key acceptance starts on this date (date only YYYY-MM-DD)" help-id="Kunci mulai diterima pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
         <PARAM name="Value"
             help="YYYY-MM-DD"
             ptype="STRING"/>
@@ -574,7 +574,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no accept-from"
-        help="Hapus accept-from kunci ini">
+        help="Delete this accept-from key" help-id="Hapus accept-from kunci ini">
         <CONFIG operation="unset" pattern="^accept-from"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" accept-from
@@ -582,7 +582,7 @@
     </COMMAND>
 
     <COMMAND name="accept-to"
-        help="Kunci berhenti diterima pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        help="Key acceptance stops on this date (date only YYYY-MM-DD)" help-id="Kunci berhenti diterima pada tanggal ini (TANGGAL saja YYYY-MM-DD)">
         <PARAM name="Value"
             help="YYYY-MM-DD"
             ptype="STRING"/>
@@ -592,7 +592,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no accept-to"
-        help="Hapus accept-to kunci ini">
+        help="Delete this accept-to key" help-id="Hapus accept-to kunci ini">
         <CONFIG operation="unset" pattern="^accept-to"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" accept-to
@@ -600,7 +600,7 @@
     </COMMAND>
 
     <COMMAND name="from"
-        help="Kunci berlaku mulai tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        help="Key valid from this date (date only YYYY-MM-DD)" help-id="Kunci berlaku mulai tanggal ini (TANGGAL saja YYYY-MM-DD)">
         <PARAM name="Value"
             help="YYYY-MM-DD"
             ptype="STRING"/>
@@ -610,7 +610,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no from"
-        help="Hapus from kunci ini">
+        help="Delete this from key" help-id="Hapus from kunci ini">
         <CONFIG operation="unset" pattern="^from"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" from
@@ -618,7 +618,7 @@
     </COMMAND>
 
     <COMMAND name="to"
-        help="Kunci berlaku sampai tanggal ini (TANGGAL saja YYYY-MM-DD)">
+        help="Key valid until this date (date only YYYY-MM-DD)" help-id="Kunci berlaku sampai tanggal ini (TANGGAL saja YYYY-MM-DD)">
         <PARAM name="Value"
             help="YYYY-MM-DD"
             ptype="STRING"/>
@@ -628,7 +628,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no to"
-        help="Hapus to kunci ini">
+        help="Delete this to key" help-id="Hapus to kunci ini">
         <CONFIG operation="unset" pattern="^to"/>
         <ACTION>
             ${RT_SBIN}/titian-bfd.sh password-unset "${bfd_pw_ctx}" to
@@ -638,7 +638,7 @@
 
 <VIEW name="enable-view">
     <COMMAND name="show bfd"
-        help="Status BFD (intent + section + sesi BFD BIRD)"
+        help="BFD status (intent + section + BIRD BFD sessions)" help-id="Status BFD (intent + section + sesi BFD BIRD)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -646,7 +646,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show bfd sessions"
-        help="Sesi BFD yang jalan (birdc show bfd sessions)"
+        help="Running BFD session (birdc show BFD sessions)" help-id="Sesi BFD yang jalan (birdc show bfd sessions)"
         lock="false"
         interrupt="true">
         <ACTION>

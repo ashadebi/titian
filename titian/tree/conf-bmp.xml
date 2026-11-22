@@ -28,7 +28,7 @@
         help="false"
         completion="true"/>
     <COMMAND name="exit"
-        help="Back to bird mode"
+        help="Back to BIRD mode" help-id="Back to bird mode"
         lock="false">
         <ACTION builtin="clish_nested_up"/>
     </COMMAND>
@@ -44,9 +44,9 @@
         help="Show BMP state"/>
 
     <COMMAND name="station"
-        help="Monitoring station BMP (MANDATORY; IP + port, mis. 198.51.100.10 1790)">
+        help="Monitoring station BMP (MANDATORY; IP + port, e.g. 198.51.100.10 1790)" help-id="Monitoring station BMP (MANDATORY; IP + port, mis. 198.51.100.10 1790)">
         <PARAM name="IP"
-            help="Alamat IP station"
+            help="Station IP address" help-id="Alamat IP station"
             ptype="STRING"/>
         <PARAM name="Port"
             help="Port station 1..65535 (port BMP standar 1790)"
@@ -57,7 +57,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no station"
-        help="Hapus station (station MANDATORY — generate akan menolak)">
+        help="Delete station (station MANDATORY — generate will reject)" help-id="Hapus station (station MANDATORY — generate akan menolak)">
         <CONFIG operation="unset" pattern="^station"/>
         <ACTION>
             ${RT_SBIN}/titian-bmp.sh station-del
@@ -65,7 +65,7 @@
     </COMMAND>
 
     <COMMAND name="monitoring-rib-in"
-        help="Monitor route diterima: pre_policy (sebelum import filter) atau post_policy (lolos import filter)">
+        help="Monitor route accepted: pre_policy (before import filter) or post_policy (passed import filter)" help-id="Monitor route diterima: pre_policy (sebelum import filter) atau post_policy (lolos import filter)">
         <PARAM name="Value"
             help="pre_policy|post_policy"
             ptype="STRING"/>
@@ -75,7 +75,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no monitoring-rib-in"
-        help="Hapus satu monitoring-rib-in">
+        help="Delete one monitoring-rib-in" help-id="Hapus satu monitoring-rib-in">
         <PARAM name="Value"
             help="pre_policy|post_policy"
             ptype="STRING"/>
@@ -86,7 +86,7 @@
     </COMMAND>
 
     <COMMAND name="tx-buffer-limit"
-        help="Data di-queue sebelum sesi dianggap stuck dan di-restart, MB (default 1024)">
+        help="Data queued before a session is considered stuck and restarted, MB (default 1024)" help-id="Data di-queue sebelum sesi dianggap stuck dan di-restart, MB (default 1024)">
         <PARAM name="Value"
             help="MB 1..4294967295"
             ptype="UINT"/>
@@ -96,7 +96,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no tx-buffer-limit"
-        help="Hapus tx-buffer-limit (default BIRD 1024 MB)">
+        help="Delete tx-buffer-limit (BIRD default 1024 MB)" help-id="Hapus tx-buffer-limit (default BIRD 1024 MB)">
         <CONFIG operation="unset" pattern="^tx-buffer-limit"/>
         <ACTION>
             ${RT_SBIN}/titian-bmp.sh tx-buffer-limit-del
@@ -104,9 +104,9 @@
     </COMMAND>
 
     <COMMAND name="debug"
-        help="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
+        help="This Debug protocol (all, off, or states,routes,filters,interfaces,events,packets)" help-id="Debug protokol ini (all, off, atau states,routes,filters,interfaces,events,packets)">
         <PARAM name="Value"
-            help="all|off|kelas,kelas,..."
+            help="all|off|class,class,..." help-id="all|off|kelas,kelas,..."
             ptype="STRING"/>
         <CONFIG/>
         <ACTION>
@@ -114,7 +114,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no debug"
-        help="Matikan debug protokol ini (default BIRD off)">
+        help="Disable this debug protocol (BIRD default off)" help-id="Matikan debug protokol ini (default BIRD off)">
         <CONFIG operation="unset" pattern="^debug"/>
         <ACTION>
             ${RT_SBIN}/titian-bmp.sh debug-del
@@ -122,7 +122,7 @@
     </COMMAND>
 
     <COMMAND name="mrtdump"
-        help="MRTdump protokol ini (all, off, atau states,messages)">
+        help="This MRTdump protocol (all, off, or states,messages)" help-id="MRTdump protokol ini (all, off, atau states,messages)">
         <PARAM name="Value"
             help="all|off|states,messages"
             ptype="STRING"/>
@@ -132,7 +132,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="no mrtdump"
-        help="Matikan mrtdump protokol ini (default BIRD off)">
+        help="Disable this mrtdump protocol (BIRD default off)" help-id="Matikan mrtdump protokol ini (default BIRD off)">
         <CONFIG operation="unset" pattern="^mrtdump"/>
         <ACTION>
             ${RT_SBIN}/titian-bmp.sh mrtdump-del
@@ -140,7 +140,7 @@
     </COMMAND>
 
     <COMMAND name="show bmp"
-        help="Tampilkan intent + section + status birdc instance ini (via show protocols)">
+        help="Show the intent + section + birdc status of this instance (via show protocols)" help-id="Tampilkan intent + section + status birdc instance ini (via show protocols)">
         <CONFIG/>
         <ACTION>
             ${RT_SBIN}/titian-bmp.sh show

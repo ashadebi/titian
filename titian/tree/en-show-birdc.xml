@@ -22,7 +22,7 @@
 <VIEW name="enable-view">
     <!-- show status (BGP-130) -->
     <COMMAND name="show status"
-        help="Status BIRD: versi, uptime, waktu rekonfigurasi terakhir (birdc show status)"
+        help="BIRD status: version, uptime, time reconfiguration last (birdc show status)" help-id="Status BIRD: versi, uptime, waktu rekonfigurasi terakhir (birdc show status)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -32,11 +32,11 @@
 
     <!-- show protocols (BGP-131) — pengganti `show bgp` di BIRD -->
     <COMMAND name="show protocols"
-        help="Daftar instance protokol BIRD + status (birdc show protocols [nama])"
+        help="List of BIRD protocol instances + status (birdc show protocols [name])" help-id="Daftar instance protokol BIRD + status (birdc show protocols [nama])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama protokol (mis. bgp_10_99_40_2); kosong = semua"
+            help="Protocol name (e.g. bgp_10_99_40_2); empty = all" help-id="Nama protokol (mis. bgp_10_99_40_2); kosong = semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -44,11 +44,11 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show protocols all"
-        help="Daftar instance protokol BIRD, verbose (birdc show protocols all [nama])"
+        help="List of BIRD protocol instances, verbose (birdc show protocols all [name])" help-id="Daftar instance protokol BIRD, verbose (birdc show protocols all [nama])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama protokol; kosong = semua"
+            help="Protocol name; empty = all" help-id="Nama protokol; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -58,7 +58,7 @@
 
     <!-- show bgp summary (BGP-146: N/A sebagai perintah birdc — komposisi klish) -->
     <COMMAND name="show bgp summary"
-        help="Ringkasan BGP ala vendor (KOMPOSISI klish: show protocols all + show route count per neighbor; BIRD tidak punya perintah ini)"
+        help="Vendor-style BGP summary (klish COMPOSITION: show protocols all + show route count per neighbor; BIRD has no such command)" help-id="Ringkasan BGP ala vendor (KOMPOSISI klish: show protocols all + show route count per neighbor; BIRD tidak punya perintah ini)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -68,7 +68,7 @@
 
     <!-- show symbols (BGP-134) -->
     <COMMAND name="show symbols"
-        help="Simbol yang didefinisikan di konfigurasi BIRD (birdc show symbols [kind])"
+        help="Symbol defined in configuration BIRD (birdc show symbols [kind])" help-id="Simbol yang didefinisikan di konfigurasi BIRD (birdc show symbols [kind])"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -76,7 +76,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols table"
-        help="Simbol tabel routing (birdc show symbols table)"
+        help="Routing table symbol (birdc show symbols table)" help-id="Simbol tabel routing (birdc show symbols table)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -84,7 +84,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols filter"
-        help="Simbol filter (birdc show symbols filter)"
+        help="Filter symbol (birdc show symbols filter)" help-id="Simbol filter (birdc show symbols filter)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -92,7 +92,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols function"
-        help="Simbol fungsi (birdc show symbols function)"
+        help="Function symbol (birdc show symbols function)" help-id="Simbol fungsi (birdc show symbols function)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -100,7 +100,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols protocol"
-        help="Simbol protokol (birdc show symbols protocol)"
+        help="Protocol symbols (birdc show symbols protocol)" help-id="Simbol protokol (birdc show symbols protocol)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -108,7 +108,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols template"
-        help="Simbol template (birdc show symbols template)"
+        help="Template symbol (birdc show symbols template)" help-id="Simbol template (birdc show symbols template)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -116,7 +116,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols roa"
-        help="Simbol ROA (birdc show symbols roa)"
+        help="ROA symbol (birdc show symbols roa)" help-id="Simbol ROA (birdc show symbols roa)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -124,7 +124,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show symbols symbol"
-        help="Satu simbol (birdc show symbols symbol)"
+        help="One symbol (birdc show symbols symbol)" help-id="Satu simbol (birdc show symbols symbol)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -134,7 +134,7 @@
 
     <!-- show interfaces (birdc) — BC9. BUKAN `show interfaces` OS. -->
     <COMMAND name="show interfaces bird"
-        help="Interface yang dilihat BIRD (birdc show interfaces) — bedakan dari `show interfaces` OS"
+        help="Interfaces seen by BIRD (birdc show interfaces) — distinct from the OS `show interfaces`" help-id="Interface yang dilihat BIRD (birdc show interfaces) — bedakan dari `show interfaces` OS"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -142,7 +142,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show interfaces bird summary"
-        help="Interface yang dilihat BIRD, ringkas (birdc show interfaces summary)"
+        help="Interfaces seen by BIRD, summary (birdc show interfaces summary)" help-id="Interface yang dilihat BIRD, ringkas (birdc show interfaces summary)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -152,23 +152,35 @@
 
     <!-- show route penuh (BGP-132) -->
     <COMMAND name="show route"
-        help="Isi tabel routing BIRD (birdc show route)"
+        help="BIRD routing table contents (birdc show route)" help-id="Isi tabel routing BIRD (birdc show route)"
         lock="false"
         interrupt="true">
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route
+            ${RT_SBIN}/titian-birdc.sh show-route | sh ${RT_SBIN}/titian-pager.sh --stream
+        </ACTION>
+    </COMMAND>
+    <!-- show route help: daftar sub-perintah show route (dipager).
+         `?` (help inline) dirender klish sendiri dan TIDAK BISA dipager
+         (tanpa hook di klish 2.2.5); perintah ini alternatif yang dipager,
+         isinya sama dengan `show route ?` (dibaca dari XML ini saat runtime). -->
+    <COMMAND name="show route help"
+        help="Subcommand show route list (paged)" help-id="Daftar sub-perintah show route (dipager)"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-show-route-help.sh
         </ACTION>
     </COMMAND>
     <COMMAND name="show route all"
-        help="Route + semua atribut (birdc show route all)"
+        help="Routes + all attributes (birdc show route all)" help-id="Route + semua atribut (birdc show route all)"
         lock="false"
         interrupt="true">
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-all
+            ${RT_SBIN}/titian-birdc.sh show-route-all | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route count"
-        help="Hanya statistik route (birdc show route count)"
+        help="Only statistics route (birdc show route count)" help-id="Hanya statistik route (birdc show route count)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -176,7 +188,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show route stats"
-        help="Statistik route (birdc show route stats)"
+        help="Route statistics (birdc show route stats)" help-id="Statistik route (birdc show route stats)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -184,111 +196,111 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show route for"
-        help="Route yang dipakai forwarding ke destinasi ini (birdc show route for &lt;prefix&gt;)"
+        help="Routes used for forwarding to this destination (birdc show route for &lt;prefix&gt;)" help-id="Route yang dipakai forwarding ke destinasi ini (birdc show route for &lt;prefix&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="prefix"
-            help="IP atau prefix tujuan"
+            help="Destination IP or prefix" help-id="IP atau prefix tujuan"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-for "${prefix}"
+            ${RT_SBIN}/titian-birdc.sh show-route-for "${prefix}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route in"
-        help="Semua prefix yang tercakup prefix ini (birdc show route in &lt;prefix&gt;)"
+        help="All this prefixes that covered prefix (birdc show route in &lt;prefix&gt;)" help-id="Semua prefix yang tercakup prefix ini (birdc show route in &lt;prefix&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="prefix"
             help="Prefix"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-in "${prefix}"
+            ${RT_SBIN}/titian-birdc.sh show-route-in "${prefix}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route table"
-        help="Route dari satu tabel (birdc show route table &lt;nama|all&gt;)"
+        help="Route from one table (birdc show route table &lt;name|all&gt;)" help-id="Route dari satu tabel (birdc show route table &lt;nama|all&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama tabel (atau all)"
+            help="Table name (or all)" help-id="Nama tabel (atau all)"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-table "${name}"
+            ${RT_SBIN}/titian-birdc.sh show-route-table "${name}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route table all"
-        help="Route dari semua tabel (birdc show route table all)"
+        help="Route from all tables (birdc show route table all)" help-id="Route dari semua tabel (birdc show route table all)"
         lock="false"
         interrupt="true">
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-table all
+            ${RT_SBIN}/titian-birdc.sh show-route-table all | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route protocol"
-        help="Hanya route dari satu protokol (birdc show route protocol &lt;nama&gt;)"
+        help="Only route from one protocol (birdc show route protocol &lt;name&gt;)" help-id="Hanya route dari satu protokol (birdc show route protocol &lt;nama&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama protokol (mis. bgp_10_99_40_2)"
+            help="Protocol name (e.g. bgp_10_99_40_2)" help-id="Nama protokol (mis. bgp_10_99_40_2)"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-protocol "${name}"
+            ${RT_SBIN}/titian-birdc.sh show-route-protocol "${name}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route export"
-        help="Route yang di-export ke protokol ini (birdc show route export &lt;nama&gt;)"
+        help="Route exported to this protocol (birdc show route export &lt;name&gt;)" help-id="Route yang di-export ke protokol ini (birdc show route export &lt;nama&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama protokol"
+            help="Protocol name" help-id="Nama protokol"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-export "${name}"
+            ${RT_SBIN}/titian-birdc.sh show-route-export "${name}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route preexport"
-        help="Route export tanpa export filter (birdc show route preexport &lt;nama&gt;)"
+        help="Exported routes without an export filter (birdc show route preexport &lt;name&gt;)" help-id="Route export tanpa export filter (birdc show route preexport &lt;nama&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama protokol"
+            help="Protocol name" help-id="Nama protokol"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-preexport "${name}"
+            ${RT_SBIN}/titian-birdc.sh show-route-preexport "${name}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route noexport"
-        help="Route yang ditolak export filter (birdc show route noexport &lt;nama&gt;)"
+        help="Routes rejected by the export filter (birdc show route noexport &lt;name&gt;)" help-id="Route yang ditolak export filter (birdc show route noexport &lt;nama&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama protokol"
+            help="Protocol name" help-id="Nama protokol"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-noexport "${name}"
+            ${RT_SBIN}/titian-birdc.sh show-route-noexport "${name}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route where"
-        help="Route cocok kondisi filter, pakai kutip: show route where &quot;net ~ [ 10.0.0.0/8+ ]&quot; (birdc show route where &lt;kondisi&gt;)"
+        help="Routes matching a filter condition, use quotes: show route where &quot;net ~ [ 10.0.0.0/8+ ]&quot; (birdc show route where &lt;condition&gt;)" help-id="Route cocok kondisi filter, pakai kutip: show route where &quot;net ~ [ 10.0.0.0/8+ ]&quot; (birdc show route where &lt;kondisi&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="cond"
-            help="Kondisi filter (kutip bila mengandung spasi)"
+            help="Filter condition (quote if contains space)" help-id="Kondisi filter (kutip bila mengandung spasi)"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-where "${cond}"
+            ${RT_SBIN}/titian-birdc.sh show-route-where "${cond}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
 
     <COMMAND name="show route filter"
-        help="Uji filter inline terhadap tabel route (birdc show route filter { if ... then accept; }); bentuk bernama TIDAK didukung BIRD 2.20 — hanya inline"
+        help="Test an inline filter against the route table (birdc show route filter { if ... then accept; }); named forms are NOT supported by BIRD 2.20 — inline only" help-id="Uji filter inline terhadap tabel route (birdc show route filter { if ... then accept; }); bentuk bernama TIDAK didukung BIRD 2.20 — hanya inline"
         lock="false"
         interrupt="true">
         <PARAM name="cond"
-            help="Kondisi COND satu token (mis. net~10.0.0.0/8 atau roa:R4,net,bgp_path.last=ROA_VALID)"
+            help="COND condition (one token) (e.g. net~10.0.0.0/8 or roa:R4,net,bgp_path.last=ROA_VALID)" help-id="Kondisi COND satu token (mis. net~10.0.0.0/8 atau roa:R4,net,bgp_path.last=ROA_VALID)"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-filter "${cond}"
+            ${RT_SBIN}/titian-birdc.sh show-route-filter "${cond}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
 
@@ -297,17 +309,17 @@
          (pola sama seperti `mrt`/`mrt dump` di bawah); birdc tidak punya
          perintah `show route import` tanpa `table`. -->
     <COMMAND name="show route import"
-        help="Import table channel (birdc show route import table &lt;protokol.channel&gt;)"/>
+        help="Import table channel (birdc show route import table &lt;protocol.channel&gt;)" help-id="Import table channel (birdc show route import table &lt;protokol.channel&gt;)"/>
     <COMMAND name="show route primary"
-        help="Hanya route primary (aktif) di tabel (birdc show route primary)"
+        help="Only primary (active) routes in the table (birdc show route primary)" help-id="Hanya route primary (aktif) di tabel (birdc show route primary)"
         lock="false"
         interrupt="true">
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-primary
+            ${RT_SBIN}/titian-birdc.sh show-route-primary | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route primary count"
-        help="Statistik route primary (birdc show route primary count)"
+        help="Primary route statistics (birdc show route primary count)" help-id="Statistik route primary (birdc show route primary count)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -315,15 +327,15 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show route filtered"
-        help="Route yang tertahan filter (tidak primary) di tabel (birdc show route filtered)"
+        help="Routes held by the filter (not primary) in the table (birdc show route filtered)" help-id="Route yang tertahan filter (tidak primary) di tabel (birdc show route filtered)"
         lock="false"
         interrupt="true">
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-filtered
+            ${RT_SBIN}/titian-birdc.sh show-route-filtered | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route filtered count"
-        help="Statistik route tertahan filter (birdc show route filtered count)"
+        help="Route statistics held back by the filter (birdc show route filtered count)" help-id="Statistik route tertahan filter (birdc show route filtered count)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -331,39 +343,39 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show route import table"
-        help="Isi import table satu channel (birdc show route import table &lt;protokol.channel&gt;); channel tanpa import table menjawab kosong"
+        help="Contents of one channel's import table (birdc show route import table &lt;protocol.channel&gt;); a channel without an import table answers empty" help-id="Isi import table satu channel (birdc show route import table &lt;protokol.channel&gt;); channel tanpa import table menjawab kosong"
         lock="false"
         interrupt="true">
         <PARAM name="proto_channel"
-            help="Protokol.channel BIRD (mis. bgp_10_99_40_2.ipv4)"
+            help="BIRD protocol.channel (e.g. bgp_10_99_40_2.ipv4)" help-id="Protokol.channel BIRD (mis. bgp_10_99_40_2.ipv4)"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-import-table "${proto_channel}"
+            ${RT_SBIN}/titian-birdc.sh show-route-import-table "${proto_channel}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
     <COMMAND name="show route export table"
-        help="Isi export table satu channel (birdc show route export table &lt;protokol.channel&gt;); channel tanpa export table menjawab kosong"
+        help="Contents of one channel's export table (birdc show route export table &lt;protocol.channel&gt;); a channel without an export table answers empty" help-id="Isi export table satu channel (birdc show route export table &lt;protokol.channel&gt;); channel tanpa export table menjawab kosong"
         lock="false"
         interrupt="true">
         <PARAM name="proto_channel"
-            help="Protokol.channel BIRD (mis. bgp_10_99_40_2.ipv4)"
+            help="BIRD protocol.channel (e.g. bgp_10_99_40_2.ipv4)" help-id="Protokol.channel BIRD (mis. bgp_10_99_40_2.ipv4)"
             ptype="STRING"/>
         <ACTION>
-            ${RT_SBIN}/titian-birdc.sh show-route-export-table "${proto_channel}"
+            ${RT_SBIN}/titian-birdc.sh show-route-export-table "${proto_channel}" | sh ${RT_SBIN}/titian-pager.sh --stream
         </ACTION>
     </COMMAND>
 
     <!-- show ospf detail (BC10-BC14; show ospf + show ospf neighbor sudah ada) -->
     <COMMAND name="show ospf interface"
-        help="Info detail interface OSPF (birdc show ospf interface [nama] [interface])"
+        help="Info detail interface OSPF (birdc show OSPF interface [name] [interface])" help-id="Info detail interface OSPF (birdc show ospf interface [nama] [interface])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama instance OSPF; kosong = semua"
+            help="OSPF instance name; empty = all" help-id="Nama instance OSPF; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <PARAM name="iface"
-            help="Nama interface; kosong = semua"
+            help="Interface name; empty = all" help-id="Nama interface; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -371,15 +383,15 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ospf neighbors"
-        help="Tetangga OSPF + state adjacency (birdc show ospf neighbors [nama] [interface])"
+        help="OSPF neighbors + adjacency state (birdc show ospf neighbors [name] [interface])" help-id="Tetangga OSPF + state adjacency (birdc show ospf neighbors [nama] [interface])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama instance OSPF; kosong = semua"
+            help="OSPF instance name; empty = all" help-id="Nama instance OSPF; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <PARAM name="iface"
-            help="Nama interface; kosong = semua"
+            help="Interface name; empty = all" help-id="Nama interface; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -387,11 +399,11 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ospf state"
-        help="Info area OSPF dari LSDB (birdc show ospf state [all|nama])"
+        help="OSPF area info from LSDB (birdc show OSPF state [all|name])" help-id="Info area OSPF dari LSDB (birdc show ospf state [all|nama])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="all atau nama instance; kosong = ringkas semua"
+            help="all or instance name; empty = summary of all" help-id="all atau nama instance; kosong = ringkas semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -399,7 +411,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ospf state all"
-        help="Info semua node di LSDB OSPF (birdc show ospf state all)"
+        help="Info on all nodes in the OSPF LSDB (birdc show ospf state all)" help-id="Info semua node di LSDB OSPF (birdc show ospf state all)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -407,11 +419,11 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ospf topology"
-        help="Topologi area OSPF dari LSDB, ringkas (birdc show ospf topology [all|nama])"
+        help="OSPF area topology from LSDB, summary (birdc show OSPF topology [all|name])" help-id="Topologi area OSPF dari LSDB, ringkas (birdc show ospf topology [all|nama])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="all atau nama instance; kosong = ringkas semua"
+            help="all or instance name; empty = summary of all" help-id="all atau nama instance; kosong = ringkas semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -419,7 +431,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ospf topology all"
-        help="Topologi semua node di LSDB OSPF (birdc show ospf topology all)"
+        help="Topology of all nodes in the OSPF LSDB (birdc show ospf topology all)" help-id="Topologi semua node di LSDB OSPF (birdc show ospf topology all)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -427,7 +439,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show ospf lsadb"
-        help="Isi OSPF LSA database (birdc show ospf lsadb; filter area/type/lsid belum diekspos)"
+        help="OSPF LSA database contents (birdc show OSPF lsadb; filter area/type/lsid not yet exposed)" help-id="Isi OSPF LSA database (birdc show ospf lsadb; filter area/type/lsid belum diekspos)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -437,15 +449,15 @@
 
     <!-- show rip detail (BC15-BC16; show rip sudah ada) -->
     <COMMAND name="show rip interfaces"
-        help="Info detail interface RIP (birdc show rip interfaces [nama] [interface])"
+        help="Info detail interface RIP (birdc show RIP interfaces [name] [interface])" help-id="Info detail interface RIP (birdc show rip interfaces [nama] [interface])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama instance RIP; kosong = semua"
+            help="RIP instance name; empty = all" help-id="Nama instance RIP; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <PARAM name="iface"
-            help="Nama interface; kosong = semua"
+            help="Interface name; empty = all" help-id="Nama interface; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -453,15 +465,15 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="show rip neighbors"
-        help="Tetangga RIP + state (birdc show rip neighbors [nama] [interface])"
+        help="RIP neighbors + state (birdc show rip neighbors [name] [interface])" help-id="Tetangga RIP + state (birdc show rip neighbors [nama] [interface])"
         lock="false"
         interrupt="true">
         <PARAM name="name"
-            help="Nama instance RIP; kosong = semua"
+            help="RIP instance name; empty = all" help-id="Nama instance RIP; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <PARAM name="iface"
-            help="Nama interface; kosong = semua"
+            help="Interface name; empty = all" help-id="Nama interface; kosong = semua"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -473,7 +485,7 @@
     <!-- Nama klish `configure reload`: bare `configure` sudah dipakai
          mode-entry (enable-mode.xml) — tidak bisa duplikat di view ini. -->
     <COMMAND name="configure reload"
-        help="Muat ulang bird.conf ke daemon yang sedang jalan (birdc configure; setara SIGHUP)"
+        help="Reload BIRD.conf to daemon that running (birdc configure; equivalent to SIGHUP)" help-id="Muat ulang bird.conf ke daemon yang sedang jalan (birdc configure; setara SIGHUP)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -481,7 +493,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure check"
-        help="Cek validitas bird.conf tanpa apply (birdc configure check)"
+        help="Check validity BIRD.conf without apply (birdc configure check)" help-id="Cek validitas bird.conf tanpa apply (birdc configure check)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -489,7 +501,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure confirm"
-        help="Konfirmasi konfigurasi berjalan, matikan timer undo (birdc configure confirm)"
+        help="Confirm configuration running, disable timer undo (birdc configure confirm)" help-id="Konfirmasi konfigurasi berjalan, matikan timer undo (birdc configure confirm)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -497,7 +509,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure undo"
-        help="Kembali ke konfigurasi sebelumnya, satu level (birdc configure undo)"
+        help="Back to configuration previous, one level (birdc configure undo)" help-id="Kembali ke konfigurasi sebelumnya, satu level (birdc configure undo)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -508,7 +520,7 @@
          7 bentuk; `configure` polos = `configure reload` (di atas).
          timeout tanpa angka = default BIRD (300 dtk). -->
     <COMMAND name="configure soft"
-        help="Muat ulang konfigurasi tanpa restart protokol (birdc configure soft)"
+        help="Reload configuration without restart protocol (birdc configure soft)" help-id="Muat ulang konfigurasi tanpa restart protokol (birdc configure soft)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -516,11 +528,11 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure timeout"
-        help="Muat ulang konfigurasi dengan timer undo (birdc configure timeout [detik]; tanpa angka = 300 dtk; konfirmasi: configure confirm)"
+        help="Reload configuration with timer undo (birdc configure timeout [seconds]; without a number = 300 sec; confirm: configure confirm)" help-id="Muat ulang konfigurasi dengan timer undo (birdc configure timeout [detik]; tanpa angka = 300 dtk; konfirmasi: configure confirm)"
         lock="false"
         interrupt="true">
         <PARAM name="num"
-            help="Timeout detik; kosong = default BIRD (300)"
+            help="Timeout in seconds; empty = BIRD default (300)" help-id="Timeout detik; kosong = default BIRD (300)"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -528,22 +540,22 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure file"
-        help="Muat konfigurasi dari file lain (birdc configure &quot;&lt;file&gt;&quot;; file harus ada + bisa dibaca)"
+        help="Load configuration from file another (birdc configure &quot;&lt;file&gt;&quot;; file must be present + can read)" help-id="Muat konfigurasi dari file lain (birdc configure &quot;&lt;file&gt;&quot;; file harus ada + bisa dibaca)"
         lock="false"
         interrupt="true">
         <PARAM name="path"
-            help="Path file konfigurasi absolut"
+            help="Absolute configuration file path" help-id="Path file konfigurasi absolut"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh configure-adv file "${path}"
         </ACTION>
     </COMMAND>
     <COMMAND name="configure soft timeout"
-        help="Muat ulang tanpa restart protokol + timer undo (birdc configure soft timeout [detik])"
+        help="Reload without restart protocol + timer undo (birdc configure soft timeout [seconds])" help-id="Muat ulang tanpa restart protokol + timer undo (birdc configure soft timeout [detik])"
         lock="false"
         interrupt="true">
         <PARAM name="num"
-            help="Timeout detik; kosong = default BIRD (300)"
+            help="Timeout in seconds; empty = BIRD default (300)" help-id="Timeout detik; kosong = default BIRD (300)"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -551,25 +563,25 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure soft file"
-        help="Muat konfigurasi dari file lain tanpa restart protokol (birdc configure soft &quot;&lt;file&gt;&quot;)"
+        help="Load configuration from file another without restart protocol (birdc configure soft &quot;&lt;file&gt;&quot;)" help-id="Muat konfigurasi dari file lain tanpa restart protokol (birdc configure soft &quot;&lt;file&gt;&quot;)"
         lock="false"
         interrupt="true">
         <PARAM name="path"
-            help="Path file konfigurasi absolut"
+            help="Absolute configuration file path" help-id="Path file konfigurasi absolut"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh configure-adv soft file "${path}"
         </ACTION>
     </COMMAND>
     <COMMAND name="configure file timeout"
-        help="Muat konfigurasi dari file lain + timer undo (birdc configure &quot;&lt;file&gt;&quot; timeout [detik])"
+        help="Load configuration from file another + timer undo (birdc configure &quot;&lt;file&gt;&quot; timeout [seconds])" help-id="Muat konfigurasi dari file lain + timer undo (birdc configure &quot;&lt;file&gt;&quot; timeout [detik])"
         lock="false"
         interrupt="true">
         <PARAM name="path"
-            help="Path file konfigurasi absolut"
+            help="Absolute configuration file path" help-id="Path file konfigurasi absolut"
             ptype="STRING"/>
         <PARAM name="num"
-            help="Timeout detik; kosong = default BIRD (300)"
+            help="Timeout in seconds; empty = BIRD default (300)" help-id="Timeout detik; kosong = default BIRD (300)"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -577,14 +589,14 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="configure soft file timeout"
-        help="Muat konfigurasi dari file lain tanpa restart protokol + timer undo (birdc configure soft &quot;&lt;file&gt;&quot; timeout [detik])"
+        help="Load configuration from file another without restart protocol + timer undo (birdc configure soft &quot;&lt;file&gt;&quot; timeout [seconds])" help-id="Muat konfigurasi dari file lain tanpa restart protokol + timer undo (birdc configure soft &quot;&lt;file&gt;&quot; timeout [detik])"
         lock="false"
         interrupt="true">
         <PARAM name="path"
-            help="Path file konfigurasi absolut"
+            help="Absolute configuration file path" help-id="Path file konfigurasi absolut"
             ptype="STRING"/>
         <PARAM name="num"
-            help="Timeout detik; kosong = default BIRD (300)"
+            help="Timeout in seconds; empty = BIRD default (300)" help-id="Timeout detik; kosong = default BIRD (300)"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -594,21 +606,21 @@
 
     <!-- debug (BGP-140) -->
     <COMMAND name="debug"
-        help="Kontrol debugging protokol: debug &lt;protokol|pola|all&gt; all|off|states,routes,filters,interfaces,events,packets"
+        help="Control debugging protocol: debug &lt;protocol|pattern|all&gt; all|off|states,routes,filters,interfaces,events,packets" help-id="Kontrol debugging protokol: debug &lt;protokol|pola|all&gt; all|off|states,routes,filters,interfaces,events,packets"
         lock="false"
         interrupt="true">
         <PARAM name="proto"
-            help="Nama protokol, pola (* diizinkan), atau all"
+            help="Name protocol, pattern (* allowed), or all" help-id="Nama protokol, pola (* diizinkan), atau all"
             ptype="STRING"/>
         <PARAM name="spec"
-            help="all | off | daftar kelas koma (states,routes,filters,interfaces,events,packets)"
+            help="all | off | comma-separated class list (states,routes,filters,interfaces,events,packets)" help-id="all | off | daftar kelas koma (states,routes,filters,interfaces,events,packets)"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh debug "${proto}" "${spec}"
         </ACTION>
     </COMMAND>
     <COMMAND name="debug all"
-        help="Nyalakan semua debugging semua protokol (birdc debug all all)"
+        help="Enable all debugging all protocols (birdc debug all all)" help-id="Nyalakan semua debugging semua protokol (birdc debug all all)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -616,7 +628,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="debug off"
-        help="Matikan semua debugging semua protokol (birdc debug all off)"
+        help="Disable all debugging all protocols (birdc debug all off)" help-id="Matikan semua debugging semua protokol (birdc debug all off)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -626,7 +638,7 @@
 
     <!-- down / graceful restart (BGP-141) — IREVERSIBEL, dua langkah -->
     <COMMAND name="down"
-        help="Matikan daemon BIRD — perintah ini HANYA menampilkan konfirmasi; eksekusi: down confirm"
+        help="Stop the BIRD daemon — this command ONLY shows a confirmation; execution: down confirm" help-id="Matikan daemon BIRD — perintah ini HANYA menampilkan konfirmasi; eksekusi: down confirm"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -634,7 +646,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="down confirm"
-        help="EKSEKUSI: matikan daemon BIRD (birdc down)"
+        help="EXECUTE: stop the BIRD daemon (birdc down)" help-id="EKSEKUSI: matikan daemon BIRD (birdc down)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -642,7 +654,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="graceful-restart"
-        help="Matikan daemon BIRD untuk graceful restart — perintah ini HANYA menampilkan konfirmasi; eksekusi: graceful-restart confirm"
+        help="Stop the BIRD daemon for graceful restart — this command ONLY shows a confirmation; execution: graceful-restart confirm" help-id="Matikan daemon BIRD untuk graceful restart — perintah ini HANYA menampilkan konfirmasi; eksekusi: graceful-restart confirm"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -650,7 +662,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="graceful-restart confirm"
-        help="EKSEKUSI: matikan daemon BIRD untuk graceful restart (birdc graceful restart)"
+        help="EXECUTE: stop the BIRD daemon for graceful restart (birdc graceful restart)" help-id="EKSEKUSI: matikan daemon BIRD untuk graceful restart (birdc graceful restart)"
         lock="false"
         interrupt="true">
         <ACTION>
@@ -660,11 +672,11 @@
 
     <!-- eval (BGP-142) -->
     <COMMAND name="eval"
-        help="Evaluasi ekspresi filter BIRD, pakai kutip: eval &quot;1+2&quot; (birdc eval &lt;expr&gt;)"
+        help="Evaluate a BIRD filter expression, using quotes: eval &quot;1+2&quot; (birdc eval &lt;expr&gt;)" help-id="Evaluasi ekspresi filter BIRD, pakai kutip: eval &quot;1+2&quot; (birdc eval &lt;expr&gt;)"
         lock="false"
         interrupt="true">
         <PARAM name="expr"
-            help="Ekspresi filter (kutip bila mengandung spasi)"
+            help="Filter expression (quote if contains space)" help-id="Ekspresi filter (kutip bila mengandung spasi)"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh eval "${expr}"
@@ -673,11 +685,11 @@
 
     <!-- echo (BGP-144) -->
     <COMMAND name="echo"
-        help="Kontrol echo log ke output CLI: echo all|off|info,warning,error,fatal,debug,trace,remote,auth,bug"
+        help="Control echo log to output CLI: echo all|off|info,warning,error,fatal,debug,trace,remote,auth,bug" help-id="Kontrol echo log ke output CLI: echo all|off|info,warning,error,fatal,debug,trace,remote,auth,bug"
         lock="false"
         interrupt="true">
         <PARAM name="spec"
-            help="all | off | daftar kelas log koma"
+            help="all | off | comma-separated log class list" help-id="all | off | daftar kelas log koma"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh echo "${spec}"
@@ -686,11 +698,11 @@
 
     <!-- dump (BGP-143) -->
     <COMMAND name="dump"
-        help="Dump struktur data internal BIRD ke file (file belum boleh ada; hanya readable user daemon)"
+        help="Dump BIRD's internal data structures to a file (file must not exist yet; only readable by the daemon user)" help-id="Dump struktur data internal BIRD ke file (file belum boleh ada; hanya readable user daemon)"
         lock="false"
         interrupt="true">
         <PARAM name="kind"
-            help="Jenis dump"
+            help="Dump type" help-id="Jenis dump"
             ptype="SUBCOMMAND"
             mode="switch">
             <PARAM name="resources"
@@ -723,7 +735,7 @@
                 ptype="SUBCOMMAND"/>
         </PARAM>
         <PARAM name="file"
-            help="Path file absolut (belum boleh ada)"
+            help="Path file absolute (must not exist yet)" help-id="Path file absolut (belum boleh ada)"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh dump "${kind}" "${file}"
@@ -732,18 +744,18 @@
 
     <!-- mrt dump table (BGP-145) -->
     <COMMAND name="mrt"
-        help="Perintah MRT on-demand (birdc mrt dump table)"/>
+        help="MRT on-demand command (birdc mrt dump table)" help-id="Perintah MRT on-demand (birdc mrt dump table)"/>
     <COMMAND name="mrt dump"
-        help="Dump MRT on-demand"/>
+        help="MRT dump on-demand" help-id="Dump MRT on-demand"/>
     <COMMAND name="mrt dump table"
-        help="Dump isi tabel routing ke file MRT (birdc mrt dump table &lt;tabel&gt; to &lt;file&gt;; filter/where belum diekspos)"
+        help="Dump contents routing table to file MRT (birdc MRT dump table &lt;table&gt; to &lt;file&gt;; filter/where not yet exposed)" help-id="Dump isi tabel routing ke file MRT (birdc mrt dump table &lt;tabel&gt; to &lt;file&gt;; filter/where belum diekspos)"
         lock="false"
         interrupt="true">
         <PARAM name="table"
-            help="Nama tabel atau pola"
+            help="Name table or pattern" help-id="Nama tabel atau pola"
             ptype="STRING"/>
         <PARAM name="file"
-            help="Path file absolut (belum boleh ada)"
+            help="Path file absolute (must not exist yet)" help-id="Path file absolut (belum boleh ada)"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh mrt-dump-table "${table}" "${file}"
@@ -752,19 +764,19 @@
 
     <!-- timeformat sesi CLI (BC18) — bedakan dari `timeformat` konfigurasi global (B6) -->
     <COMMAND name="timeformat"
-        help="Override format tanggal/waktu sesi birdc ini saja (birdc timeformat &lt;format&gt; [limit &lt;format2&gt;]); format konfigurasi ada di bird global"
+        help="Override the date/time format of this birdc session only (birdc timeformat &lt;format&gt; [limit &lt;format2&gt;]); the configuration format is in bird global" help-id="Override format tanggal/waktu sesi birdc ini saja (birdc timeformat &lt;format&gt; [limit &lt;format2&gt;]); format konfigurasi ada di bird global"
         lock="false"
         interrupt="true">
         <PARAM name="fmt"
-            help="Format: iso long|iso long ms|iso long us|iso short|iso short ms|iso short us, atau strftime mengandung % (kutip bila mengandung spasi)"
+            help="Format: iso long|iso long ms|iso long us|iso short|iso short ms|iso short us, or strftime contains % (quote if contains space)" help-id="Format: iso long|iso long ms|iso long us|iso short|iso short ms|iso short us, atau strftime mengandung % (kutip bila mengandung spasi)"
             ptype="STRING"/>
         <PARAM name="limit"
-            help="Batas format kedua"
+            help="Second format limit" help-id="Batas format kedua"
             optional="true"
             mode="subcommand"
             ptype="SUBCOMMAND">
             <PARAM name="fmt2"
-                help="Format kedua"
+                help="Second format" help-id="Format kedua"
                 ptype="STRING"/>
         </PARAM>
         <ACTION>
@@ -778,22 +790,22 @@
          `graceful restart` DIBLOK di backend (pakai gerbang konfirmasi
          dua langkah di atas). -->
     <COMMAND name="birdc"
-        help="Perintah birdc mentah (kutip seluruhnya, mis. birdc &quot;show status&quot;); down/graceful restart diblok — pakai gerbang konfirmasi"
+        help="Raw birdc command (quote it entirely, e.g. birdc &quot;show status&quot;); down/graceful restart are blocked — use the confirmation gateway" help-id="Perintah birdc mentah (kutip seluruhnya, mis. birdc &quot;show status&quot;); down/graceful restart diblok — pakai gerbang konfirmasi"
         lock="false"
         interrupt="true">
         <PARAM name="cmd"
-            help="Perintah BIRD (kutip bila mengandung spasi)"
+            help="BIRD command (quote if contains space)" help-id="Perintah BIRD (kutip bila mengandung spasi)"
             ptype="STRING"/>
         <ACTION>
             ${RT_SBIN}/titian-birdc.sh birdc-passthrough "${cmd}"
         </ACTION>
     </COMMAND>
     <COMMAND name="birdc socket"
-        help="Tampilkan/set socket kontrol birdc yang dipakai klish (default: bird.ctl); set wajib socket sudah ada + menjawab birdc"
+        help="Show/set the birdc control socket used by klish (default: bird.ctl); set requires the socket to already exist + answer birdc" help-id="Tampilkan/set socket kontrol birdc yang dipakai klish (default: bird.ctl); set wajib socket sudah ada + menjawab birdc"
         lock="false"
         interrupt="true">
         <PARAM name="path"
-            help="Path socket UNIX absolut; kosong = tampilkan saja"
+            help="Socket UNIX absolute path; empty = show only" help-id="Path socket UNIX absolut; kosong = tampilkan saja"
             optional="true"
             ptype="STRING"/>
         <ACTION>
@@ -801,7 +813,7 @@
         </ACTION>
     </COMMAND>
     <COMMAND name="birdc socket-del"
-        help="Kembalikan socket kontrol birdc ke default (bird.ctl)"
+        help="Restore the birdc control socket to the default (bird.ctl)" help-id="Kembalikan socket kontrol birdc ke default (bird.ctl)"
         lock="false"
         interrupt="true">
         <ACTION>
