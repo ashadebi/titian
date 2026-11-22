@@ -25,6 +25,14 @@ STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
 BGP_CONF="$STATE_ROOT/bgp.conf"
 BIRDC_CONF="$STATE_ROOT/birdc.conf"
 PROG="titian-birdc"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show-*|birdc-passthrough) titian_page_begin ;; esac
+
 err() { echo "Error($PROG): $*" >&2; exit 33; }
 
 birdc_bin() {

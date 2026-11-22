@@ -28,6 +28,12 @@
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+# Pager global (titian-page.sh): HANYA fungsi show di bawah yang
+# memanggil titian_page_begin. Top-level TIDAK dipager karena
+# handoff interaktif do_vtysh() wajib TTY langsung.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+
 CFG_DIR=${TITIAN_CFG_DIR:-/cfg/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
@@ -438,6 +444,7 @@ frr_version() {
 }
 
 do_show() {
+    titian_page_begin
     local want fver fen frn zpid
     want=$(intent_val); fver=$(frr_version)
     fen=no; frn="not running"
@@ -455,6 +462,7 @@ do_show() {
 }
 
 do_show_version() {
+    titian_page_begin
     local fver zpid
     fver=$(frr_version)
     zpid=$(pgrep -x zebra 2>/dev/null | head -1)
@@ -470,6 +478,7 @@ do_show_version() {
 
 # --- show (vtysh passthrough, berbatas waktu) ---
 do_show_ip() {
+    titian_page_begin
     # $1 = perintah vtysh lengkap, mis. "show ip bgp"
     _zpid=$(pgrep -x zebra 2>/dev/null | head -1)
     [ -n "$_zpid" ] || err "FRR belum jalan (enable dulu: router frr enable + commit)"

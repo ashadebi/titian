@@ -34,6 +34,14 @@ set -u
 
 CONF="${FW_CONF:-/usr/local/etc/firewall.conf}"
 DIRTY=/var/run/firewall.dirty
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show*) titian_page_begin ;; esac
+
 PROG="titian-fw"
 
 die() { echo "$PROG: $*" >&2; exit 1; }

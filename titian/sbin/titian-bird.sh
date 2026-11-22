@@ -28,6 +28,13 @@ ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 SBIN_DIR=$(dirname "$0")
 BIRD_SH="$SBIN_DIR/titian-bird.sh"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show-*|check) titian_page_begin ;; esac
+
 # Lokasi persisten bird.conf BSDRP — overridable untuk uji (pola yang
 # sama seperti TITIAN_FRR_CONF). Default = tempat BSDRP me-restore
 # /usr/local/etc dari /cfg/local saat boot. JANGAN override di mesin live.

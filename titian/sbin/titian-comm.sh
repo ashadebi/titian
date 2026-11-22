@@ -71,6 +71,28 @@ norm_action() {
 # apply: check dulu, lolos baru generate; gagal -> restore backup
 # pra-edit (.cli-bak dibuat pemanggil SEBELUM edit; backup di sini
 # akan percuma karena file sudah teredit).
+
+# avail_lists / avail_values — daftar yang tersedia untuk pesan error LOUD
+# (pola yang sama dengan filter-name / checkpoint: nama tak dikenal
+# ditolak rc=33 dengan menyebutkan yang tersedia). Sumber tunggal =
+# helper completion yang sama (titian-comm-lists.sh /
+# titian-comm-values.sh di dir yang sama); bila helper tidak ada,
+# fallback ke pesan generik (tidak menggagalkan error).
+avail_lists() {
+    _al=""
+    if [ -x "$DIR/titian-comm-lists.sh" ]; then
+        _al=$("$DIR/titian-comm-lists.sh" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
+    fi
+    if [ -n "$_al" ]; then printf '%s' "$_al"; else printf '(tidak ada community list)'; fi
+}
+avail_values() {
+    _av=""
+    if [ -x "$DIR/titian-comm-values.sh" ]; then
+        _av=$("$DIR/titian-comm-values.sh" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
+    fi
+    if [ -n "$_av" ]; then printf '%s' "$_av"; else printf '(tidak ada community)'; fi
+}
+
 apply() {
     if ! "$BIRD_SH" check filter >/tmp/titian-comm-check.out 2>&1; then
         cat /tmp/titian-comm-check.out >&2
@@ -97,7 +119,7 @@ list_add() {
 list_del() {
     name=$1
     case "$name" in ''|*[!A-Za-z0-9_]*) err "nama list tidak valid: $name" ;; esac
-    grep -q "^define $name " "$FILTER" || { echo "tidak ada: define $name"; return 0; }
+    grep -q "^define $name " "$FILTER" || err "community list tidak ada: $name — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_lists))"
     cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     grep -v "^define $name " "$FILTER" > "$FILTER.tmp" || err "gagal edit $FILTER"
     mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"
@@ -152,7 +174,7 @@ export_del() {
         END { if (!skipped) exit 2 }
     ' "$FILTER" > "$FILTER.tmp"; rc=$?
     case $rc in
-        2) rm -f "$FILTER.tmp"; echo "tidak ada: $add"; return 0 ;;
+        2) rm -f "$FILTER.tmp"; err "community tidak ada di export: $1 — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_values))" ;;
         0) mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"; apply ;;
         *) rm -f "$FILTER.tmp"; err "gagal edit $FILTER" ;;
     esac
@@ -200,7 +222,7 @@ import_del() {
         END { if (!skipped) exit 2 }
     ' "$FILTER" > "$FILTER.tmp"; rc=$?
     case $rc in
-        2) rm -f "$FILTER.tmp"; echo "tidak ada match untuk $expr"; return 0 ;;
+        2) rm -f "$FILTER.tmp"; err "tidak ada match import untuk $1 — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_values))" ;;
         0) mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"; apply ;;
         *) rm -f "$FILTER.tmp"; err "gagal edit $FILTER" ;;
     esac

@@ -194,4 +194,46 @@ fi
 # vxlan/firewall/apply-all) juga bisa mengganggu route — pastikan
 # default route yang ditangkap sebelum replay tetap ada.
 restore_default_route "$_defroute"
+
+# Jaring pengaman RPKI boot race (20 Nov 2026): BIRD naik sebelum default
+# route ada (dhclient jalan belakangan di rc.local), sehingga protokol
+# RPKI `lab` (remote 10.1.1.62:3323) gagal connect awal dan macet
+# "Connecting" (18 Nov: 11 Established, lab Connecting 10+ mnt;
+# `birdc restart lab` langsung Established). Titian-boot tidak bisa
+# menunggu default route di sini (rc.local jalan SESUDAH service ini),
+# jadi luncurkan penunggu latar (tidak menahan boot): tunggu default
+# route muncul (maks ~120 dtk), lalu restart `lab` bila belum
+# Established. Best-effort, tidak menggagalkan boot, tidak mengganggu
+# BGP (restart protokol RPKI saja). Log: /var/log/titian-rpki-boot.log.
+(
+    trap '' HUP
+    _i=0
+    while [ "$_i" -lt 60 ]; do
+        if [ "$(uname -s)" = "FreeBSD" ]; then
+            netstat -rn 2>/dev/null | grep -q '^default ' && break
+        else
+            ip route show default 2>/dev/null | grep -q '^default' && break
+        fi
+        sleep 2
+        _i=$((_i + 1))
+    done
+    _has_route=0
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -rn 2>/dev/null | grep -q '^default ' && _has_route=1
+    else
+        ip route show default 2>/dev/null | grep -q '^default' && _has_route=1
+    fi
+    [ "$_has_route" = "1" ] || { echo "$(date '+%Y-%m-%d %H:%M:%S') rpki-boot: default route tidak muncul (timeout 120 dtk), lewati"; exit 0; }
+    # Beri BIRD waktu menyelesaikan connect awal sesudah route muncul.
+    sleep 5
+    if command -v birdc >/dev/null 2>&1; then
+        if birdc show proto lab 2>/dev/null | grep -q 'Established'; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') rpki-boot: lab sudah Established, tidak ada aksi"
+        else
+            echo "$(date '+%Y-%m-%d %H:%M:%S') rpki-boot: lab belum Established, restart lab"
+            birdc restart lab 2>&1 || true
+        fi
+    fi
+    exit 0
+) >>/var/log/titian-rpki-boot.log 2>&1 &
 exit 0
