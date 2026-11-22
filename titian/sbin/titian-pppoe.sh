@@ -9,7 +9,17 @@
 #   pool <start-ip> <end-ip>
 #   radius-server <ip>
 #   radius-secret <secret>
+#   radius-acct yes|no                      (default no; accounting RADIUS ke 1813)
+#   radius-nas-ip <ip>                      (opsional; NAS-IP-Address via `set radius me`)
+#   console yes|no                          (default no; console mpd5 127.0.0.1:5005)
 #   user <name> <password> <ip|->            (password tanpa spasi)
+# Password console (16 hex char — 32 hex GAGAL login, 19 Nov 2026)
+# auto-generate, simpan mode 600 di /etc/titian/mpd-console.pw +
+# /cfg/titian/mpd-console.pw, TIDAK PERNAH dicetak. Sintaks console
+# mpd5 5.9 (sumber: mpd.conf.sample): `set console self 127.0.0.1
+# 5005` + `set console open` + `set user titian-console <pw> admin`
+# di seksi `startup:` — BUKAN `set console ip ...` (itu ditolak
+# sebagai Unknown command, 13 Nov 2026).
 # `enable` hanya mencatat niat + dirty; service mpd5 naik/berhenti
 # saat `commit` (titian-commit.sh -> apply di sini).
 # Sintaks mpd.conf di bawah ditulis dari dokumentasi mpd5 — BELUM
@@ -18,9 +28,25 @@
 ROOT=${TITIAN_ROOT:-/opt/titian}
 CONF="${PPPOE_CONF:-/usr/local/etc/pppoe.conf}"
 MPD_DIR="${PPPOE_MPD_DIR:-/usr/local/etc/mpd5}"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show*) titian_page_begin ;; esac
+
 MPD_CONF="$MPD_DIR/mpd.conf"
 MPD_SECRET="$MPD_DIR/mpd.secret"
 DIRTY=/var/run/pppoe.dirty
+# Console mpd5 (20 Nov 2026): password 16 hex char auto-generate,
+# simpan mode 600 di dua lokasi (live /etc + persisten /cfg) — TIDAK
+# PERNAH dicetak. Env PPPOE_CONSOLE_PW[_CFG] untuk mock (redirect).
+CONSOLE_PW_FILE="${PPPOE_CONSOLE_PW:-/etc/titian/mpd-console.pw}"
+CONSOLE_PW_CFG="${PPPOE_CONSOLE_PW_CFG:-/cfg/titian/mpd-console.pw}"
+CONSOLE_USER="titian-console"
+CONSOLE_ADDR="127.0.0.1"
+CONSOLE_PORT="5005"
 PROG="titian-pppoe"
 err() { echo "Error($PROG): $*" >&2; exit 33; }
 die() { echo "$PROG: $*" >&2; exit 1; }
@@ -76,6 +102,71 @@ iface_exists() {
 
 user_exists() { grep -q "^user $1 " "$CONF" 2>/dev/null; }
 
+# --- console mpd5 (20 Nov 2026) ---
+# Password console HARUS 16 hex char: 32 hex GAGAL login (19 Nov 2026,
+# padahal hash file == hash di mpd.conf). Generate 8 byte acak -> 16 hex.
+gen_console_pw() {
+    _pw=""
+    if command -v openssl >/dev/null 2>&1; then
+        _pw=$(openssl rand -hex 8 2>/dev/null)
+    fi
+    if [ -z "$_pw" ]; then
+        _pw=$(head -c 8 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n')
+    fi
+    [ -n "$_pw" ] || die "cannot generate console password (no openssl/urandom)"
+    case "$_pw" in *[!0-9a-f]*) die "generated console password bukan hex" ;; esac
+    [ "${#_pw}" = "16" ] || die "generated console password bukan 16 char"
+    printf '%s' "$_pw"
+}
+
+# Pastikan file password console ada di KEDUA lokasi (mode 600).
+# /etc tmpfs (hilang saat reboot) dipulihkan dari /cfg (persisten);
+# bila keduanya hilang, generate baru. TIDAK PERNAH mencetak password.
+ensure_console_pw() {
+    if [ -s "$CONSOLE_PW_FILE" ]; then
+        if [ ! -s "$CONSOLE_PW_CFG" ]; then
+            mkdir -p "$(dirname "$CONSOLE_PW_CFG")" 2>/dev/null
+            cp "$CONSOLE_PW_FILE" "$CONSOLE_PW_CFG" 2>/dev/null || true
+            chmod 600 "$CONSOLE_PW_CFG" 2>/dev/null || true
+        fi
+        return 0
+    fi
+    if [ -s "$CONSOLE_PW_CFG" ]; then
+        mkdir -p "$(dirname "$CONSOLE_PW_FILE")" 2>/dev/null
+        cp "$CONSOLE_PW_CFG" "$CONSOLE_PW_FILE" 2>/dev/null || die "cannot restore console password from $CONSOLE_PW_CFG"
+        chmod 600 "$CONSOLE_PW_FILE" 2>/dev/null || true
+        return 0
+    fi
+    _pw=$(gen_console_pw)
+    mkdir -p "$(dirname "$CONSOLE_PW_FILE")" "$(dirname "$CONSOLE_PW_CFG")" 2>/dev/null
+    printf '%s\n' "$_pw" > "$CONSOLE_PW_FILE" || die "cannot write $CONSOLE_PW_FILE"
+    printf '%s\n' "$_pw" > "$CONSOLE_PW_CFG" || true
+    chmod 600 "$CONSOLE_PW_FILE" "$CONSOLE_PW_CFG" 2>/dev/null || true
+    return 0
+}
+
+# Baca password console (strip whitespace/newline). Gagal bila kosong.
+read_console_pw() {
+    _pw=$(tr -d ' \n\r\t' < "$CONSOLE_PW_FILE" 2>/dev/null)
+    [ -n "$_pw" ] || return 1
+    printf '%s' "$_pw"
+    return 0
+}
+
+# Tunggu mpd5 benar-benar mati (race restart 19 Nov 2026: `pkill` +
+# start langsung bisa gagal "already running as process <pid lama>"
+# karena proses lama belum sepenuhnya mati). Poll pgrep hingga kosong,
+# maks ~10 detik. Return 0 bila mpd5 sudah tidak ada.
+wait_mpd5_gone() {
+    _i=0
+    while [ "$_i" -lt 20 ]; do
+        pgrep -x mpd5 >/dev/null 2>&1 || return 0
+        sleep 0.5
+        _i=$((_i+1))
+    done
+    pgrep -x mpd5 >/dev/null 2>&1 && return 1 || return 0
+}
+
 # --- read-only ---
 cmd_check() { touch_conf; exit 0; }
 
@@ -85,11 +176,22 @@ cmd_show() {
     _if=$(sed -n 's/^interface //p' "$CONF" | head -1)
     _pool=$(sed -n 's/^pool //p' "$CONF" | head -1)
     _rs=$(sed -n 's/^radius-server //p' "$CONF" | head -1)
+    _ra=$(sed -n 's/^radius-acct //p' "$CONF" | head -1)
+    _rn=$(sed -n 's/^radius-nas-ip //p' "$CONF" | head -1)
+    _co=$(sed -n 's/^console //p' "$CONF" | head -1)
     _n=$(grep -c '^user ' "$CONF" 2>/dev/null || echo 0)
     echo "pppoe-server: ${_en:-no}"
     echo "interface: ${_if:-unset}"
     echo "pool: ${_pool:-unset}"
     echo "radius-server: ${_rs:-local auth}"
+    echo "radius-acct: ${_ra:-no}"
+    echo "radius-nas-ip: ${_rn:-unset}"
+    echo "console: ${_co:-no}"
+    if [ -s "$CONSOLE_PW_FILE" ]; then
+        echo "console password: set (mode 600, tidak ditampilkan)"
+    else
+        echo "console password: unset"
+    fi
     echo "users: $_n"
     if command -v service >/dev/null 2>&1; then
         service mpd5 status 2>&1 | sed 's/^/  /' || true
@@ -121,6 +223,93 @@ cmd_show_sessions() {
         esac
     done
     [ "$_found" = "1" ] || echo "(no active PPPoE sessions / no ng* interfaces)"
+    exit 0
+}
+
+# --- console mpd5: client (20 Nov 2026) ---
+# Jalankan perintah console mpd5 via nc (127.0.0.1:5005). Arg = satu
+# perintah console per argumen. Auth: user titian-console + password
+# dari file mode 600 (TIDAK PERNAH dicetak). Output mentah console ke
+# stdout; rc = rc nc (0 bila konek + perintah terkirim).
+# Protokol (mpd5 5.9, console telnet-like tapi mentah nc cukup — IAC
+# banner diabaikan saat parse): kirim username, password, perintah,
+# lalu `exit`. Timeout nc via MPD_CONSOLE_TIMEOUT (default 8 dtk).
+# Env MPD_NC (default `nc`) untuk mock (stub nc).
+mpd_console() {
+    _pw=$(read_console_pw) || return 1
+    {
+        printf '%s\n' "$CONSOLE_USER"
+        printf '%s\n' "$_pw"
+        for _c in "$@"; do printf '%s\n' "$_c"; done
+        printf '%s\n' "exit"
+    } | ${MPD_NC:-nc} -w "${MPD_CONSOLE_TIMEOUT:-8}" "$CONSOLE_ADDR" "$CONSOLE_PORT" 2>/dev/null
+    return $?
+}
+
+# --- disconnect sesi PPPoE aktif via console mpd5 (20 Nov 2026, Opsi A) ---
+# Keputusan user 20 Nov 12:26: console mpd5 = jalur disconnect yang
+# benar. Jalur LAMA (ifconfig <tun> destroy, 19 Nov) DIBUKTIKAN TIDAK
+# VIABLE (20 Nov, 6 mekanisme diuji: ifconfig ng0 destroy, ngctl
+# shutdown ng0/bundle/link-template, ifconfig ng0 down — gagal / black
+# hole / mpd5 mati; `ifconfig <tun> destroy` HANG >3 mnt, salah
+# sasaran) — DIHAPUS, diganti console.
+# Mekanisme console (mpd5 5.9, console 127.0.0.1:5005, user
+# titian-console): verifikasi sesi ada + Framed-IP cocok via
+# `show sessions user <user>` -> pilih link via `authname <user>` ->
+# `close` (default layer link = LCP, graceful: kirim LCP
+# Terminate-Request) -> verifikasi sesi hilang via `show sessions
+# user <user>`. User TIDAK dihapus dari config; agar tidak bisa login
+# lagi, myRadDASH harus juga mengisolir user (status=isolated di DB)
+# sehingga auth RADIUS berikutnya ditolak.
+# Arg: <username> <framed-ip>. Framed-IP didapat myRadDASH dari radacct.
+cmd_disconnect() {
+    _user="$1"; _ip="$2"
+    case "$_user" in ''|*[!A-Za-z0-9_-]*) die "nama user tidak valid: $_user" ;; esac
+    valid_v4 "$_ip" || die "framed-ip harus IPv4 valid: $_ip"
+    _co=$(sed -n 's/^console //p' "$CONF" | head -1)
+    [ "$_co" = "yes" ] || { echo "Error: console mpd5 belum di-enable (jalankan 'console' + commit dulu)" >&2; exit 1; }
+    [ -s "$CONSOLE_PW_FILE" ] || { echo "Error: file password console tidak ada ($CONSOLE_PW_FILE)" >&2; exit 1; }
+    command -v "${MPD_NC:-nc}" >/dev/null 2>&1 || { echo "Error: nc tidak tersedia (butuh netcat untuk console mpd5)" >&2; exit 1; }
+    # 1) Verifikasi sesi ada + Framed-IP cocok.
+    # Console me-echo perintah yang dikirim ("show sessions user <user>")
+    # sehingga nama user SELALU muncul di output mentah walau sesi tidak
+    # ada — hapus baris echo itu dulu sebelum memeriksa.
+    _out1=$(mpd_console "show sessions user $_user") || { echo "Error: tidak bisa terhubung ke console mpd5 (mpd5 jalan? console listen 5005?)" >&2; exit 1; }
+    case "$_out1" in
+        *"Welcome!"*) ;;
+        *) echo "Error: auth console mpd5 gagal (periksa password console / mpd5 jalan?)" >&2; exit 1 ;;
+    esac
+    _filt1=$(printf '%s\n' "$_out1" | grep -v "show sessions user")
+    case "$_filt1" in
+        *"$_user"*) ;;
+        *) echo "Error: tidak ada sesi PPPoE untuk user $_user (sesi tidak ditemukan)" >&2; exit 1 ;;
+    esac
+    case "$_filt1" in
+        *"$_ip"*) ;;
+        *) echo "Error: sesi $_user ada tapi Framed-IP tidak cocok (bukan $_ip)" >&2; exit 1 ;;
+    esac
+    # 2) Tutup sesi: pilih link lalu close (LCP graceful).
+    _out2=$(mpd_console "authname $_user" "close") || { echo "Error: tidak bisa terhubung ke console mpd5 saat close" >&2; exit 1; }
+    case "$_out2" in
+        *"Welcome!"*) ;;
+        *) echo "Error: auth console mpd5 gagal saat close" >&2; exit 1 ;;
+    esac
+    case "$_out2" in
+        *"Incorrect context"*) echo "Error: console mpd5: link untuk user $_user tidak bisa dipilih (Incorrect context)" >&2; exit 1 ;;
+    esac
+    # Beri waktu LCP Terminate diproses (peer balas + link turun).
+    sleep 1
+    # 3) Verifikasi sesi sudah hilang (hapus baris echo perintah dulu).
+    _out3=$(mpd_console "show sessions user $_user") || { echo "Error: tidak bisa terhubung ke console mpd5 saat verifikasi" >&2; exit 1; }
+    case "$_out3" in
+        *"Welcome!"*) ;;
+        *) echo "Error: auth console mpd5 gagal saat verifikasi" >&2; exit 1 ;;
+    esac
+    _filt3=$(printf '%s\n' "$_out3" | grep -v "show sessions user")
+    case "$_filt3" in
+        *"$_user"*) echo "Error: sesi $_user masih ada sesudah close (gagal diputus)" >&2; exit 1 ;;
+    esac
+    echo "pppoe disconnect: sesi $_user (IP $_ip) diputus via console mpd5 (close LCP)"
     exit 0
 }
 
@@ -231,6 +420,73 @@ cmd_set_radius_secret() {
 
 cmd_del_radius_secret() { dellines '^radius-secret ' "radius-secret"; echo "radius-secret dihapus"; exit 0; }
 
+# --- radius-acct (RADIUS accounting, 19 Nov 2026) ---
+# `set auth enable radius-acct` di mpd5 5.9 (sumber: mpd.conf.sample
+# label `radius:`) — mengirim Accounting-Request (Start/Stop) ke server
+# RADIUS port 1813; FreeRADIUS menulis radacct -> sesi PPPoE muncul
+# di myRadDASH `GET /v0/sessions` (source `radius`). Default OFF
+# (anchor): accounting hanya jalan bila radius-acct yes + radius-server
+# ter-set. Tanpa radius-server, baris ini tidak di-emit (apply mode
+# lokal tidak mengenal accounting).
+cmd_set_radius_acct() {
+    case "$1" in yes|no) upsert '^radius-acct ' "radius-acct $1" ;; *) die "radius-acct takes yes|no" ;; esac
+    echo "pppoe radius-acct $1 (pending commit)"
+    exit 0
+}
+
+cmd_del_radius_acct() { dellines '^radius-acct ' "radius-acct"; echo "radius-acct dihapus (accounting off)"; exit 0; }
+
+# --- radius-nas-ip (NAS-IP-Address, 19 Nov 2026) ---
+# `set radius me <ip>` — NAS-IP-Address yang dikirim mpd5 ke server
+# RADIUS (auth + acct). WAJIB di-set bila source IP mesin di-NAT:
+# mesin test keluar via NAT MikroTik (10.10.2.3 -> 103.50.128.18),
+# sedangkan NAS di myRadDASH dikenali dari nasname 103.50.128.18.
+# Tanpa ini, mpd5 mengirim IP lokal sebagai NAS-IP-Address sehingga
+# radacct.nasipaddress tidak cocok dengan NAS `titian-test` (sesi
+# muncul tanpa nama NAS / tidak teratribusi). Pola sama seperti
+# `nas-ip` di IPoE (titian-ipoe-acct.py).
+cmd_set_radius_nas_ip() {
+    valid_v4 "$1" || die "radius-nas-ip harus IPv4: $1"
+    upsert '^radius-nas-ip ' "radius-nas-ip $1"
+    echo "pppoe radius-nas-ip $1 (pending commit)"
+    exit 0
+}
+
+cmd_del_radius_nas_ip() { dellines '^radius-nas-ip ' "radius-nas-ip"; echo "radius-nas-ip dihapus"; exit 0; }
+
+# --- console mpd5 (20 Nov 2026) ---
+# `console` (enable): state `console yes` + generate password bila
+# belum ada (16 hex, mode 600, /etc + /cfg). Password TIDAK PERNAH
+# dicetak — hanya status "set/unset" yang tampil di `show`.
+# `console password`: regenerasi password (rotasi) — wajib console
+# sudah enable. `no console`: hapus state + hapus kedua file password.
+cmd_set_console() {
+    case "$1" in yes) upsert '^console ' "console yes" ;; *) die "console takes yes" ;; esac
+    ensure_console_pw
+    echo "pppoe console enabled (pending commit; password tersimpan mode 600, tidak ditampilkan)"
+    exit 0
+}
+
+cmd_del_console() {
+    dellines '^console ' "console"
+    rm -f "$CONSOLE_PW_FILE" "$CONSOLE_PW_CFG" 2>/dev/null || true
+    echo "console dihapus (password file ikut dihapus)"
+    exit 0
+}
+
+cmd_set_console_password() {
+    _c=$(sed -n 's/^console //p' "$CONF" | head -1)
+    [ "$_c" = "yes" ] || die "console belum di-enable (jalankan 'console' dulu)"
+    _pw=$(gen_console_pw)
+    mkdir -p "$(dirname "$CONSOLE_PW_FILE")" "$(dirname "$CONSOLE_PW_CFG")" 2>/dev/null
+    printf '%s\n' "$_pw" > "$CONSOLE_PW_FILE" || die "cannot write $CONSOLE_PW_FILE"
+    printf '%s\n' "$_pw" > "$CONSOLE_PW_CFG" || true
+    chmod 600 "$CONSOLE_PW_FILE" "$CONSOLE_PW_CFG" 2>/dev/null || true
+    mark_dirty
+    echo "pppoe console password di-regenerasi (pending commit; password tidak ditampilkan)"
+    exit 0
+}
+
 cmd_flush() {
     printf '# pppoe.conf - generated by klish, do not edit by hand\nenable no\n' > "$CONF" \
         || die "cannot write $CONF"
@@ -248,6 +504,9 @@ cmd_apply() {
     _pool=$(sed -n 's/^pool //p' "$CONF" | head -1)
     _rs=$(sed -n 's/^radius-server //p' "$CONF" | head -1)
     _rsec=$(sed -n 's/^radius-secret //p' "$CONF" | head -1)
+    _racct=$(sed -n 's/^radius-acct //p' "$CONF" | head -1)
+    _rnip=$(sed -n 's/^radius-nas-ip //p' "$CONF" | head -1)
+    _co=$(sed -n 's/^console //p' "$CONF" | head -1)
     # Regenerasi mpd.secret SELALU (juga saat disable) dari daftar user
     # di pppoe.conf — supaya user yang dihapus via `no user` benar-benar
     # hilang dari mpd.secret (bug uji 13 Nov: user masih ada di
@@ -278,9 +537,20 @@ cmd_apply() {
     {
         echo "# mpd.conf - generated by titian-pppoe.sh, do not edit by hand"
         echo "startup:"
-        # (tanpa baris console — sintaks `set console ip 127.0.0.1 5005`
-        # ditolak mpd5 5.9 sebagai Unknown command; console tidak
-        # diperlukan untuk server PPPoE.)
+        # Console mpd5 (20 Nov 2026, fitur permanen): sintaks benar
+        # `set console self 127.0.0.1 5005` + `set console open` +
+        # `set user titian-console <pw> admin` (sumber: mpd.conf.sample).
+        # `set console ip ...` SALAH — ditolak mpd5 5.9 sebagai Unknown
+        # command (13 Nov 2026). Password 16 hex dibaca dari file mode
+        # 600 (TIDAK PERNAH dicetak ke output); bila file hilang
+        # (reboot, /etc tmpfs) dipulihkan dari /cfg atau di-generate.
+        if [ "$_co" = "yes" ]; then
+            ensure_console_pw
+            _cpw=$(read_console_pw) || die "console enabled tapi password tidak bisa dibaca"
+            echo "    set user ${CONSOLE_USER} ${_cpw} admin"
+            echo "    set console self ${CONSOLE_ADDR} ${CONSOLE_PORT}"
+            echo "    set console open"
+        fi
         echo "default:"
         echo "    load pppoe_server"
         echo "pppoe_server:"
@@ -310,7 +580,38 @@ cmd_apply() {
             echo "    set radius server ${_rs} ${_rsec:-secret} 1812 1813"
             echo "    set radius retries 3"
             echo "    set radius timeout 3"
-            echo "    set auth enable radius"
+            # NAS-IP-Address eksplisit (bila di-set): tanpa ini mpd5
+            # mengirim IP lokal (10.10.2.3) sebagai NAS-IP-Address,
+            # padahal NAS di myRadDASH dikenali dari nasname
+            # 103.50.128.18 (NAT). Lihat cmd_set_radius_nas_ip.
+            if [ -n "$_rnip" ]; then
+                echo "    set radius me ${_rnip}"
+            fi
+            # AKTIFKAN backend auth RADIUS: `set radius server` saja
+            # TIDAK cukup — tanpa baris ini mpd5 hanya mencoba INTERNAL
+            # (mpd.secret) lalu "ran out of backends", RADIUS tidak
+            # pernah dicoba. Perintah benar `set auth enable radius-auth`
+            # (BUKAN `set auth enable radius` — itu INVALID di mpd5 5.9,
+            # "option radius" ambiguous karena awalan `radius-auth` /
+            # `radius-acct`). Sumber: mpd.conf.sample label `radius:`.
+            # `radius-acct` di-enable HANYA bila `radius-acct yes`:
+            # mengirim Accounting-Request (Start/Stop) ke 1813 sehingga
+            # sesi PPPoE muncul di myRadDASH `GET /v0/sessions`.
+            # Default OFF (anchor) — monitoring PPPoE dimatikan.
+            # Ditemukan + diperbaiki 19 Nov 2026 saat uji live RADIUS.
+            echo "    set auth enable radius-auth"
+            if [ "$_racct" = "yes" ]; then
+                echo "    set auth enable radius-acct"
+            fi
+            # Protokol auth link WAJIB di-enable juga (sama seperti cabang
+            # lokal): tanpa `set link enable chap` link tidak
+            # menegosiasikan CHAP sehingga client tidak bisa auth sama
+            # sekali. Bug cabang radius — pola sama seperti bug
+            # `set auth enable local` (INVALID, 13 Nov): backend dipilih
+            # tanpa protokol link. Ditemukan + diperbaiki 19 Nov 2026
+            # saat persiapan uji RADIUS; verifikasi live menyusul.
+            echo "    set link enable chap"
+            echo "    set link accept chap pap"
         else
             # Auth: `set auth enable local` INVALID di mpd5 5.9 —
             # enable CHAP (+ terima PAP) di link; user lokal dibaca
@@ -324,8 +625,17 @@ cmd_apply() {
     chmod 600 "$MPD_CONF" 2>/dev/null || true
     if command -v sysrc >/dev/null 2>&1; then sysrc mpd_enable="YES" >/dev/null || die "sysrc mpd_enable gagal"; fi
     if command -v service >/dev/null 2>&1; then
-        if pgrep -x mpd5 >/dev/null 2>&1; then service mpd5 restart || die "service mpd5 restart gagal"
-        else service mpd5 start || die "service mpd5 start gagal"; fi
+        # Restart eksplisit stop -> tunggu mati -> start (race 19 Nov:
+        # `pkill` + start langsung bisa gagal "already running as
+        # process <pid lama>"). `service mpd5 restart` tidak dipakai
+        # agar jeda tunggu pgrep-kosong dijamin jalan.
+        if pgrep -x mpd5 >/dev/null 2>&1; then
+            service mpd5 stop 2>/dev/null || true
+            wait_mpd5_gone || die "mpd5 tidak mau mati sesudah stop (race restart)"
+            service mpd5 start || die "service mpd5 start gagal"
+        else
+            service mpd5 start || die "service mpd5 start gagal"
+        fi
     else
         echo "(service no  at host ini — lewati start mpd5; config tertulis at $MPD_CONF)"
     fi
@@ -352,8 +662,16 @@ case "${1:-}" in
     del-radius-server) cmd_del_radius_server ;;
     set-radius-secret) cmd_set_radius_secret "${2:-}" ;;
     del-radius-secret) cmd_del_radius_secret ;;
+    set-radius-acct) cmd_set_radius_acct "${2:-}" ;;
+    del-radius-acct) cmd_del_radius_acct ;;
+    set-radius-nas-ip) cmd_set_radius_nas_ip "${2:-}" ;;
+    del-radius-nas-ip) cmd_del_radius_nas_ip ;;
+    set-console) cmd_set_console "${2:-}" ;;
+    del-console) cmd_del_console ;;
+    set-console-password) cmd_set_console_password ;;
+    disconnect) cmd_disconnect "${2:-}" "${3:-}" ;;
     flush) cmd_flush ;;
     apply) cmd_apply ;;
     apply-all) cmd_apply ;;
-    *) echo "Usage: $0 {check|show|show-users|show-sessions|set-enable|set-interface|del-interface|set-pool|del-pool|user-add|user-del|user-set-password|user-set-ip|user-del-ip|set-radius-server|del-radius-server|set-radius-secret|del-radius-secret|flush|apply} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {check|show|show-users|show-sessions|set-enable|set-interface|del-interface|set-pool|del-pool|user-add|user-del|user-set-password|user-set-ip|user-del-ip|set-radius-server|del-radius-server|set-radius-secret|del-radius-secret|set-radius-acct|del-radius-acct|set-radius-nas-ip|del-radius-nas-ip|set-console|del-console|set-console-password|disconnect <user> <framed-ip>|flush|apply} ..." >&2; exit 2 ;;
 esac

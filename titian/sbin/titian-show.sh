@@ -13,6 +13,13 @@ if [ -t 1 ]; then _SHOW_COLOR=1; else _SHOW_COLOR=0; fi
 # harus berisi byte ESC, bukan string literal "\033").
 _ESC=$(printf '\033')
 _C_RED="${_ESC}[31m"; _C_GREEN="${_ESC}[32m"; _C_YELLOW="${_ESC}[33m"; _C_CYAN="${_ESC}[36m"; _C_RESET="${_ESC}[0m"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Skrip ini show-only: semua output dipager bila TTY + panjang.
+titian_page_begin
+
 # Kembalikan kode warna untuk sebuah status (kosong bila bukan tty).
 # up/u -> hijau, down/D/disabled -> merah, L (loopback) -> cyan, warning -> kuning/oranye.
 status_color() {

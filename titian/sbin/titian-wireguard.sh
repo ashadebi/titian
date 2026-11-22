@@ -22,6 +22,14 @@
 ROOT=${TITIAN_ROOT:-/opt/titian}
 STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 STATE_DIR="$STATE_ROOT/netstate/wireguard"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show*) titian_page_begin ;; esac
+
 KEY_DIR="$STATE_ROOT/wireguard"
 DIRTY=/var/run/wireguard.dirty
 PROG="titian-wireguard"

@@ -3,6 +3,14 @@
 # POSIX sh.
 OS=$(uname -s)
 BIN=${TITIAN_BIN:-/opt/titian/bin}
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|summary|port-in-use|ssh-check) titian_page_begin ;; esac
+
 err() { echo "Error: $*" >&2; exit 33; }
 
 # birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila

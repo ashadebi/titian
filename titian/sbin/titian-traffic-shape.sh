@@ -32,6 +32,14 @@ set -u
 
 CONF="${TS_CONF:-/usr/local/etc/traffic-shape.conf}"
 DIRTY=/var/run/traffic-shape.dirty
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show*) titian_page_begin ;; esac
+
 PROG="titian-traffic-shape"
 
 die() { echo "$PROG: $*" >&2; exit 1; }
@@ -161,6 +169,10 @@ cmd_show() {
     grep '^queue ' "$CONF" 2>/dev/null | sed 's/^/  /' || true
     echo "rules:"
     grep '^rule ' "$CONF" 2>/dev/null | sed 's/^/  /' || true
+    echo "profiles:"
+    grep '^profile ' "$CONF" 2>/dev/null | sed 's/^/  /' || true
+    echo "bindings:"
+    grep '^bind ' "$CONF" 2>/dev/null | sed 's/^/  /' || true
     exit 0
 }
 
@@ -466,6 +478,285 @@ cmd_del_rule() {
     exit 0
 }
 
+# --- profile paket (BRAS) + dummynet -------------------------------------
+# Profile = template down/up + burst; bind = terapkan ke interface/IP.
+# Materialisasi (Option 2): setiap perubahan profile/bind langsung membuat /
+# memperbarui pipe + rule turunan di traffic-shape.conf (cmd_apply tidak
+# diubah — reuse jalur apply + show yang sudah ada).
+#   profile <name> download <rate> burst <n> upload <rate> burst <n>
+#   bind <profile> interface <if>
+#   bind <profile> ip <addr> on <if> side <uplink|customer>
+# Turunan (nama deterministik, maks 32 char):
+#   pipe  <profile>-<slug>-d  (download) / -u (upload)
+#   rule  <profile>-<slug>-down / -up
+# Slug: interface = nama if apa adanya; IP/CIDR = . : / -> - .
+# Arah (pola PPPoE di uplink ge0; interface menghadap pelanggan dibalik):
+#   interface: down=out, up=in  (if menghadap pelanggan)
+#   ip uplink:   down=in dst, up=out src
+#   ip customer: down=out dst, up=in src
+# Burst dummynet = allowance BYTE sesudah idle (man ipfw: up to <burst>
+# bytes bypass scheduler; efektif MAX(burst, bw * idle_time)) — BUKAN
+# burst-rate berkelanjutan ala MikroTik. Jangan klaim lebih dari itu.
+
+valid_profile_name() {
+    case "$1" in
+        *[!A-Za-z0-9_-]*|"") die "bad profile name: $1 (use [A-Za-z0-9_-]+, maks 12)" ;;
+    esac
+    [ "${#1}" -le 12 ] || die "bad profile name: $1 (maks 12 karakter)"
+}
+
+regex_escape() {
+    # escape regex special chars (. [ \ * ^ $) in $1
+    printf '%s' "$1" | sed 's/[.[\*^$]/\\&/g'
+}
+
+profile_exists() { grep -q "^profile $1 " "$CONF" 2>/dev/null; }
+
+slug_for() {
+    case "$1" in
+        interface) printf '%s' "$2" ;;
+        ip) printf '%s' "$2" | tr './:' '---' ;;
+    esac
+}
+
+check_derived_len() {
+    _p="$1"; _s="$2"
+    for _n in "$_p-$_s-d" "$_p-$_s-u" "$_p-$_s-down" "$_p-$_s-up"; do
+        [ "${#_n}" -le 32 ] || die "nama turunan '$_n' melebihi 32 karakter (profile '$_p' + target '$_s' terlalu panjang — pakai nama profile lebih pendek)"
+    done
+}
+
+# bind_upsert <line> — append line if not already present (exact match)
+bind_upsert() {
+    touch_conf
+    grep -qxF "$1" "$CONF" 2>/dev/null && return 0
+    printf '%s\n' "$1" >> "$CONF"
+    mark_dirty
+}
+
+cmd_check_profile() {
+    valid_profile_name "$1"
+    touch_conf
+    exit 0
+}
+
+profile_complete() {
+    # profile_complete <name> — true (0) bila download+upload sudah di-set
+    _line=$(grep "^profile $1 " "$CONF" 2>/dev/null | head -1)
+    [ -n "$_line" ] || return 1
+    set -- $_line
+    [ "$4" != "unset" ] && [ "$8" != "unset" ]
+}
+
+cmd_set_profile_field() {
+    # set-profile-field <name> <field> <value>
+    _name="$1"; _field="$2"; _value="${3:-}"
+    valid_profile_name "$_name"
+    touch_conf
+    _line=$(grep "^profile $_name " "$CONF" 2>/dev/null | head -1)
+    if [ -z "$_line" ]; then
+        _line="profile $_name download unset burst 0 upload unset burst 0"
+    fi
+    set -- $_line
+    [ "$#" -eq 10 ] || die "corrupt profile line: $_line"
+    _dr="$4"; _db="$6"; _ur="$8"; _ub="${10}"
+    case "$_field" in
+        download) _dr="$_value" ;;
+        download-burst) _db="$_value" ;;
+        upload) _ur="$_value" ;;
+        upload-burst) _ub="$_value" ;;
+        *) die "unknown profile field: $_field" ;;
+    esac
+    _line="profile $_name download $_dr burst $_db upload $_ur burst $_ub"
+    upsert "^profile $_name " "$_line"
+    echo "profile $_name: $_field = $_value"
+    sync_profile "$_name"
+    exit 0
+}
+
+sync_profile() {
+    # sync_profile <name> — regenerasi pipe+rule turunan dari profile+bind saat ini.
+    _name="$1"
+    _line=$(grep "^profile $_name " "$CONF" 2>/dev/null | head -1)
+    [ -n "$_line" ] || return 0
+    set -- $_line
+    [ "$#" -eq 10 ] || return 0
+    _dr="$4"; _db="$6"; _ur="$8"; _ub="${10}"
+    if [ "$_dr" = "unset" ] || [ "$_ur" = "unset" ]; then
+        return 0
+    fi
+    _binds=$(grep "^bind $_name " "$CONF" 2>/dev/null || true)
+    [ -n "$_binds" ] || return 0
+    printf '%s\n' "$_binds" | while read -r _bline; do
+        set -- $_bline
+        _kind="$3"
+        case "$_kind" in
+            interface)
+                _if="$4"
+                _slug=$(slug_for interface "$_if")
+                _pdn="$_name-$_slug-d"; _pup="$_name-$_slug-u"
+                _rdn="$_name-$_slug-down"; _rup="$_name-$_slug-up"
+                upsert "^pipe $_pdn " "pipe $_pdn bw $_dr queue 50 delay 0 plr 0 burst $_db"
+                upsert "^pipe $_pup " "pipe $_pup bw $_ur queue 50 delay 0 plr 0 burst $_ub"
+                upsert "^rule $_rdn " "rule $_rdn out on $_if pipe $_pdn"
+                upsert "^rule $_rup " "rule $_rup in on $_if pipe $_pup"
+                ;;
+            ip)
+                _addr="$4"; _if="$6"; _side="${8:-uplink}"
+                _slug=$(slug_for ip "$_addr")
+                _pdn="$_name-$_slug-d"; _pup="$_name-$_slug-u"
+                _rdn="$_name-$_slug-down"; _rup="$_name-$_slug-up"
+                upsert "^pipe $_pdn " "pipe $_pdn bw $_dr queue 50 delay 0 plr 0 burst $_db"
+                upsert "^pipe $_pup " "pipe $_pup bw $_ur queue 50 delay 0 plr 0 burst $_ub"
+                case "$_side" in
+                    uplink)
+                        upsert "^rule $_rdn " "rule $_rdn in on $_if pipe $_pdn dst $_addr"
+                        upsert "^rule $_rup " "rule $_rup out on $_if pipe $_pup src $_addr"
+                        ;;
+                    customer)
+                        upsert "^rule $_rdn " "rule $_rdn out on $_if pipe $_pdn dst $_addr"
+                        upsert "^rule $_rup " "rule $_rup in on $_if pipe $_pup src $_addr"
+                        ;;
+                esac
+                ;;
+        esac
+    done
+    return 0
+}
+
+cmd_bind_interface() {
+    _prof="$1"; _if="$2"
+    valid_profile_name "$_prof"
+    profile_exists "$_prof" || die "profile $_prof not found (create it first: profile $_prof, then download/upload)"
+    iface_exists "$_if"
+    profile_complete "$_prof" || die "profile $_prof belum lengkap (set download + upload dulu)"
+    _slug=$(slug_for interface "$_if")
+    check_derived_len "$_prof" "$_slug"
+    bind_upsert "bind $_prof interface $_if"
+    sync_profile "$_prof"
+    echo "profile $_prof bound to interface $_if"
+    exit 0
+}
+
+cmd_bind_ip() {
+    _prof="$1"; _addr="$2"; _if="$3"; _side="${4:-uplink}"
+    valid_profile_name "$_prof"
+    profile_exists "$_prof" || die "profile $_prof not found (create it first)"
+    case "$_addr" in
+        any|"") die "bind ip needs an address or CIDR (not 'any')" ;;
+    esac
+    iface_exists "$_if"
+    case "$_side" in
+        uplink|customer) ;;
+        *) die "side must be uplink|customer" ;;
+    esac
+    profile_complete "$_prof" || die "profile $_prof belum lengkap (set download + upload dulu)"
+    _slug=$(slug_for ip "$_addr")
+    check_derived_len "$_prof" "$_slug"
+    _addr_re=$(regex_escape "$_addr"); _if_re=$(regex_escape "$_if")
+    # hapus bind lama untuk (profile, ip, if) yang sama (sisi boleh berbeda)
+    dellines "^bind $_prof ip $_addr_re on $_if_re " "bind $_prof ip $_addr"
+    bind_upsert "bind $_prof ip $_addr on $_if side $_side"
+    sync_profile "$_prof"
+    echo "profile $_prof bound to $_addr on $_if (side $_side)"
+    exit 0
+}
+
+delete_derived() {
+    # delete_derived <profile> <slug> — hapus rule turunan lalu pipe turunan
+    _prof="$1"; _slug="$2"
+    for _r in "$_prof-$_slug-down" "$_prof-$_slug-up"; do
+        dellines "^rule $_r " "rule $_r"
+    done
+    for _p in "$_prof-$_slug-d" "$_prof-$_slug-u"; do
+        _dep=$(grep -E "^queue [^ ]+ pipe $_p( |\$)" "$CONF" 2>/dev/null | awk '{print $2}' | tr '\n' ' ')
+        _dep2=$(grep -E "^rule [^ ]+ .* pipe $_p( |\$)" "$CONF" 2>/dev/null | awk '{print $2}' | tr '\n' ' ')
+        if [ -n "$_dep$_dep2" ]; then
+            echo "warning: pipe $_p masih dipakai (queues [${_dep:-none}] rules [${_dep2:-none}]) — tidak dihapus" >&2
+            continue
+        fi
+        dellines "^pipe $_p " "pipe $_p"
+    done
+}
+
+cmd_unbind_interface() {
+    _prof="$1"; _if="$2"
+    valid_profile_name "$_prof"
+    _slug=$(slug_for interface "$_if")
+    _if_re=$(regex_escape "$_if")
+    dellines "^bind $_prof interface $_if_re\$" "bind $_prof interface $_if"
+    delete_derived "$_prof" "$_slug"
+    echo "profile $_prof unbound from interface $_if"
+    exit 0
+}
+
+cmd_unbind_ip() {
+    _prof="$1"; _addr="$2"; _if="$3"
+    valid_profile_name "$_prof"
+    _slug=$(slug_for ip "$_addr")
+    _addr_re=$(regex_escape "$_addr"); _if_re=$(regex_escape "$_if")
+    dellines "^bind $_prof ip $_addr_re on $_if_re " "bind $_prof ip $_addr"
+    delete_derived "$_prof" "$_slug"
+    echo "profile $_prof unbound from $_addr on $_if"
+    exit 0
+}
+
+cmd_del_profile() {
+    _name="$1"; valid_profile_name "$_name"
+    touch_conf
+    _binds=$(grep "^bind $_name " "$CONF" 2>/dev/null || true)
+    if [ -n "$_binds" ]; then
+        printf '%s\n' "$_binds" | while read -r _bline; do
+            set -- $_bline
+            case "$3" in
+                interface)
+                    _slug=$(slug_for interface "$4")
+                    delete_derived "$_name" "$_slug"
+                    ;;
+                ip)
+                    _slug=$(slug_for ip "$4")
+                    delete_derived "$_name" "$_slug"
+                    ;;
+            esac
+        done
+    fi
+    dellines "^bind $_name " "bind $_name"
+    dellines "^profile $_name " "profile $_name"
+    echo "profile $_name deleted"
+    exit 0
+}
+
+cmd_show_profile() {
+    # show-profile [name]
+    touch_conf
+    if [ -n "${1:-}" ]; then
+        _name="$1"
+        valid_profile_name "$_name"
+        _line=$(grep "^profile $_name " "$CONF" 2>/dev/null | head -1)
+        [ -n "$_line" ] || { echo "(no profile $_name)"; exit 0; }
+        echo "profile $_name:"
+        echo "  $_line"
+        _b=$(grep "^bind $_name " "$CONF" 2>/dev/null || true)
+        echo "  bindings:"
+        if [ -n "$_b" ]; then printf '%s\n' "$_b" | sed 's/^/    /'; else echo "    (none)"; fi
+        _p=$(grep -E "^pipe $_name-" "$CONF" 2>/dev/null || true)
+        echo "  derived pipes:"
+        if [ -n "$_p" ]; then printf '%s\n' "$_p" | sed 's/^/    /'; else echo "    (none)"; fi
+        _r=$(grep -E "^rule $_name-" "$CONF" 2>/dev/null || true)
+        echo "  derived rules:"
+        if [ -n "$_r" ]; then printf '%s\n' "$_r" | sed 's/^/    /'; else echo "    (none)"; fi
+    else
+        _n=$(grep -c '^profile ' "$CONF" 2>/dev/null || true)
+        if [ "$_n" = "0" ] || [ -z "$_n" ]; then echo "(no profiles)"; exit 0; fi
+        echo "profiles:"
+        grep '^profile ' "$CONF" 2>/dev/null | sed 's/^/  /'
+        echo "bindings:"
+        _b=$(grep '^bind ' "$CONF" 2>/dev/null || true)
+        if [ -n "$_b" ]; then printf '%s\n' "$_b" | sed 's/^/  /'; else echo "  (none)"; fi
+    fi
+    exit 0
+}
+
 # traffic-shape-apply — apply /usr/local/etc/traffic-shape.conf to the kernel
 # BSDRP_klish, prepared 2026-11-08 (completed 2026-11-08 ~18:00 WIB).
 # POSIX sh, no bashisms. Syntax verified against FreeBSD 16 ipfw.8
@@ -488,7 +779,7 @@ cmd_del_rule() {
 # Exit 0 on success (including disabled / no config). Non-zero with a
 # clear message on bad config, so a klish commit can fail loudly.
 
-ANCHOR_FILE=/etc/pf-traffic-shape.conf
+ANCHOR_FILE="${TS_ANCHOR_FILE:-/etc/pf-traffic-shape.conf}"
 ANCHOR=traffic-shape
 
 warn() {
@@ -500,21 +791,43 @@ pf_enabled() {
     pfctl -s info 2>/dev/null | grep -q "Status: Enabled"
 }
 
+# _obj_exists <type> <n> — true bila objek dummynet ada.
+# `ipfw <tipe> <n> show` mengembalikan rc 0 BAHKAN untuk objek yang
+# tidak ada (terverifikasi live 19 Nov 2026) — jadi keberadaan dicek
+# dari OUTPUT, bukan rc.
+_obj_exists() {
+    [ -n "$(ipfw "$1" "$2" show 2>/dev/null)" ]
+}
+
 flush_all() {
     # Only our own ranges: pipes 1-99, queues 100-199, scheds 200-299.
+    # Hapus HANYA objek yang ada (cek _obj_exists dulu). Delete objek
+    # yang tidak ada memicu kernel "do_config invalid delete type 3"
+    # (dummynet tidak menangani delete scheduler langsung, type 3 =
+    # sched) — 100x per apply (loop sched 200-299), membanjiri
+    # /var/log/messages padahal status normal (temuan 19 Nov 2026).
+    # Delete scheduler yang MEMANG ada tetap dicoba (best-effort);
+    # kernel mengabaikannya — sched tidak terhapus via jalur ini
+    # (keterbatasan kernel, sama seperti bug pfSense #16275).
     _n=1
     while [ "$_n" -le 99 ]; do
-        ipfw pipe "$_n" delete >/dev/null 2>&1 || true
+        if _obj_exists pipe "$_n"; then
+            ipfw pipe "$_n" delete >/dev/null 2>&1 || true
+        fi
         _n=$((_n + 1))
     done
     _n=100
     while [ "$_n" -le 199 ]; do
-        ipfw queue "$_n" delete >/dev/null 2>&1 || true
+        if _obj_exists queue "$_n"; then
+            ipfw queue "$_n" delete >/dev/null 2>&1 || true
+        fi
         _n=$((_n + 1))
     done
     _n=200
     while [ "$_n" -le 299 ]; do
-        ipfw sched "$_n" delete >/dev/null 2>&1 || true
+        if _obj_exists sched "$_n"; then
+            ipfw sched "$_n" delete >/dev/null 2>&1 || true
+        fi
         _n=$((_n + 1))
     done
     if pf_enabled; then
@@ -807,8 +1120,16 @@ case "$op" in
     del-sched)     cmd_del_sched "$@" ;;
     del-queue)     cmd_del_queue "$@" ;;
     del-rule)      cmd_del_rule "$@" ;;
+    check-profile)   cmd_check_profile "$@" ;;
+    set-profile-field) cmd_set_profile_field "$@" ;;
+    bind-interface)  cmd_bind_interface "$@" ;;
+    bind-ip)         cmd_bind_ip "$@" ;;
+    unbind-interface) cmd_unbind_interface "$@" ;;
+    unbind-ip)       cmd_unbind_ip "$@" ;;
+    del-profile)     cmd_del_profile "$@" ;;
+    show-profile)    cmd_show_profile "$@" ;;
     apply)         cmd_apply "$@" ;;
     apply-all)     cmd_apply ;;
     flush)         cmd_apply --flush ;;
-    *) echo "usage: $PROG <check|set-enable|set-pipe-field|set-sched-field|set-queue-field|set-rule-field|del-pipe|del-sched|del-queue|del-rule|show|show-pipe|show-sched|show-queue|show-rule|stats|apply|apply-all|flush> ..." >&2; exit 2 ;;
+    *) echo "usage: $PROG <check|set-enable|set-pipe-field|set-sched-field|set-queue-field|set-rule-field|del-pipe|del-sched|del-queue|del-rule|check-profile|set-profile-field|bind-interface|bind-ip|unbind-interface|unbind-ip|del-profile|show-profile|show|show-pipe|show-sched|show-queue|show-rule|stats|apply|apply-all|flush> ..." >&2; exit 2 ;;
 esac

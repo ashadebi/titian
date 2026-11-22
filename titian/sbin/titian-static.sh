@@ -90,6 +90,14 @@
 STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
 CONF="$STATE_ROOT/static.conf"
 SECTION_DIR="$STATE_ROOT/bird.d"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show) titian_page_begin ;; esac
+
 SECTION="$SECTION_DIR/static.conf"
 PROG="titian-static"
 err() { echo "Error($PROG): $*" >&2; exit 33; }
@@ -105,12 +113,24 @@ touch_conf() {
 }
 
 # upsert <regex-untuk-hapus> <baris-baru>
+# Ganti DI TEMPAT: baris pertama yang cocok diganti baris baru (posisi
+# dipertahankan), duplikat lain dibuang; append hanya bila belum ada.
+# (Dulu hapus + append di akhir — replay startup-config memindahkan
+# baris ke akhir file tiap restart: sink blackhole yang di-replay lebih
+# dulu dari via (via-add aman diulang, tidak bergerak) sehingga urutan
+# intent membalik dan bird.conf flip; B27-ordering, 18 Nov 2026.)
 upsert() {
     _re="$1"; _line="$2"
     touch_conf
     _tmp="$CONF.tmp.$$"
-    grep -v "$_re" "$CONF" > "$_tmp" 2>/dev/null || true
-    printf '%s\n' "$_line" >> "$_tmp"
+    awk -v re="$_re" -v line="$_line" '
+        $0 ~ re {
+            if (!done) { print line; done=1 }
+            next
+        }
+        { print }
+        END { if (!done) print line }
+    ' "$CONF" > "$_tmp" 2>/dev/null || true
     mv "$_tmp" "$CONF" || die "cannot write $CONF"
     chmod 600 "$CONF" 2>/dev/null || true
 }
@@ -375,7 +395,7 @@ cmd_route_via_add() {
     [ "$(prefix_family "$_p")" = "$(ip_family "$_nh")" ] || \
         err "nexthop $_nh beda keluarga dengan prefix $_p (v4 vs v6)"
     check_kind_conflict "$_p" via
-    # Idempotent: via yang sama sudah ada -> tidak duplikat.
+    # Aman diulang: via yang sama sudah ada -> tidak duplikat.
     if awk -v p="$_p" -v nh="$_nh" '$1=="route" && $2==p && $3=="via" && $4==nh {f=1} END{exit !f}' "$CONF" 2>/dev/null; then
         echo "Static route $_p via $_nh sudah ada"
         return 0
@@ -551,11 +571,20 @@ cmd_route_sink_set() {
         *) err "sink harus blackhole|unreachable|prohibit: $_k" ;;
     esac
     check_kind_conflict "$_p" "$_k"
-    # Sink menggantikan sink lama (satu sink per prefix).
+    # Sink menggantikan sink lama (satu sink per prefix). Ganti DI
+    # TEMPAT agar urutan intent tidak berubah tiap replay (dulu hapus +
+    # append di akhir — replay memindahkan blackhole ke akhir file;
+    # B27-ordering, 18 Nov 2026).
     _tmp="$CONF.tmp.$$"
-    awk -v p="$_p" '!($1=="route" && $2==p && ($3=="blackhole" || $3=="unreachable" || $3=="prohibit"))' "$CONF" 2>/dev/null > "$_tmp" || true
+    awk -v p="$_p" -v k="$_k" '
+        $1=="route" && $2==p && ($3=="blackhole" || $3=="unreachable" || $3=="prohibit") {
+            if (!done) { print "route " p " " k; done=1 }
+            next
+        }
+        { print }
+        END { if (!done) print "route " p " " k }
+    ' "$CONF" > "$_tmp" || true
     mv "$_tmp" "$CONF" || die "cannot write $CONF"
-    printf 'route %s %s\n' "$_p" "$_k" >> "$CONF"
     echo "Static route $_p $_k"
 }
 

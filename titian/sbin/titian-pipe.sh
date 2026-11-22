@@ -45,6 +45,14 @@
 STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
 CONF="$STATE_ROOT/pipe.conf"
 SECTION_DIR="$STATE_ROOT/bird.d"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show) titian_page_begin ;; esac
+
 SECTION="$SECTION_DIR/pipe.conf"
 PROG="titian-pipe"
 err() { echo "Error($PROG): $*" >&2; exit 33; }
