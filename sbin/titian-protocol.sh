@@ -1,0 +1,624 @@
+#!/bin/sh
+# titian-protocol.sh — Kernel + Device intent (BIRD `protocol kernel` /
+# `protocol device`) untuk Titian/klish.
+# Pola sama seperti titian-bfd.sh: intent di /etc/titian/kernel.conf dan
+# /etc/titian/device.conf (tmpfs, dipersistenkan via titian-cfg.sh),
+# generate menulis section BIRD /etc/titian/bird.d/protocol.conf lalu
+# memanggil titian-bird.sh generate protocol (render + validasi +
+# birdc). Section ditulis ulang UTUH tiap apply.
+#
+# KENAPA SATU BACKEND UNTUK DUA PROTOKOL: section `protocol`
+# (bird.d/protocol.conf, marker #-PROTOCOL-#) SUDAH berisi kedua
+# instance itu sejak awal (etc/bird.d/protocol.conf contoh: device +
+# kernel ipv4/ipv6). Memisah ke bird.d/kernel.conf + bird.d/device.conf
+# akan menduplikasi instance `protocol device` / `protocol kernel` di
+# bird.conf — BIRD menolak / perilaku ganda. Jadi kernel.conf +
+# device.conf tetap intent terpisah (satu baris per fakta, sesuai pola),
+# tapi generate-nya digabung ke section protocol yang sudah ada.
+# Bila TIDAK ADA intent kernel/device sama sekali, commit melewati
+# backend ini dan protocol.conf contoh tetap dipakai apa adanya.
+#
+# Sintaks BIRD 2.16.1 yang dipakai (docs resmi bird.network,
+# User's Guide 2.16.1, §6.8 Kernel + §6.6 Device):
+#   protocol device {
+#       scan time <secs>;
+#       interface "<pattern>" {
+#           preferred <ip>;
+#       };
+#   }
+#   protocol kernel kernel4 {
+#       learn; | learn all;
+#       persist;
+#       scan time <secs>;
+#       graceful restart;
+#       merge paths yes [limit <num>];
+#       ipv4 { import all|none; export all|none; };
+#   }
+#   protocol kernel kernel6 {
+#       ... (opsi global sama) ...
+#       ipv6 { import all|none; export all|none; };
+#   }
+# Satu channel per instance Kernel (docs K16) — karena itu ipv4 dan
+# ipv6 dipisah ke instance kernel4/kernel6, sama seperti contoh
+# protocol.conf yang sudah ada. Opsi global (learn/persist/scan/
+# graceful-restart/merge-paths) ditulis sama di kedua instance.
+#
+# Default yang DIPERTAHANKAN dari contoh protocol.conf yang sudah ada
+# (bukan default BIRD — docs TIDAK menyatakan angkanya, jangan ditebak):
+#   - Device scan time 10 bila tidak diset eksplisit.
+#   - Kernel channel import none + export none (LAB-SAFE: BIRD tidak
+#     menyentuh tabel kernel sampai operator membuka ekspornya).
+# Default BIRD yang TIDAK dinyatakan docs (persist, scan time kernel,
+# graceful restart kernel) TIDAK ditebak: opsi itu hanya ditulis bila
+# operator menyetnya eksplisit di klish.
+#
+# N/A FreeBSD — TIDAK diimplementasi, JANGAN ditambahkan tanpa
+# verifikasi padanan BSD-nya (docs menandainya Linux):
+#   - `kernel table <num>` (K5): OS multi-tabel; FreeBSD satu tabel kernel.
+#   - `metric <num>` (K6): metric kernel Linux (default 32).
+#   - `netlink rx buffer` (K9): socket netlink Linux.
+#   - Atribut `krt_*` (K10-K15: krt_source/krt_metric/krt_prefsrc/
+#     krt_realm/krt_scope/krt_mtu/...): atribut route Linux.
+# `learn all` (K4) mengimpor juga device route buatan kernel sendiri;
+# `learn` saja hanya route alien (daemon lain/admin).
+#
+# Format kernel.conf (satu baris per fakta):
+#   learn on|off|all
+#   persist on|off
+#   scan-time <secs>
+#   graceful-restart on|off
+#   merge-paths on|off
+#   merge-paths-limit <N>     (1..16; hanya berlaku bila merge-paths on)
+#   debug all|off|kelas,kelas (Bab 3.4-2; B11)
+#   mrtdump all|off|kelas,kelas (Bab 3.4-3; B11)
+#   disabled on|off          (Bab 3.4-1; B11)
+#   channel ipv4 preference <N>   (0..65535, Bab 3.5-3; B11)
+#   channel ipv4 import all|none|filter NAME|where COND  (Bab 3.5-4/5; B11)
+#   channel ipv4 export all|none|filter NAME|where COND  (Bab 3.5-4/5; B11)
+#   channel <ipv4|ipv6> table <NAME>  — tabel BIRD yang disinkronkan ke
+#       kernel FIB (default master4/master6; B14, Bab 2.1-2). Harus tabel
+#       yang ADA (built-in master4/master6 atau `table-add` di bird global)
+#       dan nettype-nya cocok dengan channel. Emit `table NAME;` di blok
+#       channel saat generate.
+#   channel ipv6 preference <N>
+#   channel ipv6 import all|none|filter NAME|where COND
+#   channel ipv6 export all|none|filter NAME|where COND
+#
+# Format device.conf (satu baris per fakta):
+#   scan-time <secs>
+#   debug all|off|kelas,kelas (Bab 3.4-2; B11)
+#   mrtdump all|off|kelas,kelas (Bab 3.4-3; B11)
+#   disabled on|off          (Bab 3.4-1; B11)
+#   interface <pattern>
+#   interface <pattern> preferred <ip>
+
+STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
+KCONF="$STATE_ROOT/kernel.conf"
+DCONF="$STATE_ROOT/device.conf"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show*) titian_page_begin ;; esac
+
+SECTION_DIR="$STATE_ROOT/bird.d"
+SECTION="$SECTION_DIR/protocol.conf"
+PROG="titian-protocol"
+err() { echo "Error($PROG): $*" >&2; exit 33; }
+die() { echo "$PROG: $*" >&2; exit 1; }
+
+touch_kconf() {
+    if [ ! -f "$KCONF" ]; then
+        mkdir -p "$(dirname "$KCONF")" 2>/dev/null
+        printf '# kernel.conf - generated by klish, do not edit by hand\n' > "$KCONF" \
+            || die "cannot create $KCONF"
+        chmod 600 "$KCONF" 2>/dev/null || true
+    fi
+}
+
+touch_dconf() {
+    if [ ! -f "$DCONF" ]; then
+        mkdir -p "$(dirname "$DCONF")" 2>/dev/null
+        printf '# device.conf - generated by klish, do not edit by hand\n' > "$DCONF" \
+            || die "cannot create $DCONF"
+        chmod 600 "$DCONF" 2>/dev/null || true
+    fi
+}
+
+# re_esc <teks> — escape karakter regex (pola interface boleh
+# mengandung `*`, mis. "ge*") agar grep -v tidak salah hapus.
+re_esc() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/\./\\./g' -e 's/\*/\\*/g' \
+        -e 's/\[/\\[/g' -e 's/\]/\\]/g' -e 's/\^/\\^/g' -e 's/\$/\\$/g'
+}
+
+# upsert_file <file> <regex-untuk-hapus> <baris-baru>
+upsert_file() {
+    _f="$1"; _re="$2"; _line="$3"
+    _tmp="$_f.tmp.$$"
+    grep -v "$_re" "$_f" > "$_tmp" 2>/dev/null || true
+    printf '%s\n' "$_line" >> "$_tmp"
+    mv "$_tmp" "$_f" || die "cannot write $_f"
+    chmod 600 "$_f" 2>/dev/null || true
+}
+
+del_file() {
+    _f="$1"; _re="$2"
+    _tmp="$_f.tmp.$$"
+    grep -v "$_re" "$_f" > "$_tmp" 2>/dev/null || true
+    mv "$_tmp" "$_f" || die "cannot write $_f"
+}
+
+has_facts_file() {
+    [ -f "$1" ] || return 1
+    grep -v '^[[:space:]]*#' "$1" 2>/dev/null | grep -q '[^[:space:]]'
+}
+
+valid_scan_time() {
+    # $1=nilai $2=konteks: bilangan 1..86400 (batas kewarasan klish,
+    # BUKAN default BIRD — docs tidak menyatakan angka default).
+    case "$1" in ''|*[!0-9]*) err "$2 harus bilangan detik 1..86400: $1" ;; esac
+    [ "$1" -ge 1 ] 2>/dev/null && [ "$1" -le 86400 ] 2>/dev/null || \
+        err "$2 harus bilangan detik 1..86400: $1"
+}
+
+valid_name() {
+    # $1=nama $2=konteks: simbol BIRD [A-Za-z_][A-Za-z0-9_]*.
+    case "$1" in
+        ''|*[!A-Za-z0-9_]*) err "$2 harus nama BIRD [A-Za-z0-9_]: $1" ;;
+    esac
+    case "$1" in [A-Za-z_]*) ;; *) err "$2 harus diawali huruf/underscore: $1" ;; esac
+}
+
+valid_num() {
+    # valid_num <nilai> <lo> <hi> <label> — bilangan bulat dalam range.
+    case "$1" in ''|*[!0-9]*) err "$4 harus bilangan $2..$3: $1" ;; esac
+    [ "$1" -ge "$2" ] 2>/dev/null && [ "$1" -le "$3" ] 2>/dev/null || \
+        err "$4 harus bilangan $2..$3: $1"
+}
+
+# valid_spec <SPEC> <debug|mrtdump> — validasi daftar kelas koma (Bab 3.4-2/3).
+valid_spec() {
+    _vs_spec="$1"; _vs_kind="$2"
+    [ -n "$_vs_spec" ] || err "$_vs_kind butuh all|off|kelas,kelas,..."
+    case "$_vs_spec" in all|off) return 0 ;; esac
+    _vs_rest="$_vs_spec"
+    while [ -n "$_vs_rest" ]; do
+        case "$_vs_rest" in *,*) _vs_done=${_vs_rest%%,*}; _vs_rest=${_vs_rest#*,} ;; *) _vs_done="$_vs_rest"; _vs_rest="" ;; esac
+        if [ "$_vs_kind" = "debug" ]; then
+            case "$_vs_done" in states|routes|filters|interfaces|events|packets) ;; *) err "debug kelas tidak dikenal: $_vs_done (boleh: states|routes|filters|interfaces|events|packets)" ;; esac
+        else
+            case "$_vs_done" in states|messages) ;; *) err "mrtdump kelas tidak dikenal: $_vs_done (boleh: states|messages)" ;; esac
+        fi
+    done
+}
+
+# emit_dbg <SPEC> <debug|mrtdump> — satu baris debug/mrtdump (indent 4 spasi).
+emit_dbg() {
+    case "$1" in all|off) echo "    $2 $1;" ;; *) echo "    $2 { $(printf '%s' "$1" | sed 's/,/, /g') };" ;; esac
+}
+
+cond_validate() {
+    # cond_validate <COND> — validasi ekspresi filter bentuk ringkas
+    # (mis. net~10.0.0.0/8) via titian-bgp.sh cond-to-bird. Bila script
+    # itu tidak ada (deploy parsial), fallback validasi ringan.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" >/dev/null
+    else
+        case "$1" in *[\;\{\}]* ) err "where: ekspresi mengandung karakter terlarang (; { })" ;; esac
+    fi
+}
+
+cond_translate() {
+    # cond_translate <COND> -> terjemahan BIRD (stdout); gagal rc=33.
+    # Dipakai di generate untuk bentuk `import/export where <COND>`.
+    _bgpsh="$(dirname "$0")/titian-bgp.sh"
+    if [ -x "$_bgpsh" ]; then
+        "$_bgpsh" cond-to-bird "$1" || exit 33
+    else
+        err "penerjemah kondisi tidak tersedia (titian-bgp.sh tidak ditemukan di $(dirname "$0"))"
+    fi
+}
+
+valid_ip() {
+    # $1=ip $2=konteks: alamat IP (v4/v6, boleh suffix %zone).
+    _ip="${1%%\%*}"
+    case "$_ip" in
+        *:*)
+            case "$_ip" in *[!0-9a-fA-F:]*) err "$2 bukan alamat IPv6 valid: $1" ;; esac ;;
+        *.*.*.*)
+            case "$_ip" in *[!0-9.]*) err "$2 bukan alamat IPv4 valid: $1" ;; esac ;;
+        *) err "$2 bukan alamat IP valid: $1" ;;
+    esac
+}
+
+# --- kernel ---
+cmd_kernel_touch() {
+    touch_kconf
+    echo "Kernel"
+}
+
+cmd_kernel_set() {
+    # kernel-set <field> <value>
+    # field: learn|persist|scan-time|graceful-restart|merge-paths|merge-paths-limit|debug|mrtdump|disabled
+    # (debug/mrtdump/disabled = Bab 3.4-2/3/1.)
+    _f="$1"; _v="$2"; _ff="$_f" # _ff: upsert_file menimpa $_f (path file)
+    [ -n "$_f" ] && [ -n "$_v" ] || err "kernel-set butuh FIELD VALUE"
+    touch_kconf
+    case "$_f" in
+        learn)
+            case "$_v" in
+                on|off|all) upsert_file "$KCONF" '^learn ' "learn $_v" ;;
+                *) err "learn harus on|off|all: $_v" ;;
+            esac ;;
+        persist)
+            case "$_v" in
+                on|off) upsert_file "$KCONF" '^persist ' "persist $_v" ;;
+                *) err "persist harus on|off: $_v" ;;
+            esac ;;
+        scan-time)
+            valid_scan_time "$_v" "scan-time"
+            upsert_file "$KCONF" '^scan-time ' "scan-time $_v" ;;
+        graceful-restart)
+            case "$_v" in
+                on|off) upsert_file "$KCONF" '^graceful-restart ' "graceful-restart $_v" ;;
+                *) err "graceful-restart harus on|off: $_v" ;;
+            esac ;;
+        merge-paths)
+            case "$_v" in
+                on|off) upsert_file "$KCONF" '^merge-paths ' "merge-paths $_v" ;;
+                *) err "merge-paths harus on|off: $_v" ;;
+            esac ;;
+        merge-paths-limit)
+            case "$_v" in ''|*[!0-9]*) err "merge-paths-limit harus bilangan 1..16: $_v" ;; esac
+            [ "$_v" -ge 1 ] 2>/dev/null && [ "$_v" -le 16 ] 2>/dev/null || \
+                err "merge-paths-limit harus bilangan 1..16: $_v"
+            upsert_file "$KCONF" '^merge-paths-limit ' "merge-paths-limit $_v" ;;
+        debug)
+            valid_spec "$_v" "debug"
+            upsert_file "$KCONF" '^debug ' "debug $_v" ;;
+        mrtdump)
+            valid_spec "$_v" "mrtdump"
+            upsert_file "$KCONF" '^mrtdump ' "mrtdump $_v" ;;
+        disabled)
+            case "$_v" in
+                on|off) upsert_file "$KCONF" '^disabled ' "disabled $_v" ;;
+                *) err "disabled harus on|off: $_v" ;;
+            esac ;;
+        *) err "field kernel tidak dikenal: $_f (learn|persist|scan-time|graceful-restart|merge-paths|merge-paths-limit|debug|mrtdump|disabled)" ;;
+    esac
+    echo "Kernel $_ff = $_v"
+}
+
+cmd_kernel_del() { # kernel-del <debug|mrtdump|disabled> (kembali ke default BIRD)
+    _f="$1"
+    [ -n "$_f" ] || err "kernel-del butuh FIELD"
+    touch_kconf
+    case "$_f" in
+        debug|mrtdump|disabled) del_file "$KCONF" "^$_f " ;;
+        *) err "field kernel tidak dikenal: $_f (debug|mrtdump|disabled)" ;;
+    esac
+    echo "Kernel $_f dihapus (default BIRD)"
+}
+
+# kernel_table_exists <ipv4|ipv6> <NAME> — tabel BIRD ada: built-in
+# master4/master6, atau baris `table <nettype> <nama>` di intent global
+# (Bab 2.1-2; B14). Nettype WAJIB cocok dengan channel (tabel flow4/roa4
+# bukan tabel ipv4 — BIRD akan menolaknya di channel kernel).
+kernel_table_exists() {
+    _kte_ch="$1"; _kte_n="$2"
+    case "$_kte_ch" in
+        ipv4) [ "$_kte_n" = "master4" ] && return 0 ;;
+        ipv6) [ "$_kte_n" = "master6" ] && return 0 ;;
+    esac
+    grep -q "^table $_kte_ch $_kte_n\$" "$STATE_ROOT/bird-global.conf" 2>/dev/null
+}
+
+cmd_kernel_channel_set() {
+    # kernel-channel-set <ipv4|ipv6> <table|preference|import|export> <nilai...>
+    # (Bab 3.5-3/4/5; where = filter inline bentuk ringkas, mis.
+    # net~10.0.0.0/8 — diterjemahkan saat generate.)
+    _ch="$1"; _dir="$2"; shift 2
+    [ -n "$_ch" ] && [ -n "$_dir" ] && [ -n "$1" ] || \
+        err "kernel-channel-set butuh CHANNEL FIELD NILAI"
+    case "$_ch" in ipv4|ipv6) ;; *) err "channel harus ipv4|ipv6: $_ch" ;; esac
+    case "$_dir" in
+        table)
+            valid_name "$1" "nama tabel"
+            kernel_table_exists "$_ch" "$1" || \
+                err "tabel $_ch $1 tidak ada — pakai master4/master6, atau definisikan dulu: table-add $_ch $1 (bird global view)"
+            touch_kconf
+            upsert_file "$KCONF" "^channel $_ch table " "channel $_ch table $1"
+            echo "Kernel channel $_ch table = $1" ;;
+        preference)
+            valid_num "$1" 0 65535 "preference"
+            touch_kconf
+            upsert_file "$KCONF" "^channel $_ch preference " "channel $_ch preference $1"
+            echo "Kernel channel $_ch preference = $1" ;;
+        import|export)
+            _val="$*"
+            case "$1" in
+                all|none) touch_kconf; upsert_file "$KCONF" "^channel $_ch $_dir " "channel $_ch $_dir $1" ;;
+                filter) [ -n "$2" ] || err "$_dir filter butuh nama filter"
+                    valid_name "$2" "nama filter"
+                    touch_kconf; upsert_file "$KCONF" "^channel $_ch $_dir " "channel $_ch $_dir filter $2" ;;
+                where)
+                    shift
+                    [ -n "$*" ] || err "$_dir where butuh ekspresi filter bentuk ringkas (mis. where net~10.0.0.0/8)"
+                    cond_validate "$*" || exit 33
+                    touch_kconf; upsert_file "$KCONF" "^channel $_ch $_dir " "channel $_ch $_dir where $*" ;;
+                *) err "$_dir harus all|none|filter <nama>|where <ekspresi>: $1" ;;
+            esac
+            echo "Kernel channel $_ch $_dir = $_val" ;;
+        *) err "channel field harus table|preference|import|export: $_dir" ;;
+    esac
+}
+
+cmd_kernel_channel_del() { # kernel-channel-del <ipv4|ipv6> <table|preference|import|export>
+    _ch="$1"; _dir="$2"
+    case "$_ch" in ipv4|ipv6) ;; *) err "channel harus ipv4|ipv6: $_ch" ;; esac
+    case "$_dir" in
+        table|preference|import|export) touch_kconf; del_file "$KCONF" "^channel $_ch $_dir " ;;
+        *) err "channel field harus table|preference|import|export: $_dir" ;;
+    esac
+    echo "Kernel channel $_ch $_dir dihapus (default BIRD)"
+}
+
+cmd_kernel_scan_time_del() {
+    touch_kconf
+    del_file "$KCONF" '^scan-time '
+    echo "Kernel scan-time dihapus (kembali tanpa nilai eksplisit — default tidak dinyatakan docs)"
+}
+
+# --- device ---
+cmd_device_touch() {
+    touch_dconf
+    echo "Device"
+}
+
+cmd_device_scan_time_set() {
+    [ -n "$1" ] || err "device scan-time butuh detik"
+    valid_scan_time "$1" "scan-time"
+    touch_dconf
+    upsert_file "$DCONF" '^scan-time ' "scan-time $1"
+    echo "Device scan-time = $1"
+}
+
+cmd_device_scan_time_del() {
+    touch_dconf
+    del_file "$DCONF" '^scan-time '
+    echo "Device scan-time dihapus (kembali ke 10, nilai contoh yang sudah ada)"
+}
+
+cmd_device_set() { # device-set <debug|mrtdump|disabled> <nilai> (Bab 3.4-2/3/1)
+    _f="$1"; _v="$2"; _ff="$_f" # _ff: upsert_file menimpa $_f (path file)
+    [ -n "$_f" ] && [ -n "$_v" ] || err "device-set butuh FIELD VALUE"
+    touch_dconf
+    case "$_f" in
+        debug)
+            valid_spec "$_v" "debug"
+            upsert_file "$DCONF" '^debug ' "debug $_v" ;;
+        mrtdump)
+            valid_spec "$_v" "mrtdump"
+            upsert_file "$DCONF" '^mrtdump ' "mrtdump $_v" ;;
+        disabled)
+            case "$_v" in
+                on|off) upsert_file "$DCONF" '^disabled ' "disabled $_v" ;;
+                *) err "disabled harus on|off: $_v" ;;
+            esac ;;
+        *) err "field device tidak dikenal: $_f (debug|mrtdump|disabled)" ;;
+    esac
+    echo "Device $_ff = $_v"
+}
+
+cmd_device_del() { # device-del <debug|mrtdump|disabled> (kembali ke default BIRD)
+    _f="$1"
+    [ -n "$_f" ] || err "device-del butuh FIELD"
+    touch_dconf
+    case "$_f" in
+        debug|mrtdump|disabled) del_file "$DCONF" "^$_f " ;;
+        *) err "field device tidak dikenal: $_f (debug|mrtdump|disabled)" ;;
+    esac
+    echo "Device $_f dihapus (default BIRD)"
+}
+
+cmd_device_interface_add() {
+    _pat="$1"
+    [ -n "$_pat" ] || err "interface-add butuh pola interface (mis. ge* atau bridge0)"
+    case "$_pat" in *' '*) err "pola interface tidak boleh mengandung spasi: $_pat" ;; esac
+    touch_dconf
+    if grep -q "^interface $(re_esc "$_pat")\( \|$\)" "$DCONF" 2>/dev/null; then
+        echo "Device interface $_pat sudah ada"
+        return 0
+    fi
+    printf 'interface %s\n' "$_pat" >> "$DCONF"
+    echo "Device interface $_pat"
+}
+
+cmd_device_interface_del() {
+    _pat="$1"
+    [ -n "$_pat" ] || err "interface-del butuh pola interface"
+    touch_dconf
+    _re=$(re_esc "$_pat")
+    del_file "$DCONF" "^interface $_re\( \|$\)"
+    echo "Device interface $_pat dihapus"
+}
+
+cmd_device_preferred_add() {
+    _pat="$1"; _ip="$2"
+    [ -n "$_pat" ] && [ -n "$_ip" ] || err "preferred-add butuh PATTERN IP"
+    valid_ip "$_ip" "preferred"
+    touch_dconf
+    # Interface harus tercatat dulu (pola saja) agar generate tahu urutannya.
+    grep -q "^interface $(re_esc "$_pat")\( \|$\)" "$DCONF" 2>/dev/null || \
+        printf 'interface %s\n' "$_pat" >> "$DCONF"
+    if grep -q "^interface $(re_esc "$_pat") preferred $_ip\$" "$DCONF" 2>/dev/null; then
+        echo "Device interface $_pat preferred $_ip sudah ada"
+        return 0
+    fi
+    printf 'interface %s preferred %s\n' "$_pat" "$_ip" >> "$DCONF"
+    echo "Device interface $_pat preferred $_ip"
+}
+
+cmd_device_preferred_del() {
+    _pat="$1"; _ip="$2"
+    [ -n "$_pat" ] && [ -n "$_ip" ] || err "preferred-del butuh PATTERN IP"
+    touch_dconf
+    _re=$(re_esc "$_pat")
+    del_file "$DCONF" "^interface $_re preferred $_ip\$"
+    echo "Device interface $_pat preferred $_ip dihapus"
+}
+
+# --- generate ---
+cmd_generate() {
+    set -f
+    mkdir -p "$SECTION_DIR" 2>/dev/null || die "cannot mkdir $SECTION_DIR"
+    _tmp="$SECTION.tmp.$$"
+    # --- device ---
+    _dscan=$(grep '^scan-time ' "$DCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    [ -n "$_dscan" ] || _dscan=10
+    _ddis=$(grep '^disabled ' "$DCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _ddbg=$(grep '^debug ' "$DCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _dmrt=$(grep '^mrtdump ' "$DCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    # --- kernel globals ---
+    _learn=$(grep '^learn ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _persist=$(grep '^persist ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _kscan=$(grep '^scan-time ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _gr=$(grep '^graceful-restart ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _merge=$(grep '^merge-paths ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _mlimit=$(grep '^merge-paths-limit ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _kdis=$(grep '^disabled ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _kdbg=$(grep '^debug ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    _kmrt=$(grep '^mrtdump ' "$KCONF" 2>/dev/null | head -1 | awk '{print $2}')
+    {
+        echo "# protocol.conf - generated by titian-protocol.sh, do not edit by hand"
+        echo "# (device + kernel; contoh lab lama dipertahankan bila tidak ada intent)"
+        echo "protocol device {"
+        case "$_ddis" in on) echo "    disabled;" ;; esac
+        [ -n "$_ddbg" ] && emit_dbg "$_ddbg" debug
+        [ -n "$_dmrt" ] && emit_dbg "$_dmrt" mrtdump
+        echo "    scan time $_dscan;"
+        for _pat in $(grep '^interface ' "$DCONF" 2>/dev/null | awk '{print $2}' | awk '!s[$0]++'); do
+            _prefs=$(grep "^interface $(re_esc "$_pat") preferred " "$DCONF" 2>/dev/null | awk '{print $4}')
+            if [ -n "$_prefs" ]; then
+                echo "    interface \"$_pat\" {"
+                for _pip in $_prefs; do
+                    echo "        preferred $_pip;"
+                done
+                echo "    };"
+            else
+                echo "    interface \"$_pat\";"
+            fi
+        done
+        echo "}"
+        echo ""
+        for _ch in ipv4 ipv6; do
+            if [ "$_ch" = "ipv4" ]; then _inst=kernel4; else _inst=kernel6; fi
+            _imp=$(grep "^channel $_ch import " "$KCONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}')
+            _exp=$(grep "^channel $_ch export " "$KCONF" 2>/dev/null | head -1 | awk '{$1=""; $2=""; $3=""; sub(/^ +/, ""); print}')
+            _pref=$(grep "^channel $_ch preference " "$KCONF" 2>/dev/null | head -1 | awk '{print $4}')
+            _tab=$(grep "^channel $_ch table " "$KCONF" 2>/dev/null | head -1 | awk '{print $4}')
+            [ -n "$_imp" ] || _imp=none
+            [ -n "$_exp" ] || _exp=none
+            echo "protocol kernel $_inst {"
+            case "$_learn" in
+                on) echo "    learn;" ;;
+                all) echo "    learn all;" ;;
+            esac
+            [ "$_persist" = "on" ] && echo "    persist;"
+            [ -n "$_kscan" ] && echo "    scan time $_kscan;"
+            [ "$_gr" = "on" ] && echo "    graceful restart;"
+            if [ "$_merge" = "on" ]; then
+                if [ -n "$_mlimit" ]; then
+                    echo "    merge paths yes limit $_mlimit;"
+                else
+                    echo "    merge paths yes;"
+                fi
+            fi
+            case "$_kdis" in on) echo "    disabled;" ;; esac
+            [ -n "$_kdbg" ] && emit_dbg "$_kdbg" debug
+            [ -n "$_kmrt" ] && emit_dbg "$_kmrt" mrtdump
+            echo "    $_ch {"
+            [ -n "$_tab" ] && echo "        table $_tab;"
+            [ -n "$_pref" ] && echo "        preference $_pref;"
+            case "$_imp" in
+                where\ *) _wcond=${_imp#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        import where $_wbird;" ;;
+                *) echo "        import $_imp;" ;;
+            esac
+            case "$_exp" in
+                where\ *) _wcond=${_exp#where }; _wbird=$(cond_translate "$_wcond") || exit 33; echo "        export where $_wbird;" ;;
+                *) echo "        export $_exp;" ;;
+            esac
+            echo "    };"
+            echo "}"
+            echo ""
+        done
+    } > "$_tmp" || die "cannot write $_tmp"
+    mv "$_tmp" "$SECTION" || die "cannot write $SECTION"
+    chmod 644 "$SECTION" 2>/dev/null || true
+    set +f
+    echo "Protocol section ditulis: $SECTION"
+    _birdsh="$(dirname "$0")/titian-bird.sh"
+    if [ -x "$_birdsh" ]; then
+        "$_birdsh" generate protocol || exit 33
+    else
+        echo "Warning: $_birdsh tidak ditemukan; section hanya ditulis, belum di-apply" >&2
+    fi
+}
+
+birdc_bin() {
+    command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
+        { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
+}
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
+
+cmd_show() {
+    echo "--- kernel.conf (intent) ---"
+    [ -f "$KCONF" ] && cat "$KCONF" || echo "(belum ada)"
+    echo "--- device.conf (intent) ---"
+    [ -f "$DCONF" ] && cat "$DCONF" || echo "(belum ada)"
+    echo "--- bird.d/protocol.conf (section, bila ada) ---"
+    [ -f "$SECTION" ] && cat "$SECTION" || echo "(belum di-generate)"
+    echo "--- birdc show protocol (device/kernel) ---"
+    _birdc=$(birdc_bin)
+    _done=0
+    for _inst in device kernel4 kernel6; do
+        if _out=$("$_birdc" $(birdc_sock) show protocol "$_inst" 2>&1); then
+            echo "$_out" | grep -v '^BIRD'
+            _done=1
+        fi
+    done
+    [ "$_done" = "0" ] && echo "(BIRD tidak jalan — birdc show protocol gagal)"
+    return 0
+}
+
+case "$1" in
+    kernel-touch) cmd_kernel_touch ;;
+    kernel-set) shift; cmd_kernel_set "$@" ;;
+    kernel-del) shift; cmd_kernel_del "$@" ;;
+    kernel-scan-time-del) cmd_kernel_scan_time_del ;;
+    kernel-channel-set) shift; cmd_kernel_channel_set "$@" ;;
+    kernel-channel-del) shift; cmd_kernel_channel_del "$@" ;;
+    device-touch) cmd_device_touch ;;
+    device-set) shift; cmd_device_set "$@" ;;
+    device-del) shift; cmd_device_del "$@" ;;
+    device-scan-time-set) shift; cmd_device_scan_time_set "$@" ;;
+    device-scan-time-del) cmd_device_scan_time_del ;;
+    device-interface-add) shift; cmd_device_interface_add "$@" ;;
+    device-interface-del) shift; cmd_device_interface_del "$@" ;;
+    device-preferred-add) shift; cmd_device_preferred_add "$@" ;;
+    device-preferred-del) shift; cmd_device_preferred_del "$@" ;;
+    generate) cmd_generate ;;
+    show) cmd_show ;;
+    *) echo "Usage: $0 {kernel-touch|kernel-set FIELD VALUE|kernel-del debug|mrtdump|disabled|kernel-channel-set ipv4|ipv6 table NAME|preference N|import|export all|none|filter NAME|where COND|kernel-channel-del ipv4|ipv6 table|preference|import|export|device-touch|device-set debug|mrtdump|disabled VALUE|device-del debug|mrtdump|disabled|device-scan-time-set SECS|device-scan-time-del|device-interface-add PATTERN|device-interface-del PATTERN|device-preferred-add PATTERN IP|device-preferred-del PATTERN IP|generate|show}" >&2; exit 2 ;;
+esac

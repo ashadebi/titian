@@ -82,7 +82,7 @@ valid_prefix_v6() {
 }
 
 # --- state persisten (sumber regenerasi .network/rc.conf) ---
-STATE_DIR=${TITIAN_STATE_DIR:-/opt/titian/etc/netstate}
+STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 state_add() {
     # $1=iface $2=line ("inet <cidr>" | "inet <local> peer <peer>" | "inet6 <cidr>")
     mkdir -p "$STATE_DIR" 2>/dev/null || return 0
@@ -140,7 +140,7 @@ addr_add() {
 }
 
 addr_set() {
-    # seperti addr-add tapi menggantikan semua alamat v4 iface (semantik lo rtcli)
+    # seperti addr-add tapi menggantikan semua alamat v4 iface (semantik lo titian)
     local iface=$1 cidr=$2 peer=$3
     if [ "$OS" = "FreeBSD" ]; then
         # hapus semua inet (bukan inet6) yang ada di iface

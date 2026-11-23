@@ -4,7 +4,7 @@
 #    hanya me-match interface titian; NIC sistem tidak pernah ditulis).
 #  - FreeBSD: blok marker #-TITIAN-# ... #-ENDTITIAN-# di /etc/rc.conf
 #    (baris di luar blok tidak pernah disentuh; backup + sh -n tiap tulis).
-# Sumber kebenaran = state file /opt/titian/etc/netstate/<iface>.addr
+# Sumber kebenaran = state file /etc/titian/netstate/<iface>.addr
 # yang ditulis titian-if.sh (bukan parsing output tool).
 # Persistensi utama tetap replay startup-config saat boot; cermin ini
 # adalah artefak deklaratif kedua (keputusan default Fase 1).
@@ -13,8 +13,12 @@
 # POSIX sh.
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE_DIR="$ROOT/etc/netstate"
-warn() { echo "Warning(persist): $*" >&2; }
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE_DIR="$STATE_ROOT/netstate"
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(persist):\033[0m %s\n' "$*" >&2
+    else echo "Warning(persist): $*" >&2; fi
+}
 
 mark_if() {
     mkdir -p "$STATE_DIR" 2>/dev/null || return 0

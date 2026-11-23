@@ -3,7 +3,23 @@
 # POSIX sh.
 OS=$(uname -s)
 BIN=${TITIAN_BIN:-/opt/titian/bin}
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|summary|port-in-use|ssh-check) titian_page_begin ;; esac
+
 err() { echo "Error: $*" >&2; exit 33; }
+
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish (birdc.conf di state root), kosong
+# bila default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "${TITIAN_STATE_ROOT:-/etc/titian}/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
 
 # Portable in-place sed: BSD sed -i wajib arg backup, GNU sed tidak.
 sys_sed_i() {
@@ -42,6 +58,23 @@ dns_dropin_ensure() {
 }
 dns_dropin_restart() {
     systemctl restart systemd-resolved 2>/dev/null || true
+}
+
+# --- helper: restart sshd (dipakai ssh-restart + ssh-port-del) --------
+do_ssh_restart() {
+    if [ "$OS" = "FreeBSD" ]; then
+        service sshd restart || err "gagal restart sshd"
+    else
+        if command -v systemctl >/dev/null 2>&1; then
+            # Reset rate-limit systemd (default StartLimitBurst=5/10s):
+            # rentetan perubahan ssh via CLI tidak boleh membuat sshd
+            # wedge dalam status start-limit-hit.
+            systemctl reset-failed ssh sshd 2>/dev/null || true
+            systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || err "gagal restart ssh"
+        else
+            service ssh restart 2>/dev/null || err "gagal restart ssh"
+        fi
+    fi
 }
 
 case "${1:-}" in
@@ -85,18 +118,23 @@ case "${1:-}" in
         fi
         ;;
     ssh-restart)
-        if [ "$OS" = "FreeBSD" ]; then
-            service sshd restart || err "gagal restart sshd"
+        do_ssh_restart
+        ;;
+    ssh-port-del)
+        # `no port` di view service ssh (23 Nov 2026 — sintaks service
+        # lengkap: sebelumnya `port` tidak punya bentuk `no`): hapus
+        # baris Port (uncommented) dari sshd_config -> kembali ke
+        # default OpenSSH 22, lalu restart sshd. Bila tidak ada baris
+        # Port (sudah default): tidak ada perubahan, tidak restart.
+        # Hermetik (uji): TITIAN_SSHD_CONFIG. Produksi TIDAK PERNAH
+        # men-set variabel ini.
+        _cfg="${TITIAN_SSHD_CONFIG:-/etc/ssh/sshd_config}"
+        if grep -q '^Port[[:space:]]' "$_cfg" 2>/dev/null; then
+            sys_sed_i "$_cfg" '/^Port[[:space:]]/d'
+            do_ssh_restart
+            echo "SSH port reset to default (22)"
         else
-            if command -v systemctl >/dev/null 2>&1; then
-                # Reset rate-limit systemd (default StartLimitBurst=5/10s):
-                # rentetan perubahan ssh via CLI tidak boleh membuat sshd
-                # wedge dalam status start-limit-hit.
-                systemctl reset-failed ssh sshd 2>/dev/null || true
-                systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || err "gagal restart ssh"
-            else
-                service ssh restart 2>/dev/null || err "gagal restart ssh"
-            fi
+            echo "SSH port already default (22) — no change"
         fi
         ;;
     port-in-use)
@@ -147,6 +185,55 @@ case "${1:-}" in
             fi
         fi
         ;;
+    service-ssh)
+        # show service ssh — state SSH service (tes 16, butir 6).
+        # Nilai diambil dari /etc/ssh/sshd_config (baris uncommented
+        # terakhir menang, sesuai aturan OpenSSH) + status proses.
+        _cfg=/etc/ssh/sshd_config
+        _val() {
+            # $1 = key, $2 = default OpenSSH bila tidak ada di config.
+            _v=$(grep -v '^[[:space:]]*#' "$_cfg" 2>/dev/null | grep -i "^[[:space:]]*$1[[:space:]]" | tail -1 | awk '{print $2}')
+            [ -n "$_v" ] && echo "$_v" || echo "$2"
+        }
+        _port=$(_val Port 22)
+        echo "SSH service:"
+        # pgrep -x TIDAK andal untuk listener sshd di image ini (flaky:
+        # kadang tidak menemukan proses yang jalan — Tes 16 retest
+        # 18 Nov 2026: `pgrep -x sshd` rc=1 padahal sshd jalan, sementara
+        # pgrep normal untuk konfd/bird/sh dan `pgrep -a sshd` selalu
+        # menemukan). Pakai pidfile + kill -0 (kanonik FreeBSD),
+        # fallback pgrep -a, terakhir ps.
+        _pid=""
+        if [ -f /var/run/sshd.pid ]; then
+            _pf=$(cat /var/run/sshd.pid 2>/dev/null | tr -d ' \t\n')
+            case "$_pf" in *[!0-9]*|"") ;; *) kill -0 "$_pf" 2>/dev/null && _pid="$_pf" ;; esac
+        fi
+        if [ -z "$_pid" ] && command -v pgrep >/dev/null 2>&1; then
+            _pid=$(pgrep -a sshd 2>/dev/null | head -1)
+        fi
+        if [ -z "$_pid" ]; then
+            _pid=$(ps -ax 2>/dev/null | awk '$5=="sshd" || $NF=="sshd" {print $1; exit}')
+        fi
+        if [ -n "$_pid" ]; then echo "  sshd: running (pid $_pid)"; else echo "  sshd: not running"; fi
+        echo "  Port: $_port"
+        echo "  PermitRootLogin: $(_val PermitRootLogin prohibit-password)"
+        echo "  UseDNS: $(_val UseDNS no)"
+        if [ "$OS" = "FreeBSD" ]; then
+            if command -v sockstat >/dev/null 2>&1; then
+                # sockstat: $1=USER $2=COMMAND $3=PID $4=FD $5=PROTO $6=LOCAL.
+                # (Dulu $1=="sshd" — tidak pernah cocok karena $1 adalah
+                # user "root"; baris Listen tidak pernah tercetak.)
+                _ls=$(sockstat -l 2>/dev/null | awk -v p=":$_port" '$2=="sshd" && $6 ~ p"$" {print $6}' | sort -u | tr '\n' ' ')
+                [ -n "$_ls" ] && echo "  Listen: $_ls"
+            fi
+        else
+            if command -v ss >/dev/null 2>&1; then
+                _ls=$(ss -ltn 2>/dev/null | awk -v p=":$_port " '$4 ~ p"$" {print $4}' | sort -u | tr '\n' ' ')
+                [ -n "$_ls" ] && echo "  Listen: $_ls"
+            fi
+        fi
+        exit 0
+        ;;
     process)
         if [ "$OS" = "FreeBSD" ]; then
             ps aux | grep -v -E 'cli|klish|ps aux|agetty'
@@ -180,7 +267,7 @@ case "${1:-}" in
         if command -v dmidecode >/dev/null 2>&1; then
             dmidecode 2>/dev/null | head -60
         else
-            echo "dmidecode tidak tersedia (Debian: apt install dmidecode; FreeBSD: pkg install dmidecode)"
+            echo "dmidecode not tersedia (Debian: apt install dmidecode; FreeBSD: pkg install dmidecode)"
         fi
         ;;
     connections)
@@ -205,7 +292,7 @@ case "${1:-}" in
         printf "Kernel........: %s\n" "$(uname -r 2>/dev/null)"
         printf "Kernel build..: %s\n" "$(uname -v 2>/dev/null)"
         printf "Arsitektur....: %s\n" "$(uname -m 2>/dev/null)"
-        printf "Waktu sistem..: %s\n" "$(date 2>/dev/null)"
+        printf "Waktu system..: %s\n" "$(date 2>/dev/null)"
         printf "Waktu WIB.....: %s\n" "$(TZ=Asia/Jakarta date 2>/dev/null)"
         if [ "$OS" = "FreeBSD" ]; then
             printf "Uptime........: %s\n" "$(uptime 2>/dev/null | sed 's/^ *//')"
@@ -225,7 +312,7 @@ case "${1:-}" in
         df -h / 2>/dev/null | awk 'NR==2{printf "Disk (/)......: %s terpakai / %s total (%s)\n", $3, $2, $5}'
         printf "Titian CLI....: klish %s (tree /opt/titian/etc/clish-en)\n" "$("$BIN/clish" -v 2>/dev/null | head -1)"
         if command -v birdc >/dev/null 2>&1; then
-            printf "BIRD..........: %s\n" "$(birdc show status 2>/dev/null | head -1 | sed 's/^BIRD //;s/ ready\.$//')"
+            printf "BIRD..........: %s\n" "$(birdc $(birdc_sock) show status 2>/dev/null | head -1 | sed 's/^BIRD //;s/ ready\.$//')"
         fi
         printf "\n"
         ;;
@@ -309,5 +396,5 @@ case "${1:-}" in
             sys_sed_del_blank /etc/resolv.conf
         fi
         ;;
-    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|port-in-use|services|service-status|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|ssh-port-del|port-in-use|services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
 esac

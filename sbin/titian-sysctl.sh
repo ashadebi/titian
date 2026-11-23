@@ -1,6 +1,6 @@
 #!/bin/sh
 # TITIAN — perintah `system sysctl` (kernel parameter, kedua OS).
-# Bukan restorasi rtcli: tree lama TIDAK punya perintah sysctl sama
+# Bukan restorasi titian: tree lama TIDAK punya perintah sysctl sama
 # sekali; ini fitur baru.
 #
 # Jalur persistensi (tanpa daemon/service baru):
@@ -11,7 +11,7 @@
 #       FreeBSD: blok marker #-TITIAN-# ... #-ENDTITIAN-# di
 #               /etc/sysctl.conf (rc sysctl). Baris di luar blok
 #               tidak pernah disentuh.
-#  Sumber cermin = state file $ROOT/etc/sysctl.titian (bukan parsing
+#  Sumber cermin = state file $STATE_ROOT/sysctl.titian (bukan parsing
 #  file OS). Nilai sebelum-set pertama dicatat di sysctl.titian.prev
 #  agar `no system sysctl` bisa mengembalikan nilai live semula;
 #  bila nilai awal tidak tercatat, nilai live bertahan sampai reboot
@@ -27,11 +27,23 @@
 set -u
 OS=$(uname -s)
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE="$ROOT/etc/sysctl.titian"
-PREV="$ROOT/etc/sysctl.titian.prev"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show) titian_page_begin ;; esac
+
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE="$STATE_ROOT/sysctl.titian"
+PREV="$STATE_ROOT/sysctl.titian.prev"
 
 err() { echo "Error: $*" >&2; exit 33; }
-warn() { echo "Warning(sysctl): $*" >&2; }
+warn() {
+    if [ -t 2 ]; then printf '\033[33mWarning(sysctl):\033[0m %s\n' "$*" >&2
+    else echo "Warning(sysctl): $*" >&2; fi
+}
 
 valid_key() {
     # MIB bertitik: segmen alfanumerik/underscore, minimal satu titik
@@ -101,8 +113,8 @@ mirror_linux() {
     local f=/etc/sysctl.d/99-titian.conf
     mkdir -p /etc/sysctl.d 2>/dev/null || { warn "tidak bisa mkdir /etc/sysctl.d"; return 0; }
     {
-        echo "# TITIAN — dikelola perintah 'system sysctl'; jangan edit manual"
-        echo "# (diterapkan saat boot oleh systemd-sysctl; hapus lewat 'no system sysctl <key>')"
+        echo "# TITIAN — dikelola perintah 'system sysctl'; do not edit manual"
+        echo "# (diterapkan saat boot by systemd-sysctl; delete lewat 'no system sysctl <key>')"
         if [ -f "$STATE" ]; then
             # grep exit 1 bila state kosong (semua key dihapus) — itu
             # BUKAN gagal tulis; jangan biarkan statusnya menggagalkan mv
@@ -162,9 +174,9 @@ sysctl_del() {
         else
             sysctl -w "$key=$prev" >/dev/null 2>&1 || warn "gagal kembalikan $key live ke $prev"
         fi
-        echo "sysctl $key: dihapus dari cermin, nilai live dikembalikan ke $prev"
+        echo "sysctl $key: deleted from mirror, value live dikembalikan to $prev"
     else
-        echo "sysctl $key: dihapus dari cermin; nilai live bertahan sampai reboot (boot berikutnya memakai default OS)"
+        echo "sysctl $key: deleted from mirror; value live bertahan sampai reboot (boot berikutnya memakai default OS)"
     fi
 }
 
@@ -183,9 +195,9 @@ meaning() {
     esac
 }
 sysctl_show() {
-    echo "Sysctl yang dikelola Titian ($OS) — nilai live saat ini:"
+    echo "Sysctl that dikelola Titian ($OS) — value live current:"
     if [ ! -s "$STATE" ]; then
-        echo "  (belum ada — pakai 'system sysctl <key> <value>' untuk menambah)"
+        echo "  (none yet — pakai 'system sysctl <key> <value>' for menambah)"
         return 0
     fi
     while IFS='=' read -r k v; do

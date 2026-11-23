@@ -1,10 +1,28 @@
 #!/bin/sh
 # TITIAN Fase 1 — boot service: jalankan konfd (bila belum jalan)
-# lalu replay startup-config gaya rtcli init-rtcli.
+# lalu replay startup-config gaya titian init-titian.
 # Dipanggil systemd unit (Debian) / rc script (FreeBSD).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
 BIN=$ROOT/bin
+
+# Restore config persisten dari partisi cfg (/cfg/titian) ke /etc/titian
+# (tmpfs) SEBELUM replay — tanpa ini replay tidak menemukan config
+# sesudah reboot. Best-effort: bila /cfg kosong, lanjut (boot bersih).
+if [ -x "$ROOT/sbin/titian-cfg.sh" ]; then
+    "$ROOT/sbin/titian-cfg.sh" restore 2>/dev/null || true
+fi
+# FRR/BIRD reconcile (handoff vtysh, 17 Nov 2026): routing.intent adalah
+# sumber kebenaran; /etc/rc.conf yang dipulihkan dari /cfg bisa basi
+# (bird_enable=YES) sehingga rc menaikkan BIRD saat boot, lalu
+# check-exclusion commit memblokir FRR — gejala "boot restore BIRD
+# meski intent FRR". Selaraskan rc.conf dari intent + hentikan daemon
+# yang salah bila sempat naik, SEBELUM replay (replay `router frr
+# enable` juga dicek exclusion). Best-effort, tidak menggagalkan boot.
+if [ -x "$ROOT/sbin/titian-frr.sh" ]; then
+    "$ROOT/sbin/titian-frr.sh" frr-boot-reconcile 2>/dev/null || true
+fi
 if [ ! -x "$BIN/konfd" ] && [ -x /usr/local/bin/konfd ]; then
     BIN=/usr/local/bin
 fi
@@ -18,7 +36,7 @@ LOG=/var/log/titian-konfd.log
 if [ -f "$PIDFILE" ]; then
     oldpid=$(cat "$PIDFILE" 2>/dev/null)
     if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
-        echo "konfd sudah jalan (pid $oldpid)"
+        echo "konfd already jalan (pid $oldpid)"
     else
         rm -f "$PIDFILE" "$SOCKFILE"
     fi
@@ -39,7 +57,7 @@ if [ ! -f "$PIDFILE" ]; then
         cp -f /var/run/konfd.pid "$PIDFILE" 2>/dev/null || true
     fi
     if [ ! -S "$SOCKFILE" ]; then
-        echo "PERINGATAN: socket konfd tidak muncul; lihat $LOG" >&2
+        echo "Warning: socket konfd not muncul; show $LOG" >&2
     fi
 fi
 
@@ -52,9 +70,81 @@ if [ "$(uname -s)" = "FreeBSD" ]; then
     kldload if_vxlan 2>/dev/null || true
 fi
 
+# Default route: replay menerapkan ulang IP interface (mis. ge0) dan
+# default route yang didapat via dhclient di rc.local (boot saja)
+# ikut terhapus (tes 15: hilang 2/2 sesudah `service titian restart`,
+# BGP jatuh, ping VXLAN 100% loss). Tangkap gateway + interface
+# SEBELUM replay, kembalikan sesudah replay bila hilang. Gateway
+# TIDAK di-hardcode — diambil dari tabel route yang sedang jalan.
+# Saat boot murni belum ada default route (dhclient jalan belakangan
+# di rc.local) — capture kosong, restore no-op.
+capture_default_route() {
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -rn 2>/dev/null | awk '$1=="default" {print $2, $6; exit}'
+    else
+        ip route show default 2>/dev/null | awk '{print $3, $5; exit}'
+    fi
+}
+
+restore_default_route() {
+    # $1 = "<gateway> <iface>" hasil capture_default_route.
+    [ -n "$1" ] || return 0
+    set -- $1
+    _gw="$1"; _if="$2"
+    [ -n "$_gw" ] || return 0
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -rn 2>/dev/null | grep -q '^default ' && return 0
+        route add default "$_gw" 2>/dev/null || route add -net default "$_gw" 2>/dev/null || true
+    else
+        ip route show default 2>/dev/null | grep -q '^default' && return 0
+        if [ -n "$_if" ]; then ip route add default via "$_gw" dev "$_if" 2>/dev/null || true
+        else ip route add default via "$_gw" 2>/dev/null || true; fi
+    fi
+    echo "default route dikembalikan: $_gw (via ${_if:-?})"
+}
+
 # replay startup-config (bila ada) — aman diulang (replace semantics)
-if [ -f "$ROOT/etc/startup-config" ]; then
-    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$ROOT/etc/startup-config" 2>&1 | tee /var/log/titian-replay.log
+# Perbaikan replay (12 Nov 2026, reboot ke-2/ke-4):
+#  `!` pemisah seksi keluar dari sub-mode KECUALI bridge — sub-mode
+#  bridge TIDAK keluar pada `!`, sehingga `interface` sesudah bridge
+#  gagal "Unknown command" (vlan99 hilang, bridge0 hanya 1 member).
+#  Preprocess: sisipkan `exit` HANYA sebelum `interface` yang
+#  mengikuti seksi bridge (lacak last_iface). JANGAN sisipkan `exit`
+#  sebelum semua interface/router — itu merusak replay ke-3/ke-4
+#  (exit ganda keluar dari configure-view, semua baris "Unknown
+#  command", running-config kosong). Replay DUA pass: pass 1 membuat
+#  semua interface, pass 2 menempelkan member/atribut yang gagal di
+#  pass 1 (dependensi sudah ada).
+# Perbaikan replay (B19, 17 Nov 2026): aturan yang sama diperluas ke
+#  RAdv — `exit` sebelum saudara indent-3 (prefix/rdnss/dnssl/
+#  max-ra-interval/...) sesudah child view di bawah `interface`
+#  (replay tidak pernah pop view saat indent berkurang; tanpa exit,
+#  `prefix` resolve global dan `max-ra-interval` "Unknown command").
+#  Preprocessing tinggal di sbin/titian-replay-prep.sh (aturan bridge
+#  dipertahankan verbatim di sana); di sini hanya dipanggil. Fallback
+#  awk inline dipertahankan bila helper hilang (perilaku lama).
+_defroute=""
+if [ -f "$STATE_ROOT/startup-config" ]; then
+    _defroute=$(capture_default_route)
+    _replay_tmp="/tmp/titian-replay-prep.conf"
+    if [ -x "$ROOT/sbin/titian-replay-prep.sh" ]; then
+        "$ROOT/sbin/titian-replay-prep.sh" "$STATE_ROOT/startup-config" > "$_replay_tmp" 2>/dev/null || cp -f "$STATE_ROOT/startup-config" "$_replay_tmp"
+    else
+        awk '
+            /^interface / {
+                if (last_iface == "bridge") print "exit"
+                if (/^interface bridge/) { last_iface = "bridge" } else { last_iface = "other" }
+            }
+            { print }
+        ' "$STATE_ROOT/startup-config" > "$_replay_tmp" 2>/dev/null
+    fi
+    _replay_src="$STATE_ROOT/startup-config"
+    [ -s "$_replay_tmp" ] && _replay_src="$_replay_tmp"
+    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee /var/log/titian-replay.log
+    "$BIN/clish" -x "$ROOT/etc/clish-en" -w configure-view "$_replay_src" 2>&1 | tee -a /var/log/titian-replay.log
+    rm -f "$_replay_tmp" 2>/dev/null || true
+    # Replay selesai — kembalikan default route bila ikut terhapus.
+    restore_default_route "$_defroute"
 fi
 
 # jaring pengaman tuning: terapkan ulang nilai .tuning yang tercatat
@@ -91,4 +181,59 @@ fi
 if [ -x "$ROOT/sbin/titian-fw.sh" ]; then
     "$ROOT/sbin/titian-fw.sh" apply-all 2>/dev/null || true
 fi
+
+# BSDRP port: terapkan semua niat pending (routing/firewall/
+# traffic-shape/pppoe/wireguard/monitoring) sesudah replay — replay
+# klish menandai dirty lagi, jadi commit apply-all di sini yang
+# menaikkan service sesuai niat startup-config. No-op bila tidak ada
+# niat pending. Mutual exclusion bird/FRR tetap diperiksa.
+if [ -x "$ROOT/sbin/titian-commit.sh" ]; then
+    "$ROOT/sbin/titian-commit.sh" apply-all 2>/dev/null || true
+fi
+# Jaring pengaman terakhir: langkah sesudah replay (tuning/bond/
+# vxlan/firewall/apply-all) juga bisa mengganggu route — pastikan
+# default route yang ditangkap sebelum replay tetap ada.
+restore_default_route "$_defroute"
+
+# Jaring pengaman RPKI boot race (20 Nov 2026): BIRD naik sebelum default
+# route ada (dhclient jalan belakangan di rc.local), sehingga protokol
+# RPKI `lab` (remote 10.1.1.62:3323) gagal connect awal dan macet
+# "Connecting" (18 Nov: 11 Established, lab Connecting 10+ mnt;
+# `birdc restart lab` langsung Established). Titian-boot tidak bisa
+# menunggu default route di sini (rc.local jalan SESUDAH service ini),
+# jadi luncurkan penunggu latar (tidak menahan boot): tunggu default
+# route muncul (maks ~120 dtk), lalu restart `lab` bila belum
+# Established. Best-effort, tidak menggagalkan boot, tidak mengganggu
+# BGP (restart protokol RPKI saja). Log: /var/log/titian-rpki-boot.log.
+(
+    trap '' HUP
+    _i=0
+    while [ "$_i" -lt 60 ]; do
+        if [ "$(uname -s)" = "FreeBSD" ]; then
+            netstat -rn 2>/dev/null | grep -q '^default ' && break
+        else
+            ip route show default 2>/dev/null | grep -q '^default' && break
+        fi
+        sleep 2
+        _i=$((_i + 1))
+    done
+    _has_route=0
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -rn 2>/dev/null | grep -q '^default ' && _has_route=1
+    else
+        ip route show default 2>/dev/null | grep -q '^default' && _has_route=1
+    fi
+    [ "$_has_route" = "1" ] || { echo "$(date '+%Y-%m-%d %H:%M:%S') rpki-boot: default route tidak muncul (timeout 120 dtk), lewati"; exit 0; }
+    # Beri BIRD waktu menyelesaikan connect awal sesudah route muncul.
+    sleep 5
+    if command -v birdc >/dev/null 2>&1; then
+        if birdc show proto lab 2>/dev/null | grep -q 'Established'; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') rpki-boot: lab sudah Established, tidak ada aksi"
+        else
+            echo "$(date '+%Y-%m-%d %H:%M:%S') rpki-boot: lab belum Established, restart lab"
+            birdc restart lab 2>&1 || true
+        fi
+    fi
+    exit 0
+) >>/var/log/titian-rpki-boot.log 2>&1 &
 exit 0

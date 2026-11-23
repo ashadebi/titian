@@ -1,0 +1,1008 @@
+#!/bin/sh
+# titian-radv.sh — Router Advertisement intent (BIRD `protocol radv`)
+# untuk Titian/klish. Batch B8 program BIRD.
+# Pola sama seperti titian-rip.sh: intent di /etc/titian/radv.conf
+# (tmpfs, dipersistenkan via titian-cfg.sh), generate menulis section
+# BIRD /etc/titian/bird.d/radv.conf lalu memanggil titian-bird.sh
+# generate radv (render + validasi + birdc). Section ditulis ulang
+# UTUH tiap apply.
+#
+# Sintaks BIRD 2.16.1 yang dipakai (docs resmi bird.network,
+# User's Guide 2.16.1, §6.14 RAdv — RFC 4861/4191/6106):
+#   protocol radv {
+#       propagate routes yes;
+#       ipv6 { table radv_routes; export all; };
+#       interface "eth2" {
+#           max ra interval 5;
+#           managed yes;
+#           prefix ::/0 { autonomous off; };
+#       };
+#       interface "eth*";
+#       prefix 2001:0DB8:1234::/48 { preferred lifetime 0; };
+#       rdnss 2001:0DB8:1234::10;            # bentuk singkat
+#       rdnss { lifetime mult 10; ns ...; };
+#       dnssl { lifetime 3600; domain "abc.com"; };
+#       custom option type 38 value hex:0e:10:...;
+#   }
+# Hanya channel IPv6. Tidak butuh peer/server — pengumuman ke host
+# IPv6 di link lokal. TIDAK ADA blok template `protocol radv { ... }`
+# di docs — daftar opsi dirangkai dari teks per kelas definisi;
+# urutan emit di sini mengikuti contoh docs di atas.
+# Prefix: matching first-match; definisi interface-specific diproses
+# SEBELUM global; prefix yang tidak cocok definisi manapun dipakai
+# dengan opsi default. RDNSS/DNSSL/custom-option: boleh banyak
+# definisi (kumulatif); `rdnss local`/`dnssl local`/`custom option
+# local` = yes berarti hanya definisi lokal interface itu yang
+# dipakai (bisa juga mematikan RDNSS/DNSSL di interface bila tidak
+# ada definisi lokal).
+# `trigger`: tanpa trigger protokol selalu aktif; saat suppressed,
+# secara default HANYA `default lifetime` yang di-nol-kan. Opsi
+# `sensitive` hanya bermakna dengan `trigger` (default-lifetime:
+# sensitive yes; route/valid/preferred-lifetime: sensitive no).
+# `check link` TIDAK disebut di Bab 6.14 — JANGAN diasumsikan
+# tersedia (lihat BIRD-COVERAGE.md §2.5 RA); tidak diimplementasi.
+# Default BIRD (docs §6.14, ditulis di help klish): max ra interval
+# 600 (4..1800); min ra interval ~1/3 max (min 3, maks 3/4 max);
+# min delay 3; solicited ra unicast no; managed no; other config no;
+# link mtu 0 (= unspecified); reachable time 0 (maks 3600000 ms);
+# retrans timer 0; current hop limit 64 (0 = unspecified);
+# default lifetime 3x max ra interval (sensitive yes); default
+# preference medium; route lifetime 3x max (sensitive no,
+# 0xffffffff = infinity); route preference medium; prefix/route
+# linger 3x max; rdnss/dnssl/custom-option local no; prefix skip no,
+# onlink yes, autonomous yes; valid lifetime 86400 (sensitive no);
+# preferred lifetime 14400 (sensitive no); rdnss/dnssl lifetime 3x
+# max. Yang TIDAK dinyatakan docs (rentang min-delay, retrans timer,
+# linger, lifetime) diterima sebagai u32 0..4294967295 tanpa klaim
+# rentang docs.
+#
+# TIDAK diimplementasi di batch ini:
+#   - `check link` (tidak disebut Bab 6.14 — perlu `bird -p`).
+#   - Bentuk singkat `rdnss <addr>;` / `dnssl <domain>;` sebagai
+#     perintah terpisah: tercakup bentuk blok (`rdnss` -> `ns`,
+#     `dnssl` -> `domain`) yang semantiknya identik.
+#   - Instance radv kedua: satu instance `radv` saja (pola umum).
+#
+# Format radv.conf (satu baris per fakta):
+#   propagate-routes on|off
+#   trigger <PREFIX6>
+#   table <NAMA>
+#   import <all|none|filter NAMA>
+#   export <all|none|filter NAMA>
+#   interface <PAT> <field> <value>
+#   interface <PAT> prefix <PREFIX> <field> <value>
+#   interface <PAT> rdnss ns <addr>
+#   interface <PAT> rdnss lifetime <N|mult N>
+#   interface <PAT> dnssl domain <name>
+#   interface <PAT> dnssl lifetime <N|mult N>
+#   interface <PAT> custom-option <type> <value>
+#   prefix <PREFIX> <field> <value>
+#   rdnss ns <addr>
+#   rdnss lifetime <N|mult N>
+#   dnssl domain <name>
+#   dnssl lifetime <N|mult N>
+#   custom-option <type> <value>
+# field interface: max-ra-interval|min-ra-interval|min-delay|
+#   solicited-ra-unicast|managed|other-config|link-mtu|reachable-time|
+#   retrans-timer|current-hop-limit|default-lifetime|
+#   default-lifetime-sensitive|default-preference|route-lifetime|
+#   route-lifetime-sensitive|route-preference|prefix-linger-time|
+#   route-linger-time|rdnss-local|dnssl-local|custom-option-local
+# field prefix: skip|onlink|autonomous|valid-lifetime|
+#   valid-lifetime-sensitive|preferred-lifetime|
+#   preferred-lifetime-sensitive
+
+STATE_ROOT="${TITIAN_STATE_ROOT:-/etc/titian}"
+CONF="$STATE_ROOT/radv.conf"
+GLOBAL_CONF="$STATE_ROOT/bird-global.conf"
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show) titian_page_begin ;; esac
+
+SECTION_DIR="$STATE_ROOT/bird.d"
+SECTION="$SECTION_DIR/radv.conf"
+PROG="titian-radv"
+err() { echo "Error($PROG): $*" >&2; exit 33; }
+die() { echo "$PROG: $*" >&2; exit 1; }
+
+touch_conf() {
+    if [ ! -f "$CONF" ]; then
+        mkdir -p "$(dirname "$CONF")" 2>/dev/null
+        printf '# radv.conf - generated by klish, do not edit by hand\n' > "$CONF" \
+            || die "cannot create $CONF"
+        chmod 600 "$CONF" 2>/dev/null || true
+    fi
+}
+
+# re_esc <teks> — escape karakter regex (pola interface boleh `*`,
+# domain boleh `.`, prefix boleh `:`/`/` — yang terakhir aman di BRE
+# tapi di-escape seragam di sini).
+re_esc() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/\./\\./g' -e 's/\*/\\*/g' \
+        -e 's/\[/\\[/g' -e 's/\]/\\]/g' -e 's/\^/\\^/g' -e 's/\$/\\$/g'
+}
+
+# upsert <regex-untuk-hapus> <baris-baru>
+upsert() {
+    _re="$1"; _line="$2"
+    touch_conf
+    _tmp="$CONF.tmp.$$"
+    grep -v "$_re" "$CONF" > "$_tmp" 2>/dev/null || true
+    printf '%s\n' "$_line" >> "$_tmp"
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    chmod 600 "$CONF" 2>/dev/null || true
+}
+
+dellines() {
+    _re="$1"
+    touch_conf
+    _tmp="$CONF.tmp.$$"
+    grep -v "$_re" "$CONF" > "$_tmp" 2>/dev/null || true
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+}
+
+has_facts() {
+    [ -f "$CONF" ] || return 1
+    grep -v '^[[:space:]]*#' "$CONF" 2>/dev/null | grep -q '[^[:space:]]'
+}
+
+# --- validasi ---
+valid_num() {
+    # $1=nilai $2=lo $3=hi $4=nama field. Bilangan bulat dalam range.
+    case "$1" in ''|*[!0-9]*) err "$4 harus bilangan $2..$3: $1" ;; esac
+    [ "$1" -ge "$2" ] 2>/dev/null && [ "$1" -le "$3" ] 2>/dev/null || \
+        err "$4 harus bilangan $2..$3: $1"
+}
+
+valid_u32() {
+    # $1=nilai $2=nama field. Bilangan 0..4294967295.
+    case "$1" in ''|*[!0-9]*) err "$2 harus bilangan 0..4294967295: $1" ;; esac
+    [ "$1" -le 4294967295 ] 2>/dev/null || err "$2 harus bilangan 0..4294967295: $1"
+}
+
+valid_onoff() {
+    case "$1" in
+        on|off) ;;
+        *) err "$2 harus on|off: $1" ;;
+    esac
+}
+
+valid_name() {
+    # $1=nama $2=konteks: simbol BIRD [A-Za-z_][A-Za-z0-9_]*.
+    case "$1" in
+        ''|*[!A-Za-z0-9_]*) err "$2 harus nama BIRD [A-Za-z0-9_]: $1" ;;
+    esac
+    case "$1" in [A-Za-z_]*) ;; *) err "$2 harus diawali huruf/underscore: $1" ;; esac
+}
+
+valid_prefix6() {
+    # $1=prefix $2=konteks: CIDR IPv6.
+    _p="$1"
+    case "$_p" in
+        */*) ;;
+        *) err "$2 harus prefix CIDR IPv6 (mis. 2001:db8::/32): $_p" ;;
+    esac
+    _ip="${_p%/*}"; _plen="${_p#*/}"
+    case "$_ip" in
+        *:*)
+            case "$_ip" in *[!0-9a-fA-F:]*) err "$2 bukan prefix IPv6 valid: $_p" ;; esac ;;
+        *) err "$2 bukan prefix IPv6 (harus mengandung ':'): $_p" ;;
+    esac
+    case "$_plen" in ''|*[!0-9]*) err "$2 prefix length harus angka 0..128: $_p" ;; esac
+    [ "$_plen" -le 128 ] 2>/dev/null || err "$2 prefix length harus 0..128: $_p"
+}
+
+valid_ip6() {
+    # $1=alamat $2=konteks.
+    case "$1" in
+        *:*)
+            case "$1" in *[!0-9a-fA-F:]*) err "$2 bukan alamat IPv6 valid: $1" ;; esac ;;
+        *) err "$2 bukan alamat IPv6 (harus mengandung ':'): $1" ;;
+    esac
+}
+
+valid_pattern() {
+    # $1=pola interface $2=konteks: satu token, tanpa spasi.
+    case "$1" in
+        ''|*[[:space:]]*) err "$2 butuh satu pola interface tanpa spasi: $1" ;;
+    esac
+}
+
+valid_domain() {
+    # $1=domain $2=konteks: nama DNS (label dipisah titik).
+    case "$1" in
+        ''|*[!A-Za-z0-9.-]*|.*|*.|*..*) err "$2 bukan nama domain valid: $1" ;;
+    esac
+    [ "${#1}" -le 253 ] || err "$2 nama domain terlalu panjang (maks 253): $1"
+}
+
+valid_bytestring() {
+    # $1=nilai $2=konteks: `hex:` (boleh kosong) / `hex:aa:bb...` /
+    # string hex polos >= 32 digit (16 byte, syarat docs Bab 5.2)
+    # dengan panjang genap.
+    _v="$1"
+    case "$_v" in
+        hex:*)
+            _h=${_v#hex:}
+            case "$_h" in
+                '') return 0 ;;
+                *[!0-9a-fA-F:]*) err "$2 bytestring hex: harus byte hex dipisah ':' (mis. hex:0e:10:20): $_v" ;;
+            esac
+            # Tiap komponen 1-2 digit hex.
+            _rest="$_h"
+            while [ -n "$_rest" ]; do
+                case "$_rest" in *:* ) _one=${_rest%%:*}; _rest=${_rest#*:} ;; *) _one="$_rest"; _rest="" ;; esac
+                case "$_one" in ?|??) ;; *) err "$2 tiap byte hex: 1-2 digit hex: $_v" ;; esac
+            done
+            ;;
+        *)
+            case "$_v" in *[!0-9a-fA-F]*) err "$2 bytestring harus hex:.. atau string hex polos >= 32 digit: $_v" ;; esac
+            [ "${#_v}" -ge 32 ] || err "$2 string hex polos minimal 32 digit (16 byte, docs Bab 5.2): $_v"
+            _odd=$(( ${#_v} % 2 ))
+            [ "$_odd" = "0" ] || err "$2 string hex harus panjang genap: $_v"
+            ;;
+    esac
+}
+
+# --- perintah top-level ---
+cmd_radv_touch() {
+    touch_conf
+    echo "RAdv"
+}
+
+cmd_propagate_set() {
+    valid_onoff "$1" "propagate-routes"
+    upsert '^propagate-routes ' "propagate-routes $1"
+    echo "RAdv propagate-routes = $1"
+}
+
+cmd_propagate_del() {
+    dellines '^propagate-routes '
+    echo "RAdv propagate-routes dihapus (default BIRD disabled)"
+}
+
+cmd_trigger_set() {
+    [ -n "$1" ] || err "trigger butuh prefix IPv6"
+    valid_prefix6 "$1" "trigger"
+    upsert '^trigger ' "trigger $1"
+    echo "RAdv trigger = $1"
+}
+
+cmd_trigger_del() {
+    dellines '^trigger '
+    echo "RAdv trigger dihapus (protokol selalu aktif)"
+}
+
+cmd_table_set() {
+    [ -n "$1" ] || err "table butuh nama tabel IPv6"
+    case "$1" in
+        master6) ;;
+        *)
+            valid_name "$1" "table"
+            [ -f "$GLOBAL_CONF" ] || err "table $1 belum didefinisikan (bird-global.conf belum ada — definisikan dulu: global -> table-add ipv6 $1)"
+            grep -q "^table ipv6 $1\$" "$GLOBAL_CONF" 2>/dev/null || \
+                err "table $1 belum didefinisikan sebagai tabel ipv6 (definisikan dulu: global -> table-add ipv6 $1)"
+            ;;
+    esac
+    upsert '^table ' "table $1"
+    echo "RAdv table = $1"
+}
+
+cmd_table_del() {
+    dellines '^table '
+    echo "RAdv table dihapus (default BIRD)"
+}
+
+cmd_chan_set() {
+    # chan-set <import|export> <all|none|filter NAME>
+    _d="$1"; _v="$2"; _n="$3"
+    case "$_d" in import|export) ;; *) err "channel harus import|export: $_d" ;; esac
+    case "$_v" in
+        all|none) upsert "^$_d " "$_d $_v" ;;
+        filter)
+            [ -n "$_n" ] || err "$_d filter butuh NAMA filter"
+            valid_name "$_n" "nama filter"
+            upsert "^$_d " "$_d filter $_n" ;;
+        *) err "$_d harus all|none|filter NAMA: $_v" ;;
+    esac
+    echo "RAdv $_d = $_v${_n:+ $_n}"
+}
+
+# --- interface ---
+# iface_has <PATTERN>: exit 0 bila interface itu punya fakta.
+iface_has() {
+    _re=$(re_esc "$1")
+    grep -q "^interface $_re " "$CONF" 2>/dev/null
+}
+
+cmd_interface_add() {
+    _pat="$1"
+    [ -n "$_pat" ] || err "interface-add butuh pola interface (mis. ge*)"
+    valid_pattern "$_pat" "interface"
+    touch_conf
+    echo "RAdv interface $_pat"
+}
+
+cmd_interface_del() {
+    _pat="$1"
+    [ -n "$_pat" ] || err "interface-del butuh pola interface"
+    _re=$(re_esc "$_pat")
+    dellines "^interface $_re "
+    echo "RAdv interface $_pat dihapus"
+}
+
+cmd_interface_set() {
+    # interface-set <PATTERN> <field> <value>
+    _pat="$1"; _f="$2"; _v="$3"
+    [ -n "$_pat" ] && [ -n "$_f" ] && [ -n "$_v" ] || \
+        err "interface-set butuh PATTERN FIELD VALUE"
+    valid_pattern "$_pat" "interface"
+    _re=$(re_esc "$_pat")
+    case "$_f" in
+        max-ra-interval)
+            valid_num "$_v" 4 1800 "max-ra-interval"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        min-ra-interval)
+            valid_num "$_v" 3 1800 "min-ra-interval"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        min-delay)
+            valid_u32 "$_v" "min-delay"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        solicited-ra-unicast|managed|other-config|rdnss-local|dnssl-local|custom-option-local)
+            valid_onoff "$_v" "$_f"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        link-mtu)
+            valid_num "$_v" 0 65535 "link-mtu"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        reachable-time)
+            valid_num "$_v" 0 3600000 "reachable-time"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        retrans-timer)
+            valid_u32 "$_v" "retrans-timer"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        current-hop-limit)
+            valid_num "$_v" 0 255 "current-hop-limit"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        default-lifetime|route-lifetime|prefix-linger-time|route-linger-time)
+            valid_u32 "$_v" "$_f"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        default-lifetime-sensitive|route-lifetime-sensitive)
+            valid_onoff "$_v" "$_f"
+            upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+        default-preference|route-preference)
+            case "$_v" in
+                low|medium|high) upsert "^interface $_re $_f " "interface $_pat $_f $_v" ;;
+                *) err "$_f harus low|medium|high: $_v" ;;
+            esac ;;
+        *) err "field interface RAdv tidak dikenal: $_f" ;;
+    esac
+    echo "RAdv interface $_pat $_f = $_v"
+}
+
+cmd_interface_unset() {
+    # interface-unset <PATTERN> <field>
+    _pat="$1"; _f="$2"
+    [ -n "$_pat" ] && [ -n "$_f" ] || err "interface-unset butuh PATTERN FIELD"
+    _re=$(re_esc "$_pat")
+    case "$_f" in
+        max-ra-interval|min-ra-interval|min-delay|solicited-ra-unicast|managed|other-config|link-mtu|reachable-time|retrans-timer|current-hop-limit|default-lifetime|default-lifetime-sensitive|default-preference|route-lifetime|route-lifetime-sensitive|route-preference|prefix-linger-time|route-linger-time|rdnss-local|dnssl-local|custom-option-local)
+            dellines "^interface $_re $_f " ;;
+        *) err "field interface RAdv tidak dikenal: $_f" ;;
+    esac
+    echo "RAdv interface $_pat $_f dihapus (kembali ke default BIRD)"
+}
+
+# --- prefix (global atau interface-specific) ---
+# B.1-refactor (persistensi): konteks prefix di-encode SATU var
+# `radv_pfx_ctx` = `global:<PREFIX>` atau `iface:<IFACE>:<PREFIX>`
+# (pola route-map FRR yang terbukti jalan di klish 2.2.5 — var pertama
+# menelan sisa viewid bila multi-var). Bidang TERAKHIR = remainder
+# (prefix IPv6 mengandung `:`). Split dari KIRI untuk field awal.
+split_pfx_ctx() { # <CTX> -> _PFX_SCOPE _PFX_IFACE _PFX_PREFIX
+    _ctx="$1"
+    case "$_ctx" in
+        global:*)
+            _PFX_SCOPE=global; _PFX_IFACE=""
+            _PFX_PREFIX="${_ctx#global:}" ;;
+        iface:*)
+            _rest="${_ctx#iface:}"; _PFX_SCOPE=iface
+            _PFX_IFACE="${_rest%%:*}"; _PFX_PREFIX="${_rest#*:}" ;;
+        *) err "prefix ctx harus global:<PREFIX> atau iface:<IFACE>:<PREFIX>: $_ctx" ;;
+    esac
+    [ -n "$_PFX_PREFIX" ] || err "prefix ctx butuh PREFIX: $_ctx"
+    case "$_PFX_SCOPE" in
+        iface) [ -n "$_PFX_IFACE" ] || err "prefix ctx iface butuh IFACE: $_ctx" ;;
+    esac
+}
+_pfx_pre() { # -> awalan baris intent untuk ctx yang sudah di-split
+    case "$_PFX_SCOPE" in
+        global) printf 'prefix %s' "$_PFX_PREFIX" ;;
+        iface) printf 'interface %s prefix %s' "$_PFX_IFACE" "$_PFX_PREFIX" ;;
+    esac
+}
+cmd_prefix_touch() {
+    # prefix-touch <CTX>: validasi + tulis BARIS TELANJANG prefix ke
+    # intent (B.3: prefix-touch lama hanya validasi + touch file —
+    # fakta prefix hilang bila belum ada field-nya; blok di-emit bila
+    # baris telanjang ATAU field ada). Bila sudah ada baris prefix itu
+    # (telanjang/field), jangan duplikasi.
+    split_pfx_ctx "$1"
+    valid_prefix6 "$_PFX_PREFIX" "prefix"
+    case "$_PFX_SCOPE" in
+        iface) valid_pattern "$_PFX_IFACE" "interface" ;;
+    esac
+    touch_conf
+    _pre=$(_pfx_pre); _pre_re=$(re_esc "$_pre")
+    if ! grep -q "^$_pre_re " "$CONF" 2>/dev/null && \
+       ! grep -q "^$_pre_re\$" "$CONF" 2>/dev/null; then
+        printf '%s\n' "$_pre" >> "$CONF"
+    fi
+    echo "RAdv prefix $_PFX_PREFIX"
+}
+
+cmd_prefix_set() {
+    # prefix-set <CTX> <field> <value>
+    split_pfx_ctx "$1"; _f="$2"; _v="$3"
+    _pre=$(_pfx_pre)
+    case "$_PFX_SCOPE" in
+        iface) valid_pattern "$_PFX_IFACE" "interface" ;;
+    esac
+    [ -n "$_PFX_PREFIX" ] && [ -n "$_f" ] && [ -n "$_v" ] || \
+        err "prefix-set butuh CTX FIELD VALUE"
+    valid_prefix6 "$_PFX_PREFIX" "prefix"
+    _pre_re=$(re_esc "$_pre")
+    case "$_f" in
+        skip|onlink|autonomous)
+            valid_onoff "$_v" "$_f"
+            upsert "^$_pre_re $_f " "$_pre $_f $_v" ;;
+        valid-lifetime|preferred-lifetime)
+            valid_u32 "$_v" "$_f"
+            upsert "^$_pre_re $_f " "$_pre $_f $_v" ;;
+        valid-lifetime-sensitive|preferred-lifetime-sensitive)
+            valid_onoff "$_v" "$_f"
+            upsert "^$_pre_re $_f " "$_pre $_f $_v" ;;
+        *) err "field prefix RAdv tidak dikenal: $_f (skip|onlink|autonomous|valid-lifetime|valid-lifetime-sensitive|preferred-lifetime|preferred-lifetime-sensitive)" ;;
+    esac
+    echo "RAdv prefix $_PFX_PREFIX $_f = $_v"
+}
+
+cmd_prefix_unset() {
+    # prefix-unset <CTX> <field>
+    split_pfx_ctx "$1"; _f="$2"
+    _pre=$(_pfx_pre)
+    case "$_PFX_SCOPE" in
+        iface) valid_pattern "$_PFX_IFACE" "interface" ;;
+    esac
+    [ -n "$_PFX_PREFIX" ] && [ -n "$_f" ] || err "prefix-unset butuh CTX FIELD"
+    _pre_re=$(re_esc "$_pre")
+    case "$_f" in
+        skip|onlink|autonomous|valid-lifetime|valid-lifetime-sensitive|preferred-lifetime|preferred-lifetime-sensitive)
+            dellines "^$_pre_re $_f " ;;
+        *) err "field prefix RAdv tidak dikenal: $_f" ;;
+    esac
+    echo "RAdv prefix $_PFX_PREFIX $_f dihapus (kembali ke default BIRD)"
+}
+
+cmd_prefix_del() {
+    # prefix-del <CTX>: hapus SEMUA field prefix itu + baris telanjang.
+    split_pfx_ctx "$1"
+    _pre=$(_pfx_pre)
+    case "$_PFX_SCOPE" in
+        iface) valid_pattern "$_PFX_IFACE" "interface" ;;
+    esac
+    [ -n "$_PFX_PREFIX" ] || err "prefix-del butuh CTX"
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re "
+    dellines "^$_pre_re\$"
+    echo "RAdv prefix $_PFX_PREFIX dihapus"
+}
+
+# --- rdnss / dnssl (global atau interface-specific) ---
+# Implementasi langsung per subcommand (tanpa wrapper — POSIX sh
+# tidak punya $0 fungsi yang andal di sini).
+split_dns_ctx() { # <CTX> -> _CX_SCOPE _CX_IF
+    # CTX: "global" atau "iface:<IFACE>" (single-var colon-encoding.
+    # Viewid klish multi-var menelan sisa — viewid rdnss/dnssl lama
+    # "radv_dns_scope=iface radv_iface=..." membuat scope jadi
+    # "iface radv_iface=bridge0" dan ns/domain selalu gagal.)
+    case "$1" in
+        global) _CX_SCOPE=global; _CX_IF="" ;;
+        iface:*)
+            _CX_SCOPE=iface; _CX_IF="${1#iface:}" ;;
+        *) err "dns ctx harus global atau iface:<IFACE>: $1" ;;
+    esac
+    case "$_CX_SCOPE" in
+        iface) valid_pattern "$_CX_IF" "interface" ;;
+    esac
+}
+cmd_rdnss_ns_add() {
+    # rdnss-ns-add <CTX global|iface:IFACE> <ADDR>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"; _addr="$2"
+    case "$_scope" in
+        global) _pre="rdnss" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if rdnss" ;;
+        *) err "rdnss scope harus global|iface: $_scope" ;;
+    esac
+    [ -n "$_addr" ] || err "rdnss ns butuh alamat IPv6"
+    valid_ip6 "$_addr" "rdnss ns"
+    _pre_re=$(re_esc "$_pre")
+    if grep -q "^$_pre_re ns $_addr\$" "$CONF" 2>/dev/null; then
+        echo "RAdv $_pre ns $_addr sudah ada"
+        return 0
+    fi
+    touch_conf
+    printf '%s ns %s
+' "$_pre" "$_addr" >> "$CONF"
+    echo "RAdv $_pre ns = $_addr"
+}
+
+cmd_rdnss_ns_del() {
+    # rdnss-ns-del <CTX global|iface:IFACE> <ADDR>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"; _addr="$2"
+    case "$_scope" in
+        global) _pre="rdnss" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if rdnss" ;;
+        *) err "rdnss scope harus global|iface: $_scope" ;;
+    esac
+    [ -n "$_addr" ] || err "rdnss ns-del butuh alamat IPv6"
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re ns $_addr\$"
+    echo "RAdv $_pre ns $_addr dihapus"
+}
+
+cmd_rdnss_lifetime_set() {
+    # rdnss-lifetime-set <CTX> <N> | <mult> <N>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"; _a="$2"; _b="$3"
+    case "$_scope" in
+        global) _pre="rdnss" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if rdnss" ;;
+        *) err "rdnss scope harus global|iface: $_scope" ;;
+    esac
+    case "$_a" in
+        mult)
+            [ -n "$_b" ] || err "rdnss lifetime mult butuh N"
+            valid_u32 "$_b" "rdnss lifetime mult"
+            _val="mult $_b" ;;
+        *)
+            [ -n "$_a" ] || err "rdnss lifetime butuh N (detik) atau mult N"
+            valid_u32 "$_a" "rdnss lifetime"
+            _val="$_a" ;;
+    esac
+    _pre_re=$(re_esc "$_pre")
+    upsert "^$_pre_re lifetime " "$_pre lifetime $_val"
+    echo "RAdv $_pre lifetime = $_val"
+}
+
+cmd_rdnss_lifetime_del() {
+    # rdnss-lifetime-del <CTX>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"
+    case "$_scope" in
+        global) _pre="rdnss" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if rdnss" ;;
+        *) err "rdnss scope harus global|iface: $_scope" ;;
+    esac
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re lifetime "
+    echo "RAdv $_pre lifetime dihapus (default BIRD 3x max ra interval)"
+}
+
+cmd_dnssl_domain_add() {
+    # dnssl-domain-add <CTX global|iface:IFACE> <DOMAIN>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"; _dom="$2"
+    case "$_scope" in
+        global) _pre="dnssl" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if dnssl" ;;
+        *) err "dnssl scope harus global|iface: $_scope" ;;
+    esac
+    [ -n "$_dom" ] || err "dnssl domain butuh nama domain"
+    valid_domain "$_dom" "dnssl domain"
+    _pre_re=$(re_esc "$_pre")
+    if grep -q "^$_pre_re domain $_dom\$" "$CONF" 2>/dev/null; then
+        echo "RAdv $_pre domain $_dom sudah ada"
+        return 0
+    fi
+    touch_conf
+    printf '%s domain %s
+' "$_pre" "$_dom" >> "$CONF"
+    echo "RAdv $_pre domain = $_dom"
+}
+
+cmd_dnssl_domain_del() {
+    # dnssl-domain-del <CTX global|iface:IFACE> <DOMAIN>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"; _dom="$2"
+    case "$_scope" in
+        global) _pre="dnssl" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if dnssl" ;;
+        *) err "dnssl scope harus global|iface: $_scope" ;;
+    esac
+    [ -n "$_dom" ] || err "dnssl domain-del butuh nama domain"
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re domain $_dom\$"
+    echo "RAdv $_pre domain $_dom dihapus"
+}
+
+cmd_dnssl_lifetime_set() {
+    # dnssl-lifetime-set <CTX> <N> | <mult> <N>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"; _a="$2"; _b="$3"
+    case "$_scope" in
+        global) _pre="dnssl" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if dnssl" ;;
+        *) err "dnssl scope harus global|iface: $_scope" ;;
+    esac
+    case "$_a" in
+        mult)
+            [ -n "$_b" ] || err "dnssl lifetime mult butuh N"
+            valid_u32 "$_b" "dnssl lifetime mult"
+            _val="mult $_b" ;;
+        *)
+            [ -n "$_a" ] || err "dnssl lifetime butuh N (detik) atau mult N"
+            valid_u32 "$_a" "dnssl lifetime"
+            _val="$_a" ;;
+    esac
+    _pre_re=$(re_esc "$_pre")
+    upsert "^$_pre_re lifetime " "$_pre lifetime $_val"
+    echo "RAdv $_pre lifetime = $_val"
+}
+
+cmd_dnssl_lifetime_del() {
+    # dnssl-lifetime-del <CTX>
+    split_dns_ctx "$1"; _scope="$_CX_SCOPE"; _if="$_CX_IF"
+    case "$_scope" in
+        global) _pre="dnssl" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if dnssl" ;;
+        *) err "dnssl scope harus global|iface: $_scope" ;;
+    esac
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re lifetime "
+    echo "RAdv $_pre lifetime dihapus (default BIRD 3x max ra interval)"
+}
+
+cmd_rdnss_del() {
+    # rdnss-del <SCOPE> <IFACE-atau-kosong>: hapus SELURUH blok rdnss scope itu.
+    _scope="$1"; _if="$2"
+    case "$_scope" in
+        global) _pre="rdnss" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if rdnss" ;;
+        *) err "rdnss scope harus global|iface: $_scope" ;;
+    esac
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re "
+    echo "RAdv $_pre dihapus"
+}
+
+cmd_dnssl_del() {
+    # dnssl-del <SCOPE> <IFACE-atau-kosong>: hapus SELURUH blok dnssl scope itu.
+    _scope="$1"; _if="$2"
+    case "$_scope" in
+        global) _pre="dnssl" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if dnssl" ;;
+        *) err "dnssl scope harus global|iface: $_scope" ;;
+    esac
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re "
+    echo "RAdv $_pre dihapus"
+}
+
+# --- custom option (global atau interface-specific) ---
+cmd_custom_add() {
+    # custom-option-add <SCOPE> <IFACE-atau-kosong> <TYPE> <VALUE>
+    _scope="$1"; _if="$2"; _type="$3"; _val="$4"
+    case "$_scope" in
+        global) _pre="custom-option" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if custom-option" ;;
+        *) err "custom-option scope harus global|iface: $_scope" ;;
+    esac
+    [ -n "$_type" ] && [ -n "$_val" ] || err "custom-option butuh TYPE VALUE (mis. 38 hex:0e:10:...)"
+    valid_num "$_type" 0 255 "custom-option type"
+    valid_bytestring "$_val" "custom-option value"
+    _pre_re=$(re_esc "$_pre")
+    upsert "^$_pre_re $_type " "$_pre $_type $_val"
+    echo "RAdv $_pre type $_type = $_val"
+}
+
+cmd_custom_del() {
+    # custom-option-del <SCOPE> <IFACE-atau-kosong> <TYPE>
+    _scope="$1"; _if="$2"; _type="$3"
+    case "$_scope" in
+        global) _pre="custom-option" ;;
+        iface) valid_pattern "$_if" "interface"; _pre="interface $_if custom-option" ;;
+        *) err "custom-option scope harus global|iface: $_scope" ;;
+    esac
+    [ -n "$_type" ] || err "custom-option-del butuh TYPE"
+    _pre_re=$(re_esc "$_pre")
+    dellines "^$_pre_re $_type "
+    echo "RAdv $_pre type $_type dihapus"
+}
+
+# --- getters (untuk generate) ---
+get_top_field() {
+    # $1=field -> nilai (kolom 2)
+    grep "^$1 " "$CONF" 2>/dev/null | head -1 | awk '{print $2}'
+}
+
+get_chan() {
+    # $1=import|export -> "all"|"none"|"filter NAME"
+    grep "^$1 " "$CONF" 2>/dev/null | head -1 | awk '{$1=""; sub(/^ +/, ""); print}'
+}
+
+get_iface_field() {
+    # $1=pattern $2=field -> nilai (kolom 4)
+    _re=$(re_esc "$1")
+    grep "^interface $_re $2 " "$CONF" 2>/dev/null | head -1 | awk '{print $4}'
+}
+
+get_prefix_field() {
+    # $1=awalan-baris (mis. `prefix 2001:..` / `interface ge* prefix
+    # 2001:..`) $2=field -> nilai (kolom terakhir)
+    _pre_re=$(re_esc "$1")
+    grep "^$_pre_re $2 " "$CONF" 2>/dev/null | head -1 | awk '{print $NF}'
+}
+
+# emit_switch_iface <PAT> <field> <bird-name>: cetak
+# `    <bird-name> yes|no;` bila fakta ada.
+emit_switch_iface() {
+    _v=$(get_iface_field "$1" "$2")
+    case "$_v" in
+        on) printf '        %s yes;\n' "$3" ;;
+        off) printf '        %s no;\n' "$3" ;;
+    esac
+}
+
+# emit_lifetime_iface <PAT> <field> <bird-name> [sensitive-field]:
+# cetak `    <bird-name> N[ sensitive yes|no];` bila fakta ada.
+emit_lifetime_iface() {
+    _v=$(get_iface_field "$1" "$2")
+    [ -n "$_v" ] || return 0
+    _s=""
+    if [ -n "$4" ]; then
+        _sv=$(get_iface_field "$1" "$4")
+        case "$_sv" in
+            on) _s=" sensitive yes" ;;
+            off) _s=" sensitive no" ;;
+        esac
+    fi
+    printf '        %s %s%s;\n' "$3" "$_v" "$_s"
+}
+
+# emit_prefix_block <awalan-baris> <indent>: cetak blok
+# `prefix <PREFIX> { ... };` bila prefix itu punya baris telanjang
+# ATAU >=1 field (B.3: baris telanjang dari prefix-touch ikut di-emit
+# sebagai blok kosong ber-default BIRD).
+emit_prefix_block() {
+    _pre="$1"; _ind="$2"
+    _pfx=${_pre##* }
+    _pre_re=$(re_esc "$_pre")
+    grep -q "^$_pre_re " "$CONF" 2>/dev/null || \
+    grep -q "^$_pre_re\$" "$CONF" 2>/dev/null || return 0
+    _skip=$(get_prefix_field "$_pre" skip)
+    _onlink=$(get_prefix_field "$_pre" onlink)
+    _auto=$(get_prefix_field "$_pre" autonomous)
+    _vl=$(get_prefix_field "$_pre" valid-lifetime)
+    _vls=$(get_prefix_field "$_pre" valid-lifetime-sensitive)
+    _pl=$(get_prefix_field "$_pre" preferred-lifetime)
+    _pls=$(get_prefix_field "$_pre" preferred-lifetime-sensitive)
+    printf '%sprefix %s {\n' "$_ind" "$_pfx"
+    case "$_skip" in on) printf '%s    skip yes;\n' "$_ind" ;; off) printf '%s    skip no;\n' "$_ind" ;; esac
+    case "$_onlink" in on) printf '%s    onlink yes;\n' "$_ind" ;; off) printf '%s    onlink no;\n' "$_ind" ;; esac
+    case "$_auto" in on) printf '%s    autonomous yes;\n' "$_ind" ;; off) printf '%s    autonomous no;\n' "$_ind" ;; esac
+    if [ -n "$_vl" ]; then
+        _s=""; case "$_vls" in on) _s=" sensitive yes" ;; off) _s=" sensitive no" ;; esac
+        printf '%s    valid lifetime %s%s;\n' "$_ind" "$_vl" "$_s"
+    fi
+    if [ -n "$_pl" ]; then
+        _s=""; case "$_pls" in on) _s=" sensitive yes" ;; off) _s=" sensitive no" ;; esac
+        printf '%s    preferred lifetime %s%s;\n' "$_ind" "$_pl" "$_s"
+    fi
+    printf '%s};\n' "$_ind"
+}
+
+# emit_dns_block <KIND rdnss|dnssl> <awalan-baris> <indent>: cetak blok
+# `rdnss { lifetime ...; ns ...; };` / `dnssl { ... };` bila ada fakta.
+emit_dns_block() {
+    _kind="$1"; _pre="$2"; _ind="$3"
+    _pre_re=$(re_esc "$_pre")
+    grep -q "^$_pre_re " "$CONF" 2>/dev/null || return 0
+    _lt=$(grep "^$_pre_re lifetime " "$CONF" 2>/dev/null | head -1 | sed "s/^$_pre_re lifetime //")
+    printf '%s%s {\n' "$_ind" "$_kind"
+    [ -n "$_lt" ] && printf '%s    lifetime %s;\n' "$_ind" "$_lt"
+    if [ "$_kind" = "rdnss" ]; then
+        grep "^$_pre_re ns " "$CONF" 2>/dev/null | awk '{print "ns " $NF ";"}' | sed "s/^/$_ind    /"
+    else
+        grep "^$_pre_re domain " "$CONF" 2>/dev/null | awk '{print "domain \"" $NF "\";"}' | sed "s/^/$_ind    /"
+    fi
+    printf '%s};\n' "$_ind"
+}
+
+# emit_custom <awalan-baris> <indent>: cetak baris `custom option ...`
+# untuk semua custom option di awalan itu, urut kemunculan.
+emit_custom() {
+    _pre="$1"; _ind="$2"
+    _pre_re=$(re_esc "$_pre")
+    grep "^$_pre_re " "$CONF" 2>/dev/null | while IFS= read -r _line; do
+        # Bentuk baris: [interface <PAT>] custom-option <TYPE> <VALUE>
+        # -> ambil 2 kolom terakhir (baris interface punya 5 kolom).
+        _type=$(printf '%s' "$_line" | awk '{print $(NF-1)}')
+        _val=$(printf '%s' "$_line" | awk '{print $NF}')
+        printf '%scustom option type %s value %s;\n' "$_ind" "$_type" "$_val"
+    done
+}
+
+# emit_iface <PATTERN>: cetak blok interface BIRD (atau bentuk
+# telanjang bila tanpa fakta).
+emit_iface() {
+    _pat="$1"
+    _re=$(re_esc "$_pat")
+    if ! grep -q "^interface $_re " "$CONF" 2>/dev/null; then
+        printf '    interface "%s";\n' "$_pat"
+        return 0
+    fi
+    printf '    interface "%s" {\n' "$_pat"
+    _v=$(get_iface_field "$_pat" max-ra-interval); [ -n "$_v" ] && printf '        max ra interval %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" min-ra-interval); [ -n "$_v" ] && printf '        min ra interval %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" min-delay); [ -n "$_v" ] && printf '        min delay %s;\n' "$_v"
+    emit_switch_iface "$_pat" solicited-ra-unicast "solicited ra unicast"
+    emit_switch_iface "$_pat" managed "managed"
+    emit_switch_iface "$_pat" other-config "other config"
+    _v=$(get_iface_field "$_pat" link-mtu); [ -n "$_v" ] && printf '        link mtu %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" reachable-time); [ -n "$_v" ] && printf '        reachable time %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" retrans-timer); [ -n "$_v" ] && printf '        retrans timer %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" current-hop-limit); [ -n "$_v" ] && printf '        current hop limit %s;\n' "$_v"
+    emit_lifetime_iface "$_pat" default-lifetime "default lifetime" default-lifetime-sensitive
+    _v=$(get_iface_field "$_pat" default-preference); [ -n "$_v" ] && printf '        default preference %s;\n' "$_v"
+    emit_lifetime_iface "$_pat" route-lifetime "route lifetime" route-lifetime-sensitive
+    _v=$(get_iface_field "$_pat" route-preference); [ -n "$_v" ] && printf '        route preference %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" prefix-linger-time); [ -n "$_v" ] && printf '        prefix linger time %s;\n' "$_v"
+    _v=$(get_iface_field "$_pat" route-linger-time); [ -n "$_v" ] && printf '        route linger time %s;\n' "$_v"
+    emit_switch_iface "$_pat" rdnss-local "rdnss local"
+    emit_switch_iface "$_pat" dnssl-local "dnssl local"
+    emit_switch_iface "$_pat" custom-option-local "custom option local"
+    set -f
+    # Pola tanpa spasi akhir: cocok baris telanjang (`interface X
+    # prefix P`) MAUPUN baris field (`interface X prefix P <field> ...`).
+    for _pfx in $(grep "^interface $_re prefix" "$CONF" 2>/dev/null | awk '{print $4}' | awk '!s[$0]++'); do
+        emit_prefix_block "interface $_pat prefix $_pfx" "        "
+    done
+    set +f
+    emit_dns_block rdnss "interface $_pat rdnss" "        "
+    emit_dns_block dnssl "interface $_pat dnssl" "        "
+    emit_custom "interface $_pat custom-option" "        "
+    echo "    };"
+}
+
+cmd_generate() {
+    touch_conf
+    set -f
+    mkdir -p "$SECTION_DIR" 2>/dev/null || die "cannot mkdir $SECTION_DIR"
+    _tmp="$SECTION.tmp.$$"
+    if has_facts; then
+        # Cross-check min vs max ra interval per interface: min <= 3/4
+        # max (docs §6.14: min maks 3/4 x max ra interval).
+        for _pat in $(grep '^interface ' "$CONF" 2>/dev/null | awk '{print $2}' | awk '!s[$0]++'); do
+            _mn=$(get_iface_field "$_pat" min-ra-interval)
+            _mx=$(get_iface_field "$_pat" max-ra-interval)
+            if [ -n "$_mn" ] && [ -n "$_mx" ]; then
+                [ $(( _mn * 4 )) -le $(( _mx * 3 )) ] 2>/dev/null || \
+                    err "interface $_pat min ra interval $_mn melebihi 3/4 x max ra interval $_mx (maks $(( _mx * 3 / 4 )) — docs §6.14)"
+            fi
+        done
+        _prop=$(get_top_field propagate-routes)
+        _trig=$(get_top_field trigger)
+        _table=$(get_top_field table)
+        _import=$(get_chan import)
+        _export=$(get_chan export)
+        [ -n "$_import" ] || _import="all"
+        [ -n "$_export" ] || _export="all"
+        {
+            echo "# radv.conf - generated by titian-radv.sh, do not edit by hand"
+            echo "protocol radv {"
+            case "$_prop" in
+                on) echo "    propagate routes yes;" ;;
+                off) echo "    propagate routes no;" ;;
+            esac
+            [ -n "$_trig" ] && echo "    trigger $_trig;"
+            echo "    ipv6 {"
+            [ -n "$_table" ] && echo "        table $_table;"
+            echo "        import $_import;"
+            echo "        export $_export;"
+            echo "    };"
+            for _pat in $(grep '^interface ' "$CONF" 2>/dev/null | awk '{print $2}' | awk '!s[$0]++'); do
+                emit_iface "$_pat"
+            done
+            for _pfx in $(grep '^prefix ' "$CONF" 2>/dev/null | awk '{print $2}' | awk '!s[$0]++'); do
+                emit_prefix_block "prefix $_pfx" "    "
+            done
+            emit_dns_block rdnss "rdnss" "    "
+            emit_dns_block dnssl "dnssl" "    "
+            emit_custom "custom-option" "    "
+            echo "}"
+            echo ""
+        } > "$_tmp" || die "cannot write $_tmp"
+    else
+        {
+            echo "# radv.conf - generated by titian-radv.sh, do not edit by hand"
+            echo "# (tidak ada config RAdv — protocol radv tidak dibuat)"
+        } > "$_tmp" || die "cannot write $_tmp"
+    fi
+    mv "$_tmp" "$SECTION" || die "cannot write $SECTION"
+    chmod 644 "$SECTION" 2>/dev/null || true
+    set +f
+    echo "RAdv section ditulis: $SECTION"
+    _birdsh="$(dirname "$0")/titian-bird.sh"
+    if [ -x "$_birdsh" ]; then
+        "$_birdsh" generate radv || exit 33
+    else
+        echo "Warning: $_birdsh tidak ditemukan; section hanya ditulis, belum di-apply" >&2
+    fi
+}
+
+birdc_bin() {
+    command -v birdc 2>/dev/null || { [ -x /usr/sbin/birdc ] && echo /usr/sbin/birdc; } || \
+        { [ -x /usr/local/sbin/birdc ] && echo /usr/local/sbin/birdc; } || echo birdc
+}
+# birdc_sock — salinan titian-birdc.sh (BC8, B13): cetak "-s <path>" bila
+# socket utama dikonfigurasi via klish ($STATE_ROOT/birdc.conf), kosong bila
+# default. Dipakai semua pemanggilan birdc di file ini.
+birdc_sock() {
+    _s=$(grep '^socket ' "$STATE_ROOT/birdc.conf" 2>/dev/null | head -1 | cut -d' ' -f2-)
+    [ -n "$_s" ] && printf '%s' "-s $_s"
+}
+
+
+cmd_show() {
+    touch_conf
+    echo "--- radv.conf (intent) ---"
+    cat "$CONF"
+    echo "--- bird.d/radv.conf (section, bila ada) ---"
+    [ -f "$SECTION" ] && cat "$SECTION" || echo "(belum di-generate)"
+    echo "--- birdc show protocol radv ---"
+    _birdc=$(birdc_bin)
+    if grep -q "protocol radv" "$SECTION" 2>/dev/null; then
+        if _out=$("$_birdc" $(birdc_sock) show protocol radv 2>&1); then
+            echo "$_out" | grep -v '^BIRD'
+        else
+            echo "(BIRD tidak jalan — birdc show protocol gagal)"
+        fi
+    else
+        echo "(belum ada protocol radv — birdc show protocol gagal)"
+    fi
+    return 0
+}
+
+case "$1" in
+    radv-touch) cmd_radv_touch ;;
+    has-facts) has_facts ;;
+    propagate-routes-set) shift; cmd_propagate_set "$@" ;;
+    propagate-routes-del) cmd_propagate_del ;;
+    trigger-set) shift; cmd_trigger_set "$@" ;;
+    trigger-del) cmd_trigger_del ;;
+    table-set) shift; cmd_table_set "$@" ;;
+    table-del) cmd_table_del ;;
+    chan-set) shift; cmd_chan_set "$@" ;;
+    interface-add) shift; cmd_interface_add "$@" ;;
+    interface-del) shift; cmd_interface_del "$@" ;;
+    interface-set) shift; cmd_interface_set "$@" ;;
+    interface-unset) shift; cmd_interface_unset "$@" ;;
+    prefix-touch) shift; cmd_prefix_touch "$@" ;;
+    prefix-set) shift; cmd_prefix_set "$@" ;;
+    prefix-unset) shift; cmd_prefix_unset "$@" ;;
+    prefix-del) shift; cmd_prefix_del "$@" ;;
+    rdnss-ns-add) shift; cmd_rdnss_ns_add "$@" ;;
+    rdnss-ns-del) shift; cmd_rdnss_ns_del "$@" ;;
+    rdnss-lifetime-set) shift; cmd_rdnss_lifetime_set "$@" ;;
+    rdnss-lifetime-del) shift; cmd_rdnss_lifetime_del "$@" ;;
+    rdnss-del) shift; cmd_rdnss_del "$@" ;;
+    dnssl-domain-add) shift; cmd_dnssl_domain_add "$@" ;;
+    dnssl-domain-del) shift; cmd_dnssl_domain_del "$@" ;;
+    dnssl-lifetime-set) shift; cmd_dnssl_lifetime_set "$@" ;;
+    dnssl-lifetime-del) shift; cmd_dnssl_lifetime_del "$@" ;;
+    dnssl-del) shift; cmd_dnssl_del "$@" ;;
+    custom-option-add) shift; cmd_custom_add "$@" ;;
+    custom-option-del) shift; cmd_custom_del "$@" ;;
+    generate) cmd_generate ;;
+    show) cmd_show ;;
+    *) echo "Usage: $0 {radv-touch|has-facts|propagate-routes-set on|off|propagate-routes-del|trigger-set PREFIX6|trigger-del|table-set NAMA|table-del|chan-set import|export all|none|filter NAMA|interface-add PATTERN|interface-del PATTERN|interface-set PATTERN FIELD VALUE|interface-unset PATTERN FIELD|prefix-touch CTX|prefix-set CTX FIELD VALUE|prefix-unset CTX FIELD|prefix-del CTX|rdnss-ns-add CTX ADDR|rdnss-ns-del CTX ADDR|rdnss-lifetime-set CTX N|mult N|rdnss-lifetime-del CTX|dnssl-domain-add CTX DOMAIN|dnssl-domain-del CTX DOMAIN|dnssl-lifetime-set CTX N|mult N|dnssl-lifetime-del CTX|custom-option-add SCOPE IFACE TYPE VALUE|custom-option-del SCOPE IFACE TYPE (CTX=global|iface:IFACE; SCOPE=global|iface; IFACE="" bila global)|generate|show}" >&2; exit 2 ;;
+esac
