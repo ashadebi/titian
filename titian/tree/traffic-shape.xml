@@ -812,7 +812,7 @@
             </ACTION>
         </COMMAND>
         <COMMAND name="show traffic-shape statistics"
-                help="Show pipe/sched/queue counters (ipfw pipe/sched/queue show)"
+                help="Show dummynet state (ipfw pipe/sched/queue) + moving counters: pf anchor rules (Packets/Bytes per rule) + netstat per bound interface. NOTE: BKT Tot_pkt/bytes in ipfw pipe show does NOT move (display quirk, proven live 22 Nov 2026) — do not measure throughput from it"
                 lock="false"
                 interrupt="true">
             <ACTION>

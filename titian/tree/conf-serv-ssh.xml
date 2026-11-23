@@ -63,6 +63,13 @@
             ${RT_SBIN}/titian-sys.sh ssh-restart
         </ACTION>
     </COMMAND>
+    <COMMAND name="no port"
+          help="Reset SSH port to default (22): delete Port from sshd_config" help-id="Reset port SSH ke default (22): hapus Port dari sshd_config">
+        <CONFIG operation="unset" pattern="^port"/>
+        <ACTION>
+            ${RT_SBIN}/titian-sys.sh ssh-port-del
+        </ACTION>
+    </COMMAND>
 
     <COMMAND name="allow-root"
           help="Enable root login over SSH" help-id="Enable root login over ssh">

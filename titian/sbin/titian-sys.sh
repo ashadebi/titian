@@ -60,6 +60,23 @@ dns_dropin_restart() {
     systemctl restart systemd-resolved 2>/dev/null || true
 }
 
+# --- helper: restart sshd (dipakai ssh-restart + ssh-port-del) --------
+do_ssh_restart() {
+    if [ "$OS" = "FreeBSD" ]; then
+        service sshd restart || err "gagal restart sshd"
+    else
+        if command -v systemctl >/dev/null 2>&1; then
+            # Reset rate-limit systemd (default StartLimitBurst=5/10s):
+            # rentetan perubahan ssh via CLI tidak boleh membuat sshd
+            # wedge dalam status start-limit-hit.
+            systemctl reset-failed ssh sshd 2>/dev/null || true
+            systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || err "gagal restart ssh"
+        else
+            service ssh restart 2>/dev/null || err "gagal restart ssh"
+        fi
+    fi
+}
+
 case "${1:-}" in
     hostname)
         # $2 = nama baru
@@ -101,18 +118,23 @@ case "${1:-}" in
         fi
         ;;
     ssh-restart)
-        if [ "$OS" = "FreeBSD" ]; then
-            service sshd restart || err "gagal restart sshd"
+        do_ssh_restart
+        ;;
+    ssh-port-del)
+        # `no port` di view service ssh (23 Nov 2026 — sintaks service
+        # lengkap: sebelumnya `port` tidak punya bentuk `no`): hapus
+        # baris Port (uncommented) dari sshd_config -> kembali ke
+        # default OpenSSH 22, lalu restart sshd. Bila tidak ada baris
+        # Port (sudah default): tidak ada perubahan, tidak restart.
+        # Hermetik (uji): TITIAN_SSHD_CONFIG. Produksi TIDAK PERNAH
+        # men-set variabel ini.
+        _cfg="${TITIAN_SSHD_CONFIG:-/etc/ssh/sshd_config}"
+        if grep -q '^Port[[:space:]]' "$_cfg" 2>/dev/null; then
+            sys_sed_i "$_cfg" '/^Port[[:space:]]/d'
+            do_ssh_restart
+            echo "SSH port reset to default (22)"
         else
-            if command -v systemctl >/dev/null 2>&1; then
-                # Reset rate-limit systemd (default StartLimitBurst=5/10s):
-                # rentetan perubahan ssh via CLI tidak boleh membuat sshd
-                # wedge dalam status start-limit-hit.
-                systemctl reset-failed ssh sshd 2>/dev/null || true
-                systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || err "gagal restart ssh"
-            else
-                service ssh restart 2>/dev/null || err "gagal restart ssh"
-            fi
+            echo "SSH port already default (22) — no change"
         fi
         ;;
     port-in-use)
@@ -374,5 +396,5 @@ case "${1:-}" in
             sys_sed_del_blank /etc/resolv.conf
         fi
         ;;
-    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|port-in-use|services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|ssh-port-del|port-in-use|services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
 esac

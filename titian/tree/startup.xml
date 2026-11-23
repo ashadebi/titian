@@ -98,6 +98,13 @@ HOTKEYS
 	</ACTION>
 </VAR>
 
+<!--Get service names (untuk completion show service status) -->
+<VAR name="Get_services" help="Get" dynamic="true">
+	<ACTION>
+		${RT_SBIN}/titian-service-names.sh
+	</ACTION>
+</VAR>
+
 <!--Get community list names (untuk completion community list delete) -->
 <VAR name="Get_comm_lists" help="Get" dynamic="true">
 	<ACTION>

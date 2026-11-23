@@ -198,7 +198,8 @@
             interrupt="true">
         <PARAM name="service"
             help="services any"
-            ptype="STRING"/>
+            ptype="STRING"
+            completion="${Get_services}"/>
         <ACTION>
             ${RT_SBIN}/titian-sys.sh service-status "${service}"
         </ACTION>

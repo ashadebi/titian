@@ -137,7 +137,7 @@ show hardware dmi        # detail DMI
 
 ```
 show service summary          # ringkasan service
-show service status <nama>    # perintah init service tertentu
+show service status <nama>    # perintah init service tertentu (Tab = daftar service rc)
 ```
 
 ### 1.6 Ping dan traceroute
@@ -342,7 +342,7 @@ Verifikasi:
 show traffic-shape profile paket10   # profile + bind + pipe/rule turunan
 show traffic-shape profile           # semua profile
 show traffic-shape                   # konfigurasi traffic-shape
-show traffic-shape statistics        # counter pipe/sched/queue kernel (ipfw)
+show traffic-shape statistics        # state dummynet (ipfw) + counter BERGERAK: pf anchor + netstat per interface terikat
 ```
 
 Catatan: perubahan profile/*bind* langsung tertulis ke
@@ -354,9 +354,20 @@ sudah menampilkan profile-nya tapi kernel belum membatasi apa pun.
 Detail lengkap + arah *download*/*upload* per jenis *bind*: §9e.
 
 Bukti ukur (21 Nov 2026): profile `paket8` → 8,001 Mbit/s (target 8);
-profile `paket14` → 14,004 Mbit/s (target 14). Diukur dari *counter*
-*pipe* dummynet dengan *UDP flood* — bukan iperf3 *end-to-end*
+profile `paket14` → 14,004 Mbit/s (target 14). Diukur dari counter rule
+pf anchor + netstat ge0 dengan *UDP flood* — bukan iperf3 *end-to-end*
 (MikroTik tidak menjalankan iperf3).
+
+**Counter yang bergerak (koreksi 23 Nov 2026):** kolom BKT
+Tot_pkt/bytes di `ipfw pipe show` **TIDAK bergerak** (mentok 1 pkt /
+~124 byte walau 134 ribu paket lewat pipe — quirk tampilan dummynet,
+terbukti live 22 Nov 2026). `show traffic-shape statistics` kini
+menampilkan juga dua sumber counter yang bergerak: rule pf anchor
+`traffic-shape` (`pfctl -a traffic-shape -s rules -v`, Packets/Bytes
+per rule = offered ke pipe) + netstat per interface terikat
+(Ibytes/Obytes). Bukti staging: `TRAFFIC-SHAPE-STATS-MOCK.sh` 10/0.
+Uji berbentuk live (flood → delta counter pf/netstat) menunggu giliran
+mesin sesudah rekaman Part 6.
 
 Notes: konfigurasi profile 100M di `vlan100` lolos di *mock* saja;
 uji *throughput* live 100 Mbps via `vlan100` BELUM terukur
@@ -492,6 +503,7 @@ Di view SSH:
 
 ```
 port <nomor>                # port service SSH
+no port                     # reset port SSH ke default (22)
 allow-root                  # izinkan login root lewat SSH
 no allow-root               # larang login root lewat SSH
 disable-host-validation     # jangan validasi hostname remote dengan DNS
@@ -918,6 +930,11 @@ Catatan: `show firewall` hanya ada di mode exec (menampilkan daftar rule
 urut prioritas + dump backend live + status forwarding). Di dalam view
 firewall, `show firewall` = Unknown command — `exit` dulu.
 
+Bukti staging (23 Nov 2026): `titian-fw.sh apply` terverifikasi mock
+(`FW-APPLY-MOCK.sh` 16/0 — anchor pf benar, parse-check sebelum load,
+rule iface-tidak-ada di-SKIP, enable-no flush). Uji live tetap BELUM
+(§14 baris 12) — butuh gelombang live di interface non-mgmt (lihat §8.6–§8.7).
+
 ### 8.1 Semantik dasar
 
 - **Forward default DENY; input/output default ACCEPT.** Trafik transit
@@ -1081,9 +1098,9 @@ show checkpoints           # sama dengan checkpoint list
 checkpoint delete <nama>   # hapus satu titik
 ```
 
-Nama titik: `[A-Za-z0-9_-]+`. Snapshot berisi running-config + bird.conf
-+ bird.d + netstate + sysctl + meta, di
-`/opt/titian/etc/checkpoints/<nama>/`.
+Nama titik: `[A-Za-z0-9_-]+`. Snapshot berisi running-config +
+startup-header + bird.conf + bird.d + intent + netstate + sysctl +
+meta, di `/opt/titian/etc/checkpoints/<nama>/`.
 
 `factory-reset confirm` otomatis membuat titik pra-reset bernama tanggal
 WIB (`YYYY-MM-DD`, mis. `2026-11-19`) sebelum menghapus config — titik
@@ -1101,6 +1118,18 @@ rollback          # tanpa nama = kembali ke startup-config
 Rollback bersifat PERSISTEN dan me-restart service. Urutan aman sebelum
 perubahan berisiko: `checkpoint save pra-ubah`, lakukan perubahan, bila
 gagal `rollback pra-ubah`, bila berhasil `save`.
+
+**Byte-identik (perbaikan 23 Nov 2026):** titik yang dibuat sesudah
+perbaikan ini menyimpan blok stempel startup-config di `startup-header`,
+sehingga rollback memulihkan startup-config **byte-identik** (diff kosong
+vs pra-uji) di **kedua** lokasi (`/etc/titian` dan `/cfg/titian`).
+Bukti staging: `CHECKPOINT-HEADER-MOCK.sh` 14/0. Titik **lama** (dibuat
+sebelum 23 Nov 2026, tanpa `startup-header`) tetap memakai perilaku lama:
+startup-config hasil rollback kehilangan 3 baris header stempel
+(`! version`, ` ! last commit`, `!`) + `/cfg` tidak dipulihkan — jalankan
+`save` sesudah rollback ke titik lama untuk menyinkronkan `/cfg`.
+Verifikasi live (save → ubah → rollback → diff kosong) menunggu gelombang
+live sesudah rekaman Part 6.
 
 ### 9.3 Rename interface (persisten)
 
@@ -2321,7 +2350,7 @@ Bukti uji live (19 Nov 2026, myRadDASH host 84):
   `tun0` TIDAK dapat IP. RADIUS adalah otoritas auth, bukan fallback
   lokal.
 
-Catatan jujur:
+Notes:
 
 - **Ping klien → 10.254.254.1 GAGAL (100% loss) saat klien lokal.**
   Bukan kegagalan RADIUS. Penyebab: konflik route same-machine —
@@ -2948,7 +2977,7 @@ show traffic-shape                 # enable + pipe/sched/queue/rule/profile/bind
 show traffic-shape profile [nama]  # semua profile, atau satu profile + bind + turunannya
 show traffic-shape pipe            # pipe mentah (termasuk turunan profile)
 show traffic-shape rule            # rule mentah (termasuk turunan profile)
-show traffic-shape statistics      # counter pipe/sched/queue kernel (ipfw)
+show traffic-shape statistics      # state dummynet (ipfw) + counter BERGERAK: pf anchor + netstat (BKT ipfw TIDAK bergerak — quirk, lihat §1.10)
 ```
 
 ### 9e.3 Arah download/upload — tergantung jenis bind
@@ -3087,24 +3116,27 @@ save
 
 ```
 show traffic-shape profile pppoe10   # profile + bind + pipe/rule turunan
-show traffic-shape statistics        # counter kernel: cek pipe bertambah
+show traffic-shape statistics        # counter bergerak: pf anchor + netstat bertambah (BKT ipfw TIDAK bergerak — quirk)
 ```
 
 `show traffic-shape statistics` memanggil `ipfw pipe show` (dan
-*sched*/*queue*): kolom *transmitted* menunjukkan byte yang lewat
-*pipe*; *dropped* menunjukkan byte yang dibuang karena melebihi
-*rate*. Bila *transmitted* jalan tapi *dropped* 0 saat trafik
-melebihi *rate*, *pipe* belum diterapkan (cek §9e.5) atau *rule*
+*sched*/*queue*) untuk state dummynet, plus counter yang bergerak:
+rule pf anchor `traffic-shape` dan netstat per interface terikat.
+**Koreksi (23 Nov 2026):** kolom BKT Tot_pkt/bytes di `ipfw pipe show`
+**TIDAK bergerak** (mentok 1 pkt / ~124 byte walau 134 ribu paket lewat
+pipe — quirk tampilan dummynet, terbukti live 22 Nov 2026). Jangan
+ukur throughput dari situ; bila counter pf/netstat tidak bergerak saat
+trafik melebihi *rate*, *pipe* belum diterapkan (cek §9e.5) atau *rule*
 salah arah (cek §9e.3).
 
 Bukti ukur (21 Nov 2026, uji throughput dummynet): profile `paket8`
 → **8,001 Mbit/s** (target 8); profile `paket14` → **14,004 Mbit/s**
 (target 14) — dummynet bekerja presisi. Metode: *UDP flood* Python
 (~3,3 Gbit/s *offered*, paket 1400 B) ke satu *bind* IP di `ge0`
-(*burst* 500000); hasil dihitung dari *counter pipe* dummynet
-(*transmitted* = *offered* − *dropped*). Bukan iperf3 *end-to-end*
-(MikroTik tidak menjalankan iperf3) — jangan klaim sebagai hasil
-iperf3.
+(*burst* 500000); hasil dihitung dari counter rule pf anchor +
+netstat ge0 (Opkts/Obytes), BUKAN dari kolom BKT ipfw. Bukan iperf3
+*end-to-end* (MikroTik tidak menjalankan iperf3) — jangan klaim sebagai
+hasil iperf3.
 
 Catatan: konfigurasi profile 100M di `vlan100` lolos di *mock*,
 tapi uji *throughput* live 100 Mbps lewat `vlan100` BELUM terukur —
@@ -3391,6 +3423,25 @@ SUDAH LOLOS 15 Nov (lokal) + 19 Nov (RADIUS via myRadDASH).
 > **Koreksi 19 Nov (PPPoE + RADIUS LOLOS):** PPPoE baris 14 kini
 > ✅ LIVE (lokal 15 Nov + RADIUS 19 Nov) — hitungan kini ✅ LIVE =
 > **20**, ❌ BELUM/GAGAL = **2** (firewall/NAT, WireGuard).
+>
+> **Koreksi 23 Nov 2026 (batch repo, tanpa deploy — verifikasi live
+> ditunda sesudah rekaman Part 6):**
+> - Baris 12 (firewall/NAT): integrasi repo SUDAH lengkap (XML +
+>   backend apply + hook commit/boot + panduan §8); yang kurang hanya
+>   bukti + uji live. Bukti staging baru: `FW-APPLY-MOCK.sh` 16/0.
+>   Uji live (filter permit/deny + SNAT masquerade + DNAT di interface
+>   non-mgmt, guard §8.6–§8.7) tetap butuh gelombang live.
+> - Baris 13 (traffic-shape): `show traffic-shape statistics` kini
+>   menampilkan counter BERGERAK (pf anchor + netstat); kolom BKT ipfw
+>   dinyatakan quirk (tidak bergerak, terbukti live 22 Nov).
+>   `TRAFFIC-SHAPE-STATS-MOCK.sh` 10/0. Uji berbentuk live ditunda.
+> - Baris 20 (service SSH): sintaks dilengkapi — `no port` (reset ke
+>   22) + Tab-completion nama service di `show service status`.
+>   `SERVICE-MOCK.sh` 15/0. Uji live `service ssh` tetap BELUM.
+> - Baris 21 (checkpoint/rollback): rollback dari titik BARU kini
+>   byte-identik (startup-header + cermin /cfg).
+>   `CHECKPOINT-HEADER-MOCK.sh` 14/0. Verifikasi live (save → ubah →
+>   rollback → diff kosong) ditunda sesudah rekaman Part 6.
 
 ---
 

@@ -192,6 +192,27 @@ cmd_stats() {
     ipfw sched show 2>/dev/null || echo "(no schedulers in kernel)"
     echo "== queues =="
     ipfw queue show 2>/dev/null || echo "(no queues in kernel)"
+    # CATATAN (temuan Part 9, 22 Nov 2026): kolom BKT Tot_pkt/bytes di
+    # `ipfw pipe show` di atas TIDAK bergerak (mentok 1 pkt / ~124 byte
+    # walau 134 ribu paket lewat pipe — quirk tampilan dummynet, bukan
+    # bug Titian). JANGAN ukur throughput dari situ. Counter yang
+    # bergerak ada di dua seksi bawah ini.
+    echo "NOTE: kolom BKT Tot_pkt/bytes di ipfw pipe show di atas TIDAK bergerak (quirk tampilan dummynet, terbukti live 22 Nov 2026) — ukur throughput dari seksi pf + netstat di bawah."
+    echo "== pf anchor traffic-shape rules (counter BERGERAK: Packets/Bytes per rule = offered ke pipe) =="
+    if pf_enabled; then
+        pfctl -a "$ANCHOR" -s rules -v 2>/dev/null || echo "(anchor traffic-shape kosong / tidak termuat)"
+    else
+        echo "(pf disabled — tidak ada counter pf)"
+    fi
+    echo "== interface counters (netstat — BERGERAK: Ibytes/Obytes per interface terikat) =="
+    _ifs=$(grep -h -E '^(rule|bind) ' "$CONF" 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="on" || $i=="interface") print $(i+1)}' | sort -u)
+    if [ -z "$_ifs" ]; then
+        echo "(tidak ada interface terikat di config)"
+    else
+        for _if in $_ifs; do
+            netstat -I "$_if" 2>/dev/null || echo "(interface $_if tidak ada)"
+        done
+    fi
     exit 0
 }
 

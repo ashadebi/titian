@@ -139,7 +139,7 @@ show hardware dmi        # DMI detail
 
 ```
 show service summary          # service summary
-show service status <name>    # init command for a specific service
+show service status <name>    # init command for a specific service (Tab = list of rc services)
 ```
 
 ### 1.6 Ping and traceroute
@@ -346,7 +346,7 @@ Verification:
 show traffic-shape profile paket10   # profile + bind + derived pipe/rule
 show traffic-shape profile           # all profiles
 show traffic-shape                   # traffic-shape configuration
-show traffic-shape statistics        # kernel pipe/sched/queue counters (ipfw)
+show traffic-shape statistics        # dummynet state (ipfw) + MOVING counters: pf anchor + netstat per bound interface
 ```
 
 Note: profile/*bind* changes are written to
@@ -500,6 +500,7 @@ In the SSH view:
 
 ```
 port <number>               # SSH service port
+no port                     # reset SSH port to default (22)
 allow-root                  # allow root login via SSH
 no allow-root               # forbid root login via SSH
 disable-host-validation     # do not validate remote hostname with DNS
@@ -928,6 +929,11 @@ Note: `show firewall` exists only in exec mode (showing the rule list in
 priority order + live backend dump + forwarding status). Inside the
 firewall view, `show firewall` = Unknown command — `exit` first.
 
+Staging proof (23 Nov 2026): `titian-fw.sh apply` is mock-verified
+(`FW-APPLY-MOCK.sh` 16/0 — correct pf anchors, parse-check before load,
+missing-iface rules skipped, enable-no flush). Live test is still PENDING
+(§14 row 12) — it needs a live wave on a non-mgmt interface (see §8.6–§8.7).
+
 ### 8.1 Basic semantics
 
 - **Forward default DENY; input/output default ACCEPT.** Transit traffic
@@ -1091,9 +1097,9 @@ show checkpoints           # same as checkpoint list
 checkpoint delete <name>   # delete one point
 ```
 
-Point names: `[A-Za-z0-9_-]+`. A snapshot contains running-config + bird.conf
-+ bird.d + netstate + sysctl + meta, in
-`/opt/titian/etc/checkpoints/<name>/`.
+Point names: `[A-Za-z0-9_-]+`. A snapshot contains running-config +
+startup-header + bird.conf + bird.d + intent + netstate + sysctl +
+meta, in `/opt/titian/etc/checkpoints/<name>/`.
 
 `factory-reset confirm` automatically creates a pre-reset point named
 with the WIB date (`YYYY-MM-DD`, e.g. `2026-11-19`) before deleting
@@ -1111,6 +1117,18 @@ rollback          # without a name = return to startup-config
 Rollback is PERSISTENT and restarts the service. Safe order before a
 risky change: `checkpoint save pre-change`, make the change, if it fails
 `rollback pre-change`, if it succeeds `save`.
+
+**Byte-identical (fix, 23 Nov 2026):** points created after this fix
+store the startup-config stamp block in `startup-header`, so rollback
+restores startup-config **byte-identical** (empty diff vs pre-test) in
+**both** locations (`/etc/titian` and `/cfg/titian`). Staging proof:
+`CHECKPOINT-HEADER-MOCK.sh` 14/0. **Old** points (created before
+23 Nov 2026, no `startup-header`) keep the old behavior: the rolled-back
+startup-config loses the 3 stamp header lines (`! version`,
+` ! last commit`, `!`) + `/cfg` is not restored — run `save` after
+rolling back to an old point to re-sync `/cfg`. Live verification
+(save → change → rollback → empty diff) waits for the live wave after
+the Part 6 recording.
 
 ### 9.3 Rename interface (persistent)
 
@@ -2342,7 +2360,7 @@ Live test evidence (19 Nov 2026, myRadDASH host 84):
   `tun0` got NO IP. RADIUS is the auth authority, not a local
   fallback.
 
-Honest notes:
+Notes:
 
 - **Ping from the client to 10.254.254.1 FAILED (100% loss) for the
   local client.** Not a RADIUS failure. Cause: a same-machine route
@@ -2987,7 +3005,7 @@ show traffic-shape                 # enable + pipe/sched/queue/rule/profile/bind
 show traffic-shape profile [name]  # all profiles, or one profile + bind + derived objects
 show traffic-shape pipe            # raw pipes (including profile-derived ones)
 show traffic-shape rule            # raw rules (including profile-derived ones)
-show traffic-shape statistics      # kernel pipe/sched/queue counters (ipfw)
+show traffic-shape statistics      # dummynet state (ipfw) + MOVING counters: pf anchor + netstat (ipfw BKT does NOT move — quirk, see §1.10)
 ```
 
 ### 9e.3 Download/upload direction — depends on the bind kind
@@ -3128,24 +3146,28 @@ save
 
 ```
 show traffic-shape profile pppoe10   # profile + bind + derived pipe/rule
-show traffic-shape statistics        # kernel counters: check the pipe grows
+show traffic-shape statistics        # moving counters: pf anchor + netstat grow (ipfw BKT does NOT move — quirk)
 ```
 
 `show traffic-shape statistics` calls `ipfw pipe show` (and
-*sched*/*queue*): the *transmitted* column shows bytes through the
-*pipe*; *dropped* shows bytes discarded for exceeding the *rate*.
-If *transmitted* grows but *dropped* stays 0 while traffic exceeds
-the *rate*, the *pipe* is not applied yet (see §9e.5) or the *rule*
-points the wrong way (see §9e.3).
+*sched*/*queue*) for dummynet state, plus the counters that move:
+pf anchor `traffic-shape` rules and netstat per bound interface.
+**Correction (23 Nov 2026):** the BKT Tot_pkt/bytes columns in
+`ipfw pipe show` do **NOT** move (stuck at 1 pkt / ~124 bytes even
+with 134 thousand packets through the pipe — dummynet display quirk,
+proven live 22 Nov 2026). Do not measure throughput from them; if the
+pf/netstat counters do not move while traffic exceeds the *rate*, the
+*pipe* is not applied yet (see §9e.5) or the *rule* points the wrong
+way (see §9e.3).
 
 Measured evidence (21 Nov 2026, dummynet throughput test): profile
 `paket8` → **8.001 Mbit/s** (target 8); profile `paket14` →
 **14.004 Mbit/s** (target 14) — dummynet works precisely. Method:
 Python *UDP flood* (~3.3 Gbit/s *offered*, 1400 B packets) to one
 IP *bind* on `ge0` (*burst* 500000); results computed from the
-dummynet *pipe counter* (*transmitted* = *offered* − *dropped*).
-Not end-to-end iperf3 (MikroTik does not run iperf3) — do not claim
-it as an iperf3 result.
+pf anchor rule counters + netstat ge0 (Opkts/Obytes), NOT from the
+ipfw BKT columns. Not end-to-end iperf3 (MikroTik does not run
+iperf3) — do not claim it as an iperf3 result.
 
 Note: the 100M profile configuration on `vlan100` passes in the
 *mock*, but a live 100 Mbit/s *throughput* test through `vlan100`
@@ -3433,6 +3455,26 @@ already PASSED 15 Nov (local) + 19 Nov (RADIUS via myRadDASH).
 > **Correction 19 Nov (PPPoE + RADIUS PASSED):** PPPoE row 14 is now
 > ✅ LIVE (local 15 Nov + RADIUS 19 Nov) — counts are now ✅ LIVE =
 > **20**, ❌ NOT YET/FAILED = **2** (firewall/NAT, WireGuard).
+>
+> **Correction 23 Nov 2026 (repo batch, no deploy — live verification
+> deferred until after the Part 6 recording):**
+> - Row 12 (firewall/NAT): repo integration is already complete (XML +
+>   apply backend + commit/boot hooks + guide §8); only proof + live
+>   test were missing. New staging proof: `FW-APPLY-MOCK.sh` 16/0.
+>   Live test (filter permit/deny + SNAT masquerade + DNAT on a
+>   non-mgmt interface, guards §8.6–§8.7) still needs a live wave.
+> - Row 13 (traffic-shape): `show traffic-shape statistics` now shows
+>   the MOVING counters (pf anchor + netstat); the ipfw BKT column is
+>   declared a quirk (does not move, proven live 22 Nov).
+>   `TRAFFIC-SHAPE-STATS-MOCK.sh` 10/0. Live shaped test deferred.
+> - Row 20 (SSH service): syntax completed — `no port` (reset to 22)
+>   + Tab-completion of service names in `show service status`.
+>   `SERVICE-MOCK.sh` 15/0. Live `service ssh` test still NOT YET.
+> - Row 21 (checkpoint/rollback): rollback from NEW points is now
+>   byte-identical (startup-header + /cfg mirror).
+>   `CHECKPOINT-HEADER-MOCK.sh` 14/0. Live verification (save →
+>   change → rollback → empty diff) deferred until after the Part 6
+>   recording.
 
 ---
 

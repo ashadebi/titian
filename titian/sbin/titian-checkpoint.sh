@@ -38,6 +38,20 @@
 #   netstate/       — seluruh isi netstate (addr/managed/tuning/
 #                     tuning.prev/bond/vxlan) saat titik dibuat
 #   sysctl.titian (+ .prev) — sysctl global yang dikelola Titian
+#   startup-header  — blok stempel startup-config (perbaikan 23 Nov
+#                     2026, temuan Part 9): dump running-config TIDAK
+#                     memuat 3 baris header (`! version ...`,
+#                     ` ! last commit: ...`, `!` pemisah sesudahnya),
+#                     sehingga rollback lama selalu kehilangan ketiganya
+#                     (startup-config 409 -> 406 baris). File ini
+#                     menyimpan KEEMPAT baris blok stempel (`!` pembuka
+#                     + 3 baris itu) byte-persis, diambil dari
+#                     startup-config live saat titik dibuat — BUKAN
+#                     direkonstruksi (tanggal last commit tidak boleh
+#                     ditebak). Bila startup-config tidak ada / tanpa
+#                     stempel, file tidak ada (rollback fallback ke
+#                     perilaku lama + peringatan). Titik LAMA (dibuat
+#                     sebelum perbaikan ini) tidak punya file ini.
 #   meta            — nama + waktu dibuat (WIB) + waktu rollback terakhir
 #
 # Semantik rollback (BACA SEBELUM PAKAI — ditulis juga di help text):
@@ -49,6 +63,11 @@
 #   jalur boot yang sudah terbukti) + birdc configure untuk bird.conf.
 #   Alasan persistensi: "balik ke titik" harus berarti kembali
 #   sungguhan, bukan kembali sampai reboot berikutnya.
+#   (23 Nov 2026) startup-config dipulihkan BYTE-IDENTIK dari titik
+#   baru (blok stempel di startup-header + dump running-config) di
+#   KEDUA lokasi (/etc/titian + /cfg/titian); titik lama tanpa
+#   startup-header tetap memakai perilaku lama (kehilangan 3 baris
+#   header, /cfg tidak dipulihkan) + peringatan.
 #   Sebelum restart, rollback membersihkan (prune) objek live yang
 #   tidak ada di titik: interface buatan Titian yang mengendap,
 #   alamat ekstra, kunci tuning ekstra, sysctl ekstra, dan route
@@ -227,6 +246,24 @@ snapshot_files() {
     # save (berstempel) — strip di sini membuatnya kanonis.
     grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$src" > "$d/running-config.tmp" 2>/dev/null && \
         mv "$d/running-config.tmp" "$d/running-config" || return 1
+    # Header stempel startup-config (perbaikan 23 Nov 2026 — rollback
+    # byte-identik, temuan Part 9): blok = baris-baris awal
+    # startup-config yang cocok pola stempel (`!`, `! version ...`,
+    # ` ! last commit: ...`), berhenti di baris pertama yang bukan
+    # stempel. Guard: file HANYA valid bila memuat baris `! version`
+    # dan paling banyak 5 baris (blok stempel = 4 baris; lebih dari itu
+    # berarti pola salah tangkap isi config) — bila guard gagal, file
+    # dibuang (rollback fallback ke perilaku lama).
+    if [ -f "$STATE_ROOT/startup-config" ]; then
+        awk '/^!$/ || /^! version/ || /^ ?! last commit/ {print; next} {exit}' \
+            "$STATE_ROOT/startup-config" > "$d/startup-header" 2>/dev/null || true
+        if grep -q '^! version' "$d/startup-header" 2>/dev/null && \
+           [ "$(wc -l < "$d/startup-header" 2>/dev/null | tr -d ' ')" -le 5 ]; then
+            chmod 600 "$d/startup-header" 2>/dev/null || true
+        else
+            rm -f "$d/startup-header"
+        fi
+    fi
     # GUARD (Temuan 4, 17 Nov 2026): JANGAN memotret bird.conf yang
     # bukan hasil generate titian (tanpa marker #-GLOBAL-# — mis.
     # file default BSDRP yang kembali sesudah reboot karena
@@ -304,7 +341,7 @@ cmd_save() {
     rm -f "$tmp"
     write_meta "$d" "$name" "running" || warn "gagal tulis meta (checkpoint tetap tersimpan)"
     echo "checkpoint $name dibuat: $(grep '^created_wib=' "$d/meta" 2>/dev/null | cut -d= -f2-)"
-    echo "  isi: running-config + bird.conf + bird.d + intent + netstate + sysctl (beku; 'save' biasa not mengubah point ini)"
+    echo "  isi: running-config + startup-header + bird.conf + bird.d + intent + netstate + sysctl (beku; 'save' biasa not mengubah point ini)"
 }
 
 cmd_snapshot_last_save() {
@@ -558,7 +595,35 @@ restore_files() {
     # netstate + sysctl dari titik (menimpa penuh)
     local d=$1 conf f
     conf=$(bird_conf_path)
-    cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
+    # Startup-config: pulihkan BYTE-IDENTIK (perbaikan 23 Nov 2026,
+    # temuan Part 9). Titik BARU menyimpan blok stempel di
+    # startup-header; gabungkan dengan dump running-config: dump
+    # diawali baris `!` (pemisah klish = baris pertama
+    # startup-config), jadi baris pertama dump DIGANTI blok header
+    # utuh — bukan ditempel di depan (itu akan menduplikasi `!`).
+    # Bila dump tidak diawali `!` (config kosong / bentuk lain),
+    # header ditempel di depan. Titik LAMA (tanpa startup-header):
+    # perilaku lama (dump polos) — 3 baris header tetap hilang di
+    # titik lama (peringatan di cmd_rollback).
+    if [ -s "$d/startup-header" ]; then
+        if [ "$(head -n 1 "$d/running-config" 2>/dev/null)" = "!" ]; then
+            { cat "$d/startup-header"; tail -n +2 "$d/running-config"; } > "$STATE_ROOT/startup-config.tmp.$$" || return 1
+        else
+            { cat "$d/startup-header"; cat "$d/running-config"; } > "$STATE_ROOT/startup-config.tmp.$$" || return 1
+        fi
+        mv "$STATE_ROOT/startup-config.tmp.$$" "$STATE_ROOT/startup-config" || return 1
+    else
+        cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
+    fi
+    # Cerminkan ke /cfg agar rollback bertahan melewati reboot
+    # (temuan Part 9: /cfg dulu TIDAK dipulihkan sama sekali).
+    # HANYA bila restore byte-identik (ada startup-header): untuk
+    # titik lama, /cfg dibiarkan apa adanya — menimpa salinan /cfg
+    # yang bagus dengan file 3-baris-pendek justru merusak.
+    if [ -s "$d/startup-header" ] && [ -d "$CFG_DIR" ]; then
+        cp -f "$STATE_ROOT/startup-config" "$CFG_DIR/startup-config" 2>/dev/null || \
+            warn "gagal mencerminkan startup-config ke $CFG_DIR/startup-config (rollback tetap berlaku di sesi ini, tapi TIDAK bertahan melewati reboot — jalankan 'save' sesudah rollback)"
+    fi
     # MODE FILE LIVE (perbaikan 2 Nov 2026): cp FreeBSD MENULAR mode
     # sumber ke tujuan yang sudah ada (terbukti di lab: cp -f src600
     # dst644 -> dst 600), sementara file snapshot sengaja 600
@@ -684,6 +749,13 @@ cmd_rollback() {
         name="(startup-config)"
     fi
     [ -f "$d/running-config" ] || err "checkpoint rusak: $d/running-config tidak ada — TIDAK ADA PERUBAHAN"
+    # Titik lama (pra-23 Nov 2026, tanpa startup-header): rollback
+    # tetap jalan dengan perilaku lama — startup-config hasil rollback
+    # kehilangan 3 baris header stempel + /cfg TIDAK dipulihkan
+    # (jalankan 'save' sesudah rollback untuk menyinkronkan /cfg).
+    if [ ! -s "$d/startup-header" ]; then
+        warn "titik $name dibuat sebelum perbaikan header 23 Nov 2026 (tanpa startup-header) — startup-config hasil rollback kehilangan 3 baris header stempel + /cfg TIDAK dipulihkan; jalankan 'save' sesudah rollback untuk menyinkronkan /cfg"
+    fi
     # parse check bird.conf titik SEBELUM mengganti apa pun
     if [ -f "$d/bird.conf" ]; then
         bird=$(bird_bin)
