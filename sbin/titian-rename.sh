@@ -6,11 +6,15 @@
 # ditulis ulang (section + referensi nama) + aturan boot ditulis
 # (Linux: berkas .link berdasarkan MAC; FreeBSD: baris
 # ifconfig_<asal>_name di blok #-TITIAN-RENAME-# rc.conf), lalu
-# restart service titian (replay startup-config baru). Sesi CLI yang
-# menjalankan rename ikut ter-restart (pola yang sama seperti
-# rollback) — sambung lagi lalu verifikasi dengan `show interfaces`
-# / `show running-config`. Baris pra-restart dicatat di
-# /var/log/titian-rename.log.
+# restart service titian (replay startup-config baru) — TERLEPAS:
+# restart DITUNDA 1 detik + dijalankan di background (setsid bila
+# ada), karena `service titian restart` di dalam ACTION konfd
+# membunuh konfd induk sebelum fase start selesai (tes 15: konfd
+# mati 2/2). Sesi CLI yang menjalankan rename ikut terputus ~1 detik
+# sesudah output — sambung lagi lalu verifikasi dengan
+# `show interfaces` / `show running-config`. Baris pra-restart
+# dicatat di /var/log/titian-rename.log; log restart di
+# /var/log/titian-rename-restart.log.
 #
 # ATURAN AMAN (ditolak lantang, tanpa perubahan):
 #  - nama lama tidak ada di sistem; nama baru sudah dipakai sistem;
@@ -58,8 +62,9 @@
 #    adalah glob, bukan referensi nama — di luar cakupan rename).
 # POSIX sh.
 ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE_DIR=$ROOT/etc/netstate
-STARTUP=$ROOT/etc/startup-config
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+STATE_DIR=$STATE_ROOT/netstate
+STARTUP=$STATE_ROOT/startup-config
 SBIN=$ROOT/sbin
 SOCKFILE=/tmp/konfd.socket
 PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:$PATH
@@ -202,7 +207,7 @@ write_persist_linux() {
 # Dipanggil HANYA untuk kegagalan sesudah rename OS (sebelum restart).
 # Variabel global: old, new, was_up, bak, rcbak, linkbak, persist_done.
 fail_rollback() {
-    echo "GAGAL: $1 — mengembalikan keadaan (tanpa perubahan Titian)..." >&2
+    echo "Failed: $1 — mengembalikan keadaan (tanpa perubahan Titian)..." >&2
     if iface_exists "$new"; then
         if [ "$OS" = "FreeBSD" ]; then ifconfig "$new" name "$old" 2>/dev/null || true;
         else ip link set dev "$new" name "$old" 2>/dev/null || true; fi
@@ -273,7 +278,7 @@ rewrite_startup "$STARTUP" "$tmpnew" "$old" "$new" || err "gagal menulis ulang s
 matches=$(count_matches "$STARTUP" "$old")
 if [ "$matches" = "0" ]; then
     cmp -s "$tmpnew" "$STARTUP" || err "self-check rewrite gagal (tanpa perubahan)"
-    echo "catatan: $old tidak punya section/referensi di startup-config (tanpa state Titian) — rename OS + aturan boot saja"
+    echo "note: $old not punya section/referensi at startup-config (tanpa state Titian) — rename OS + aturan boot saja"
 else
     echo "tulis ulang startup-config: $matches baris section/referensi $old -> $new"
 fi
@@ -324,20 +329,29 @@ fi
 "$SBIN/titian-persist.sh" sync-if "$new" 2>/dev/null || warn "sync-if $new gagal (replay sesudah restart meregenerasi cermin)"
 "$SBIN/titian-persist.sh" drop-if "$old" 2>/dev/null || warn "drop-if $old gagal (cermin lama mungkin mengendap)"
 
-# Restart service (pola rollback) — sesi CLI terputus sesaat.
-echo "rename $old -> $new — restart service titian (sesi CLI terputus sesaat; sambung lagi lalu cek 'show interfaces')..."
-echo "$(date '+%Y-%m-%d %H:%M:%S %Z') rename $old -> $new (restart issued)" >> /var/log/titian-rename.log 2>/dev/null || true
-if [ "$OS" = "FreeBSD" ]; then
-    service titian restart 2>&1 || err "restart service GAGAL — state sudah PERSISTEN-baru (startup-config + netstate + aturan boot untuk $new); perbaiki service (start akan me-replay config baru), lalu verifikasi dengan 'show interfaces'"
+# Restart service TERLEPAS (detached): `service titian restart` di
+# dalam ACTION konfd membunuh konfd induk sebelum fase start selesai
+# (tes 15: konfd mati 2/2, perlu `service titian start` manual).
+# Jadi restart DITUNDA 1 detik + dijalankan di background (setsid
+# bila ada) agar ACTION selesai + output kembali dulu, baru restart
+# berjalan. Sesi CLI terputus ~1 detik sesudah output ini; sambung
+# lagi lalu verifikasi dengan `show interfaces`. Log restart:
+# /var/log/titian-rename-restart.log.
+echo "rename $old -> $new — restart service titian TERJADWAL (detached, ~1 detik lagi; sesi CLI terputus sesaat, sambung lagi lalu check 'show interfaces')..."
+echo "$(date '+%Y-%m-%d %H:%M:%S %Z') rename $old -> $new (restart scheduled)" >> /var/log/titian-rename.log 2>/dev/null || true
+_restart_cmd="service titian restart"
+[ "$OS" != "FreeBSD" ] && _restart_cmd="systemctl restart titian"
+if command -v setsid >/dev/null 2>&1; then
+    setsid sh -c "sleep 1; $_restart_cmd >/var/log/titian-rename-restart.log 2>&1" >/dev/null 2>&1 </dev/null &
 else
-    systemctl restart titian 2>&1 || err "restart service GAGAL — state sudah PERSISTEN-baru (startup-config + netstate + aturan boot untuk $new); perbaiki service (start akan me-replay config baru), lalu verifikasi dengan 'show interfaces'"
+    ( sleep 1; $_restart_cmd >/var/log/titian-rename-restart.log 2>&1 ) >/dev/null 2>&1 </dev/null &
 fi
-i=0
-while [ ! -S "$SOCKFILE" ] && [ "$i" -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
 rm -f "$bak" "$rcbak" "$linkbak" "$tmpnew" 2>/dev/null || true
+# Verifikasi di sini hanya soal rename OS (restart belum jalan —
+# konfd masih hidup saat baris ini dieksekusi).
 if iface_exists "$new" && ! iface_exists "$old"; then
-    echo "rename OK: $old -> $new (sistem + startup-config + netstate + aturan boot; verifikasi lengkap: 'show interfaces' + 'show running-config')"
+    echo "rename OK: $old -> $new (system + startup-config + netstate + aturan boot; restart service terjadwal — verifikasi lengkap sesudah sambung lagi: 'show interfaces' + 'show running-config')"
 else
-    warn "verifikasi pasca-restart tidak keduanya benar ($new ada / $old hilang) — periksa 'show interfaces' + 'show running-config'"
+    warn "verifikasi pra-restart tidak keduanya benar ($new ada / $old hilang) — periksa 'show interfaces' + 'show running-config' sesudah sambung lagi"
 fi
 exit 0

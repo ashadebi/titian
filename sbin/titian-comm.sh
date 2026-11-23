@@ -12,7 +12,8 @@
 # POSIX sh. Dipanggil dari bird-view sebagai ${RT_SBIN}/titian-comm.sh.
 DIR=$(dirname "$0")
 ROOT=$(dirname "$DIR")
-FILTER="$ROOT/etc/bird.d/filter.conf"
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+FILTER="$STATE_ROOT/bird.d/filter.conf"
 BIRD_SH="$DIR/titian-bird.sh"
 err() { echo "Error: $*" >&2; exit 33; }
 [ -f "$FILTER" ] || err "filter.conf tidak ada: $FILTER"
@@ -67,16 +68,39 @@ norm_action() {
     esac
 }
 
-# apply: check dulu, lolos baru generate; gagal -> restore backup.
+# apply: check dulu, lolos baru generate; gagal -> restore backup
+# pra-edit (.cli-bak dibuat pemanggil SEBELUM edit; backup di sini
+# akan percuma karena file sudah teredit).
+
+# avail_lists / avail_values — daftar yang tersedia untuk pesan error LOUD
+# (pola yang sama dengan filter-name / checkpoint: nama tak dikenal
+# ditolak rc=33 dengan menyebutkan yang tersedia). Sumber tunggal =
+# helper completion yang sama (titian-comm-lists.sh /
+# titian-comm-values.sh di dir yang sama); bila helper tidak ada,
+# fallback ke pesan generik (tidak menggagalkan error).
+avail_lists() {
+    _al=""
+    if [ -x "$DIR/titian-comm-lists.sh" ]; then
+        _al=$("$DIR/titian-comm-lists.sh" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
+    fi
+    if [ -n "$_al" ]; then printf '%s' "$_al"; else printf '(tidak ada community list)'; fi
+}
+avail_values() {
+    _av=""
+    if [ -x "$DIR/titian-comm-values.sh" ]; then
+        _av=$("$DIR/titian-comm-values.sh" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
+    fi
+    if [ -n "$_av" ]; then printf '%s' "$_av"; else printf '(tidak ada community)'; fi
+}
+
 apply() {
-    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     if ! "$BIRD_SH" check filter >/tmp/titian-comm-check.out 2>&1; then
         cat /tmp/titian-comm-check.out >&2
         cp -f "$FILTER.cli-bak" "$FILTER"
         err "parse GAGAL, filter.conf dikembalikan (tidak ada perubahan diterapkan)"
     fi
     "$BIRD_SH" generate filter || {
-        echo "PERINGATAN: generate filter gagal setelah check lolos; backup filter: $FILTER.cli-bak" >&2
+        echo "Warning: generate filter failed after check pass; backup filter: $FILTER.cli-bak" >&2
         exit 33
     }
 }
@@ -87,6 +111,7 @@ list_add() {
     line="define $name = $expr;"
     if grep -qF -- "$line" "$FILTER"; then echo "sudah ada: $line"; return 0; fi
     if grep -q "^define $name " "$FILTER"; then err "nama $name sudah didefinisikan dgn nilai lain (hapus dulu)"; fi
+    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     echo "$line" >> "$FILTER" || err "gagal tulis $FILTER"
     apply
 }
@@ -94,7 +119,8 @@ list_add() {
 list_del() {
     name=$1
     case "$name" in ''|*[!A-Za-z0-9_]*) err "nama list tidak valid: $name" ;; esac
-    grep -q "^define $name " "$FILTER" || { echo "tidak ada: define $name"; return 0; }
+    grep -q "^define $name " "$FILTER" || err "community list tidak ada: $name — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_lists))"
+    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     grep -v "^define $name " "$FILTER" > "$FILTER.tmp" || err "gagal edit $FILTER"
     mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"
     apply
@@ -112,6 +138,7 @@ export_add() {
         ext)   add="        bgp_ext_community.add($expr);" ;;
         large) add="        bgp_large_community.add($expr);" ;;
     esac
+    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     awk -v add="$add" '
         /^filter bgp_export_attr \{/ { infilter = 1 }
         infilter && /if source = RTS_STATIC then \{/ { instatic = 1 }
@@ -138,6 +165,7 @@ export_del() {
         ext)   add="        bgp_ext_community.add($expr);" ;;
         large) add="        bgp_large_community.add($expr);" ;;
     esac
+    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     awk -v add="$add" '
         /^filter bgp_export_attr \{/ { infilter = 1 }
         infilter && /if source = RTS_STATIC then \{/ { instatic = 1 }
@@ -146,7 +174,7 @@ export_del() {
         END { if (!skipped) exit 2 }
     ' "$FILTER" > "$FILTER.tmp"; rc=$?
     case $rc in
-        2) rm -f "$FILTER.tmp"; echo "tidak ada: $add"; return 0 ;;
+        2) rm -f "$FILTER.tmp"; err "community tidak ada di export: $1 — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_values))" ;;
         0) mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"; apply ;;
         *) rm -f "$FILTER.tmp"; err "gagal edit $FILTER" ;;
     esac
@@ -169,6 +197,7 @@ import_add() {
     # PORTABEL: jangan escape \( \) (awk -v memproses backslash berbeda di
     # gawk vs BSD awk sehingga match gagal di FreeBSD); pakai kelas [(] [)].
     pat="^ *if $(printf '%s' "$expr" | sed 's/(/[(]/g; s/)/[)]/g') ~ bgp_"
+    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     awk -v m="$m" -v pat="$pat" '
         /^filter bgp_import_comm \{/ { inimport = 1; print; print m; inserted = 1; next }
         inimport && $0 ~ pat { next }
@@ -185,6 +214,7 @@ import_add() {
 import_del() {
     spec=$(norm "$1"); type=${spec%%|*}; expr=${spec#*|}
     pat="^ *if $(printf '%s' "$expr" | sed 's/(/[(]/g; s/)/[)]/g') ~ bgp_"
+    cp -f "$FILTER" "$FILTER.cli-bak" || err "gagal backup $FILTER"
     awk -v pat="$pat" '
         /^filter bgp_import_comm \{/ { inimport = 1 }
         inimport && $0 ~ pat { skipped = 1; next }
@@ -192,7 +222,7 @@ import_del() {
         END { if (!skipped) exit 2 }
     ' "$FILTER" > "$FILTER.tmp"; rc=$?
     case $rc in
-        2) rm -f "$FILTER.tmp"; echo "tidak ada match untuk $expr"; return 0 ;;
+        2) rm -f "$FILTER.tmp"; err "tidak ada match import untuk $1 — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_values))" ;;
         0) mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"; apply ;;
         *) rm -f "$FILTER.tmp"; err "gagal edit $FILTER" ;;
     esac

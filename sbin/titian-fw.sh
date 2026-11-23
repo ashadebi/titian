@@ -1,620 +1,569 @@
 #!/bin/sh
-# TITIAN — firewall + NAT terpadu (Linux nftables + FreeBSD pf).
-# Model: SATU file netstate /opt/titian/etc/netstate/firewall.rules
-# (satu rule per baris, urutan dibuat = prioritas) = sumber kebenaran.
-# Setiap perubahan = tulis netstate + REBUILD backend penuh dari
-# netstate (bukan tambah/hapus satu rule live) — jadi live selalu sama
-# dengan netstate. Check-before-load (nft -c / pfctl -n) membuat gagal
-# apply TIDAK mengubah live; netstate dipulihkan dari backup.
+# titian-fw.sh — klish helper: edit + apply /usr/local/etc/firewall.conf (pf only)
+# BSDRP_klish, prepared 2026-11-08 ~19:15 WIB.
+# POSIX sh, no bashisms. Model follows Titian's proven firewall
+# (~/workspace/titian/titian-cli/sbin/titian-fw.sh, lab-verified 2 Nov 2026):
+# one config file = source of truth; rules identified by CONTENT (no IDs);
+# duplicates = "already exists"; `no` form = same full syntax.
+# IPv4 only (v1). pf is FreeBSD-only here (no nftables).
 #
-# Bentuk rule (kanonis, posisi tetap — PTYPE tree memaksa bentuk ini):
-#   filter <forward|input|output> <permit|deny> <tcp|udp|icmp|all>
-#          <src-cidr|any> <dst-cidr|any> <sport|any> <dport|any>
-#          <in-iface|any> <out-iface|any>
-#   snat <srcnet-cidr> <masquerade|addr> <out-iface|any>
-#   dnat <tcp|udp> <in-iface> <dport> <to-addr> <to-port|same>
-# Rule diidentifikasi ISI (bukan ID): `no` form = sintaks lengkap yang
-# sama; duplikat ditolak sebagai "sudah ada" (exit 0, replay-safe).
+# Config format (one rule per line; written by klish, read by
+# firewall-apply):
+#   enable yes|no
+#   protected <if>            (repeatable; default ge0)
+#   filter <chain> <action> proto <p> src <a> dst <a> sport <s> dport <d>
+#          in <if> out <if>
+#   snat <srcnet> to <target|masquerade> out <if>
+#   dnat <tcp|udp> in <if> dport <n> to <addr> port <n|same>
 #
-# Semantik (didokumentasikan di help + panduan §20, JANGAN diubah diam):
-#   - IPv4 SAJA v1. NAT first-match per chain (nft) / quick (pf).
-#   - Forward default DENY: nft = policy drop + established/related
-#     accept pertama; pf = trailing `block in quick on <iface> all`
-#     per in-iface rule forward (pf stateful default, tanpa padanan
-#     established). Input/output default ACCEPT (tidak pernah mengunci
-#     manajemen yang sudah ada).
-#   - Filter cocok pre-NAT untuk sumber (forward/output) dan post-NAT
-#     untuk tujuan DNAT (prerouting/rdr jalan sebelum filter) — SAMA
-#     kedua backend. Karena itu DNAT selalu butuh forward permit ke
-#     tujuan TERJEMAHAN (bukan ke port publik).
-#   - Perbedaan backend yang DITOLAK LANTANG (bukan diabaikan):
-#     [F] filter out-iface (pf tidak bisa mencocokkan iface keluar
-#         pada satu rule filter); [F] filter tanpa in/out iface
-#         (pf tanpa `on` berlaku ke SEMUA interface termasuk mgmt);
-#     [F] snat tanpa out; [F] masquerade tanpa out (alamat diambil
-#         dari iface itu); [F] dnat proto selain tcp/udp.
-#   - Guard mgmt/PtP: iface rute default (mgmt) selalu ditolak sebagai
-#     in/out; file /opt/titian/etc/protected-ifaces (satu nama/baris,
-#     kosong default) menambah daftar tolak (diisi uji lab dengan
-#     nama mgmt + PtP; dihapus saat cleanup).
-#   - Konflik NAT ditolak: snat (srcnet,out) sama target beda;
-#     dnat (proto,in,dport) sama target beda. Filter overlap
-#     DIIZINKAN (urutan memutuskan).
-#   - pf: rule ber-iface-hilang DILEWATI dengan warning saat apply
-#     (pfctl gagal load bila nama iface tidak ada); nft memuat semua
-#     nama apa adanya.
-# POSIX sh (jalan di dash Debian dan sh FreeBSD).
-PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin
-export PATH
-OS=$(uname -s)
-ROOT=${TITIAN_ROOT:-/opt/titian}
-STATE_DIR=${TITIAN_STATE_DIR:-$ROOT/etc/netstate}
-RULES="$STATE_DIR/firewall.rules"
-PROT="$ROOT/etc/protected-ifaces"
-PF_ANCHOR_FILE=/etc/pf.titian.conf
+# Validation (all enforced here, loudly, before anything is written):
+# - forward/input: in = real iface, out = any. output: in = any,
+#   out = real iface. (pf matches transit traffic on ingress; an out
+#   qualifier on a forward/input rule has no pf equivalent.)
+# - snat: out = real iface (snat without out is rejected).
+# - dnat: tcp/udp only; in = real iface.
+# - NAT conflicts rejected: snat (srcnet,out) / dnat (proto,in,dport)
+#   with a different target.
+# - Protected interfaces (default ge0, the mgmt iface) are rejected as
+#   in/out — this is the anti-lockout guard. At least one protected
+#   interface must remain.
+#
+# Every mutation touches /var/run/firewall.dirty so the klish commit
+# hook knows to run `service firewall restart` (or stop).
+set -u
 
-err() { echo "Error(firewall): $*" >&2; exit 33; }
-warn() { echo "Warning(firewall): $*" >&2; }
+CONF="${FW_CONF:-/usr/local/etc/firewall.conf}"
+DIRTY=/var/run/firewall.dirty
+# Pager global: output show >1 layar lewat less (titian-page.sh).
+# Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
+SBIN_DIR=$(dirname "$0")
+. "$SBIN_DIR/titian-page.sh"
+# Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
+# output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
+case "${1:-}" in show*) titian_page_begin ;; esac
 
-valid_v4() {
-    local rest o i
-    rest=$1
-    for i in 1 2 3 4; do
-        case "$rest" in
-            *.*) o=${rest%%.*}; rest=${rest#*.} ;;
-            *)   o=$rest; rest="" ;;
-        esac
-        case "$o" in ''|*[!0-9]*) return 1 ;; esac
-        if [ "$o" -gt 255 ] 2>/dev/null; then return 1; fi
-        if [ "$i" -eq 4 ] && [ -n "$rest" ]; then return 1; fi
-    done
-    case "$1" in *.*.*.*) return 0 ;; *) return 1 ;; esac
+PROG="titian-fw"
+
+die() { echo "$PROG: $*" >&2; exit 1; }
+
+touch_conf() {
+    if [ ! -f "$CONF" ]; then
+        printf '# firewall.conf - generated by klish, do not edit by hand\nenable no\nprotected ge0\n' > "$CONF" \
+            || die "cannot create $CONF"
+    fi
 }
 
-valid_cidr() {
-    # $1 = A.B.C.D/N (N 0-32)
-    local addr mask
+mark_dirty() { touch "$DIRTY" 2>/dev/null || true; }
+
+# --- validation helpers -------------------------------------------------
+valid_name() {
     case "$1" in
-        */*) addr=${1%%/*}; mask=${1##*/} ;;
+        *[!A-Za-z0-9_-]*|"") die "bad name: $1 (use [A-Za-z0-9_-]+)" ;;
+    esac
+}
+
+# valid_octet <n>: 0-255, no leading junk
+valid_octet() {
+    case "$1" in
+        ""|*[!0-9]*) return 1 ;;
+    esac
+    [ "$1" -ge 0 ] && [ "$1" -le 255 ] 2>/dev/null
+}
+
+# valid_v4 <addr>: dotted quad, each octet 0-255
+valid_v4() {
+    _a="$1"
+    case "$_a" in
+        *.*.*.*) ;;
         *) return 1 ;;
     esac
-    valid_v4 "$addr" || return 1
-    case "$mask" in ''|*[!0-9]*) return 1 ;; esac
-    [ "$mask" -ge 0 ] 2>/dev/null && [ "$mask" -le 32 ] 2>/dev/null
+    _o1=${_a%%.*}; _rest=${_a#*.}
+    _o2=${_rest%%.*}; _rest=${_rest#*.}
+    _o3=${_rest%%.*}; _o4=${_rest#*.}
+    case "$_o4" in *.*) return 1 ;; esac
+    valid_octet "$_o1" && valid_octet "$_o2" \
+        && valid_octet "$_o3" && valid_octet "$_o4"
+}
+
+# valid_cidr <addr>: bare IPv4 or IPv4/n (n 0-32)
+valid_cidr() {
+    case "$1" in
+        */*)
+            _ip=${1%%/*}; _n=${1#*/}
+            case "$_n" in *[!0-9]*|"") return 1 ;; esac
+            [ "$_n" -ge 0 ] && [ "$_n" -le 32 ] 2>/dev/null || return 1
+            valid_v4 "$_ip"
+            ;;
+        *) valid_v4 "$1" ;;
+    esac
 }
 
 valid_port() {
-    case "$1" in ''|*[!0-9]*) return 1 ;; esac
-    [ "$1" -ge 1 ] 2>/dev/null && [ "$1" -le 65535 ] 2>/dev/null
+    case "$1" in *[!0-9]*|"") return 1 ;; esac
+    [ "$1" -ge 1 ] && [ "$1" -le 65535 ] 2>/dev/null
 }
 
 iface_exists() {
-    if [ "$OS" = "FreeBSD" ]; then
-        ifconfig "$1" >/dev/null 2>&1
+    ifconfig "$1" >/dev/null 2>&1 || die "interface $1 not found (see 'show interfaces')"
+}
+
+is_protected() {
+    grep -q "^protected $1\$" "$CONF" 2>/dev/null
+}
+
+check_not_protected() {
+    if is_protected "$1"; then
+        die "interface $1 is protected (mgmt guard) — remove it from the protected list first ('no protect-interface $1'), at your own risk"
+    fi
+}
+
+# --- read-only ops ------------------------------------------------------
+cmd_check() { touch_conf; exit 0; }
+
+cmd_show() {
+    touch_conf
+    _en=$(sed -n 's/^enable //p' "$CONF" | head -1)
+    echo "firewall: ${_en:-no}"
+    echo "protected interfaces:"
+    grep '^protected ' "$CONF" 2>/dev/null | sed 's/^protected /  /' || true
+    echo "rules (order = priority; delete with the full syntax):"
+    _n=0
+    while IFS= read -r _line; do
+        case "$_line" in
+            filter\ *|snat\ *|dnat\ *)
+                _n=$((_n + 1))
+                printf '  %d. %s\n' "$_n" "$_line" ;;
+        esac
+    done < "$CONF"
+    [ "$_n" -gt 0 ] || echo "  (no rules)"
+    exit 0
+}
+
+cmd_show_filter() {
+    touch_conf
+    grep '^filter ' "$CONF" 2>/dev/null || echo "(no filter rules)"
+    exit 0
+}
+
+cmd_show_nat() {
+    touch_conf
+    grep -E '^(snat|dnat) ' "$CONF" 2>/dev/null || echo "(no NAT rules)"
+    exit 0
+}
+
+cmd_status() {
+    echo "forwarding: net.inet.ip.forwarding=$(sysctl -n net.inet.ip.forwarding 2>/dev/null) (pf does NOT forward by itself — needs 1 for transit)"
+    if pfctl -s Running >/dev/null 2>&1; then
+        echo "pf: $(pfctl -s Running 2>&1 | head -1)"
     else
-        [ -d "/sys/class/net/$1" ]
+        echo "pf: not running"
+        exit 0
     fi
+    echo "-- live anchor firewall (filter):"
+    pfctl -a firewall -sr 2>&1 | sed 's/^/   /'
+    echo "-- live anchor nat (nat/rdr):"
+    pfctl -a nat -sn 2>&1 | sed 's/^/   /'
+    exit 0
 }
 
-default_iface() {
-    # iface rute default = mgmt (kedua guest terbukti: enp1s0 / vtnet0)
-    if [ "$OS" = "FreeBSD" ]; then
-        netstat -rn 2>/dev/null | awk '$1=="default" {print $NF; exit}'
-    else
-        ip route show default 2>/dev/null | awk '{print $5; exit}'
-    fi
+# --- mutations ----------------------------------------------------------
+cmd_set_enable() {
+    case "$1" in
+        yes|no) ;;
+        *) die "enable takes yes|no" ;;
+    esac
+    touch_conf
+    _tmp="$CONF.tmp.$$"
+    grep -v '^enable ' "$CONF" > "$_tmp" 2>/dev/null || true
+    printf 'enable %s\n' "$1" >> "$_tmp"
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    mark_dirty
+    echo "firewall $1"
+    exit 0
 }
 
-check_iface() {
-    # $1=iface $2=boleh-any(0/1) — tolak: tidak ada / mgmt / terproteksi
-    local ifc=$1 d
-    if [ "$ifc" = "any" ]; then
-        [ "$2" = "1" ] && return 0
-        err "iface 'any' tidak diizinkan di sini (lihat help: batas FreeBSD)"
+# add_line <canonical-line> — append if not already present (exact match)
+add_line() {
+    touch_conf
+    if grep -qxF "$1" "$CONF" 2>/dev/null; then
+        echo "firewall: rule already exists: $1"
+        exit 0
     fi
-    iface_exists "$ifc" || err "interface tidak ada: $ifc (lihat 'show interfaces')"
-    d=$(default_iface)
-    if [ -n "$d" ] && [ "$ifc" = "$d" ]; then
-        err "interface $ifc adalah mgmt (rute default) — TIDAK BOLEH dipakai rule firewall/NAT"
-    fi
-    if [ -f "$PROT" ] && grep -qx "$ifc" "$PROT" 2>/dev/null; then
-        err "interface $ifc terproteksi (daftar $PROT) — TIDAK BOLEH dipakai rule firewall/NAT"
-    fi
+    printf '%s\n' "$1" >> "$CONF" || die "cannot write $CONF"
+    mark_dirty
+    echo "firewall: rule added: $1"
+    exit 0
 }
 
-rules_backup() { cp -f "$RULES" "$RULES.bak" 2>/dev/null || true; }
-rules_restore() { if [ -f "$RULES.bak" ]; then mv -f "$RULES.bak" "$RULES"; else rm -f "$RULES"; fi; }
-
-rule_add() {
-    # $* = baris rule kanonis — tambah bila belum ada (dup = pesan, exit 0)
-    local line="$*"
-    mkdir -p "$STATE_DIR" 2>/dev/null
-    touch "$RULES" 2>/dev/null
-    if grep -qxF "$line" "$RULES" 2>/dev/null; then
-        echo "firewall: rule sudah ada (tidak ditambah lagi): $line"
-        return 0
+# del_line <canonical-line> — remove exact match, fail if absent
+del_line() {
+    touch_conf
+    if ! grep -qxF "$1" "$CONF" 2>/dev/null; then
+        die "firewall: rule not found (nothing deleted): $1"
     fi
-    rules_backup
-    echo "$line" >> "$RULES"
-    if ! apply_live; then
-        rules_restore
-        err "apply backend GAGAL — netstate dipulihkan, live tidak berubah"
-    fi
-    echo "firewall: rule ditambah: $line"
+    _tmp="$CONF.tmp.$$"
+    grep -vxF "$1" "$CONF" > "$_tmp" || true
+    mv "$_tmp" "$CONF" || die "cannot write $CONF"
+    mark_dirty
+    echo "firewall: rule deleted: $1"
+    exit 0
 }
 
-rule_del() {
-    # $* = baris rule kanonis — hapus bila ada (absen = pesan, exit 0)
-    local line="$*" tmp
-    if [ ! -f "$RULES" ] || ! grep -qxF "$line" "$RULES" 2>/dev/null; then
-        echo "firewall: rule tidak ada (tidak ada yang dihapus): $line"
-        return 0
-    fi
-    rules_backup
-    tmp="$RULES.tmp"
-    grep -vxF "$line" "$RULES" > "$tmp" 2>/dev/null || true
-    mv -f "$tmp" "$RULES"
-    if ! apply_live; then
-        rules_restore
-        err "apply backend GAGAL — netstate dipulihkan, live tidak berubah"
-    fi
-    echo "firewall: rule dihapus: $line"
-}
-
-# ---------------- validasi + add/del per jenis ----------------
-
-add_filter() {
-    # $1..$9 = chain action proto src dst sport dport in out
-    local chain=$1 action=$2 proto=$3 src=$4 dst=$5 sport=$6 dport=$7 in=$8 out=$9
-    case "$chain" in forward|input|output) ;; *) err "chain tidak dikenal: $chain" ;; esac
-    case "$action" in permit|deny) ;; *) err "aksi tidak dikenal: $action" ;; esac
-    case "$proto" in tcp|udp|icmp|all) ;; *) err "proto tidak dikenal: $proto" ;; esac
-    if [ "$src" != "any" ]; then valid_cidr "$src" || err "src harus CIDR atau any: $src"; fi
-    if [ "$dst" != "any" ]; then valid_cidr "$dst" || err "dst harus CIDR atau any: $dst"; fi
-    case "$proto" in
+# add-filter <chain> <action> <proto> <src> <dst> <sport> <dport> <in> <out>
+cmd_add_filter() {
+    _chain="$1"; _action="$2"; _proto="$3"; _src="$4"; _dst="$5"
+    _sport="$6"; _dport="$7"; _in="$8"; _out="$9"
+    case "$_chain" in forward|input|output) ;; *) die "chain must be forward|input|output" ;; esac
+    case "$_action" in permit|deny) ;; *) die "action must be permit|deny" ;; esac
+    case "$_proto" in tcp|udp|icmp|all) ;; *) die "proto must be tcp|udp|icmp|all" ;; esac
+    if [ "$_src" != "any" ]; then valid_cidr "$_src" || die "src must be CIDR or any: $_src"; fi
+    if [ "$_dst" != "any" ]; then valid_cidr "$_dst" || die "dst must be CIDR or any: $_dst"; fi
+    case "$_proto" in
         tcp|udp)
-            [ "$sport" != "any" ] && { valid_port "$sport" || err "sport di luar 1-65535: $sport"; }
-            [ "$dport" != "any" ] && { valid_port "$dport" || err "dport di luar 1-65535: $dport"; }
+            [ "$_sport" != "any" ] && { valid_port "$_sport" || die "sport out of 1-65535: $_sport"; }
+            [ "$_dport" != "any" ] && { valid_port "$_dport" || die "dport out of 1-65535: $_dport"; }
             ;;
         *)
-            [ "$sport" != "any" ] || [ "$dport" != "any" ] && err "proto $proto tidak memakai port (pakai any)"
+            [ "$_sport" = "any" ] && [ "$_dport" = "any" ] \
+                || die "proto $_proto does not use ports (use any)"
             ;;
     esac
-    if [ "$OS" = "FreeBSD" ]; then
-        [ "$out" != "any" ] && err "FreeBSD: filter tidak bisa mencocokkan out-iface (pf tidak punya padanannya) — pakai in saja"
-        case "$chain" in
-            forward|input) check_iface "$in" 0 ;;
-            output) check_iface "$out" 0 ;;
-        esac
-    else
-        [ "$in" != "any" ] && check_iface "$in" 1
-        [ "$out" != "any" ] && check_iface "$out" 1
-    fi
-    rule_add "filter $chain $action $proto $src $dst $sport $dport $in $out"
-}
-
-del_filter() {
-    rule_del "filter $1 $2 $3 $4 $5 $6 $7 $8 $9"
-}
-
-add_snat() {
-    # $1=srcnet $2=target(masquerade|addr) $3=out
-    local src=$1 tgt=$2 out=$3 line f s o
-    valid_cidr "$src" || err "srcnet harus CIDR: $src"
-    if [ "$tgt" != "masquerade" ]; then valid_v4 "$tgt" || err "target snat harus alamat IPv4 atau masquerade: $tgt"; fi
-    if [ "$OS" = "FreeBSD" ]; then
-        [ "$out" = "any" ] && err "FreeBSD: snat butuh out-iface eksplisit"
-        check_iface "$out" 0
-        [ "$tgt" = "masquerade" ] || true
-    else
-        [ "$out" != "any" ] && check_iface "$out" 1
-    fi
-    # konflik: (srcnet,out) sama tapi target beda
-    if [ -f "$RULES" ]; then
-        while IFS= read -r line; do
-            set -- $line
-            if [ "${1:-}" = "snat" ] && [ "${2:-}" = "$src" ] && [ "${4:-}" = "$out" ] && [ "${3:-}" != "$tgt" ]; then
-                err "konflik snat: ($src, out $out) sudah dipetakan ke ${3} — hapus dulu bila mau ganti target"
-            fi
-        done < "$RULES"
-    fi
-    rule_add "snat $src $tgt $out"
-}
-
-del_snat() { rule_del "snat $1 $2 $3"; }
-
-add_dnat() {
-    # $1=proto $2=in $3=dport $4=to $5=toport
-    local proto=$1 in=$2 dport=$3 to=$4 toport=$5 line
-    case "$proto" in tcp|udp) ;; *) err "dnat hanya tcp/udp (bukan $proto)" ;; esac
-    check_iface "$in" 0
-    valid_port "$dport" || err "dport di luar 1-65535: $dport"
-    valid_v4 "$to" || err "tujuan dnat harus IPv4: $to"
-    if [ "$toport" != "same" ]; then valid_port "$toport" || err "port tujuan di luar 1-65535: $toport"; fi
-    if [ -f "$RULES" ]; then
-        while IFS= read -r line; do
-            set -- $line
-            if [ "${1:-}" = "dnat" ] && [ "${2:-}" = "$proto" ] && [ "${3:-}" = "$in" ] && [ "${4:-}" = "$dport" ] && ( [ "${5:-}" != "$to" ] || [ "${6:-}" != "$toport" ] ); then
-                err "konflik dnat: ($proto, in $in, dport $dport) sudah dipetakan ke ${5}:${6} — hapus dulu bila mau ganti target"
-            fi
-        done < "$RULES"
-    fi
-    rule_add "dnat $proto $in $dport $to $toport"
-}
-
-del_dnat() { rule_del "dnat $1 $2 $3 $4 $5"; }
-
-# ---------------- generate + load: Linux nftables ----------------
-
-nft_filter_terms() {
-    # $1..$8 = proto src dst sport dport in out (tanpa chain/action)
-    # -> istilah match nft (stdout, satu baris, tanpa aksi)
-    local proto=$1 src=$2 dst=$3 sport=$4 dport=$5 in=$6 out=$7 t=""
-    [ "$in" != "any" ] && t="$t iif \"$in\""
-    [ "$out" != "any" ] && t="$t oif \"$out\""
-    [ "$src" != "any" ] && t="$t ip saddr $src"
-    [ "$dst" != "any" ] && t="$t ip daddr $dst"
-    case "$proto" in
-        tcp) t="$t ip protocol tcp"
-            [ "$sport" != "any" ] && t="$t tcp sport $sport"
-            [ "$dport" != "any" ] && t="$t tcp dport $dport" ;;
-        udp) t="$t ip protocol udp"
-            [ "$sport" != "any" ] && t="$t udp sport $sport"
-            [ "$dport" != "any" ] && t="$t udp dport $dport" ;;
-        icmp) t="$t ip protocol icmp" ;;
-        all) : ;;
+    touch_conf
+    case "$_chain" in
+        forward|input)
+            [ "$_in" != "any" ] || die "$_chain needs a real in-interface (any is rejected on FreeBSD/pf)"
+            [ "$_out" = "any" ] || die "FreeBSD/pf: filter cannot match out-interface — use in only (out must be any)"
+            iface_exists "$_in"
+            check_not_protected "$_in"
+            ;;
+        output)
+            [ "$_in" = "any" ] || die "output chain: in must be any (traffic originates locally)"
+            [ "$_out" != "any" ] || die "output chain needs a real out-interface"
+            iface_exists "$_out"
+            check_not_protected "$_out"
+            ;;
     esac
-    printf '%s' "$t"
+    add_line "filter $_chain $_action proto $_proto src $_src dst $_dst sport $_sport dport $_dport in $_in out $_out"
 }
 
-nft_apply() {
-    local tmpfull tmpadd exists=0
-    if nft list table inet titian >/dev/null 2>&1; then exists=1; fi
-    if [ ! -s "$RULES" ]; then
-        if [ "$exists" = "1" ]; then nft delete table inet titian 2>/dev/null || warn "gagal hapus tabel inet titian"; fi
-        return 0
+cmd_del_filter() {
+    touch_conf
+    del_line "filter $1 $2 proto $3 src $4 dst $5 sport $6 dport $7 in $8 out $9"
+}
+
+# add-snat <srcnet> <target> <out>
+cmd_add_snat() {
+    _src="$1"; _tgt="$2"; _out="$3"
+    case "$_src" in */*) ;; *) die "snat srcnet must be CIDR: $_src" ;; esac
+    valid_cidr "$_src" || die "snat srcnet must be CIDR: $_src"
+    if [ "$_tgt" != "masquerade" ]; then valid_v4 "$_tgt" || die "snat target must be an IPv4 address or masquerade: $_tgt"; fi
+    [ "$_out" != "any" ] || die "FreeBSD/pf: snat needs an explicit out-interface"
+    touch_conf
+    iface_exists "$_out"
+    check_not_protected "$_out"
+    # conflict: same (srcnet,out), different target
+    while IFS= read -r _line; do
+        set -- $_line
+        if [ "${1:-}" = "snat" ] && [ "${2:-}" = "$_src" ] && [ "${6:-}" = "$_out" ] && [ "${4:-}" != "$_tgt" ]; then
+            die "snat conflict: ($_src, out $_out) already maps to ${4} — delete it first to change target"
+        fi
+    done < "$CONF"
+    add_line "snat $_src to $_tgt out $_out"
+}
+
+cmd_del_snat() {
+    del_line "snat $1 to $2 out $3"
+}
+
+# add-dnat <proto> <in> <dport> <to> <toport>
+cmd_add_dnat() {
+    _proto="$1"; _in="$2"; _dport="$3"; _to="$4"; _toport="$5"
+    case "$_proto" in tcp|udp) ;; *) die "dnat only supports tcp/udp (not $_proto)" ;; esac
+    valid_port "$_dport" || die "dport out of 1-65535: $_dport"
+    valid_v4 "$_to" || die "dnat target must be IPv4: $_to"
+    if [ "$_toport" != "same" ]; then valid_port "$_toport" || die "target port out of 1-65535: $_toport"; fi
+    touch_conf
+    iface_exists "$_in"
+    check_not_protected "$_in"
+    # conflict: same (proto,in,dport), different target
+    while IFS= read -r _line; do
+        set -- $_line
+        if [ "${1:-}" = "dnat" ] && [ "${2:-}" = "$_proto" ] && [ "${4:-}" = "$_in" ] && [ "${6:-}" = "$_dport" ] \
+            && { [ "${8:-}" != "$_to" ] || [ "${10:-}" != "$_toport" ]; }; then
+            die "dnat conflict: ($_proto, in $_in, dport $_dport) already maps to ${8}:${10} — delete it first to change target"
+        fi
+    done < "$CONF"
+    add_line "dnat $_proto in $_in dport $_dport to $_to port $_toport"
+}
+
+cmd_del_dnat() {
+    del_line "dnat $1 in $2 dport $3 to $4 port $5"
+}
+
+cmd_add_protected() {
+    valid_name "$1"
+    touch_conf
+    iface_exists "$1"
+    add_line "protected $1"
+}
+
+cmd_del_protected() {
+    touch_conf
+    if ! grep -qxF "protected $1" "$CONF" 2>/dev/null; then
+        die "interface $1 is not in the protected list"
     fi
-    tmpfull=$(mktemp /tmp/titian-fw-nft.XXXXXX) || return 1
-    tmpadd=$(mktemp /tmp/titian-fw-add.XXXXXX) || { rm -f "$tmpfull"; return 1; }
-    # JALUR EXISTING (insiden bar1 2 Nov 2026): `nft flush table`
-    # menghapus SEMUA rule termasuk established/related di forward —
-    # jadi daftar add-rule HARUS membukanya lagi PALING ATAS, kalau
-    # tidak trafik balik putus (policy drop) meski request lolos.
-    # (Di chain forward, add-rule menempel urut per chain, jadi baris
-    # ini tetap pertama di forward apa pun urutan rule user.)
-    if [ "$exists" = "1" ]; then
-        echo "add rule inet titian forward ct state established,related accept" > "$tmpadd"
+    _n=$(grep -c '^protected ' "$CONF" 2>/dev/null)
+    [ "$_n" -gt 1 ] || die "at least one protected interface is required (add another one first, then remove $1)"
+    del_line "protected $1"
+}
+
+cmd_flush() {
+    printf '# firewall.conf - generated by klish, do not edit by hand\nenable no\nprotected ge0\n' > "$CONF" \
+        || die "cannot write $CONF"
+    mark_dirty
+    echo "firewall: all configuration flushed (enable no, protected reset to ge0)"
+    exit 0
+}
+
+# firewall-apply — apply /usr/local/etc/firewall.conf to pf anchors
+# BSDRP_klish, prepared 2026-11-08 ~19:15 WIB.
+# POSIX sh, no bashisms. Generation logic follows Titian's proven
+# pf_apply (~/workspace/titian/titian-cli/sbin/titian-fw.sh, lab-verified
+# 2 Nov 2026): translation first, filter rules all `quick` (first match
+# wins), trailing `block in quick on <if> all` per in-iface from forward
+# filters AND dnat rules (dnat alone must close its iface), iface-missing
+# rules SKIPPED with a warning (pfctl fails the whole anchor load on an
+# unknown iface name), and CHECK-BEFORE-LOAD — an anchor is never loaded
+# live before it passes `pfctl -a <anchor> -n -f`.
+#
+# Usage (merged): titian-fw.sh apply [config-file] | apply --flush
+#   (test-only env overrides: FW_CONF, PF_CONF, PF_FW_FILE, PF_NAT_FILE)
+#
+# Anchors (must be referenced in /etc/pf.conf — see staging pf.conf):
+#   nat-anchor "nat" + rdr-anchor "nat"  -> /etc/pf-nat.conf
+#   anchor "firewall"                    -> /etc/pf-firewall.conf
+# The traffic-shape anchor lives in the same pf.conf (separate subsystem).
+#
+# Safe to re-run: full rebuild from the config file on every run. Exit 0 on
+# success (including disabled / no config). Non-zero with a clear message
+# on bad config or failed parse-check, so a klish commit can fail loudly.
+
+PF_CONF="${PF_CONF:-/etc/pf.conf}"
+FW_FILE="${PF_FW_FILE:-/etc/pf-firewall.conf}"
+NAT_FILE="${PF_NAT_FILE:-/etc/pf-nat.conf}"
+
+warn() {
+    if [ -t 2 ]; then printf '%s: \033[33mwarning:\033[0m %s\n' "$PROG" "$*" >&2
+    else echo "$PROG: warning: $*" >&2; fi
+}
+
+pf_enabled() {
+    pfctl -s info 2>/dev/null | grep -q "Status: Enabled"
+}
+
+iface_present() {
+    ifconfig "$1" >/dev/null 2>&1
+}
+
+flush_anchors() {
+    if pf_enabled; then
+        pfctl -a firewall -F rules >/dev/null 2>&1 || true
+        pfctl -a nat -F rules >/dev/null 2>&1 || true
+        pfctl -a nat -F nat >/dev/null 2>&1 || true
     fi
-    {
-        echo "table inet titian {"
-        echo "  chain input { type filter hook input priority 0; policy accept;"
-        echo "  }"
-        echo "  chain forward { type filter hook forward priority 0; policy drop;"
-        echo "    ct state established,related accept"
-        echo "  }"
-        echo "  chain output { type filter hook output priority 0; policy accept;"
-        echo "  }"
-        echo "  chain prerouting { type nat hook prerouting priority -100; policy accept;"
-        echo "  }"
-        echo "  chain postrouting { type nat hook postrouting priority 100; policy accept;"
-        echo "  }"
-        echo "}"
-    } > "$tmpfull"
-    # aturan-aturan sebagai add rule (dipakai sesudah flush bila tabel ada)
-    while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        set -- $line
-        case "$1" in
-            filter)
-                _act=accept; [ "$3" = "deny" ] && _act=drop
-                echo "add rule inet titian $2$(nft_filter_terms "$4" "$5" "$6" "$7" "$8" "$9" "${10}") $_act" >> "$tmpadd"
-                ;;
-            snat)
-                _t=""
-                [ "$2" != "any" ] && _t=" ip saddr $2"
-                if [ "$4" != "any" ]; then _t="$_t oif \"$4\""; fi
-                if [ "$3" = "masquerade" ]; then
-                    echo "add rule inet titian postrouting$_t masquerade" >> "$tmpadd"
+    rm -f "$FW_FILE" "$NAT_FILE"
+}
+
+# --- apply (was firewall-apply, standalone) -------------------------
+cmd_apply() {
+    # $1 = optional config path, or --flush
+    if [ "${1:-}" = "--flush" ]; then
+        kldstat -q -m pf 2>/dev/null || exit 0
+        flush_anchors
+        exit 0
+    fi
+    [ -n "${1:-}" ] && CONF="$1"
+    # --- load module --------------------------------------------------------
+    kldstat -q -m pf 2>/dev/null || kldload pf \
+        || die "cannot load pf module"
+
+    # --- no config yet = nothing to do --------------------------------------
+    [ -f "$CONF" ] || { flush_anchors; exit 0; }
+
+    # --- disabled = flush everything and stop -------------------------------
+    _en=$(sed -n 's/^enable //p' "$CONF" | head -1)
+    if [ "$_en" != "yes" ]; then
+        flush_anchors
+        exit 0
+    fi
+
+    # --- pf.conf must reference our anchors ---------------------------------
+    if [ ! -f "$PF_CONF" ]; then
+        warn "$PF_CONF does not exist — anchors cannot be evaluated (ship staging pf.conf to BSDRP/Files/etc/pf.conf)"
+    elif ! grep -q 'anchor "firewall"' "$PF_CONF" 2>/dev/null \
+        || ! grep -q 'nat-anchor "nat"' "$PF_CONF" 2>/dev/null; then
+        warn "$PF_CONF does not reference anchors \"firewall\"/\"nat\" — add:"
+        warn '    nat-anchor "nat"'
+        warn '    rdr-anchor "nat"'
+        warn '    anchor "firewall"'
+        warn "anchors are created, but pf will not evaluate them until then"
+    fi
+
+    # --- generate anchor files (temp, then parse-check, then install) -------
+    _nat_tmp="$NAT_FILE.tmp.$$"
+    _fw_tmp="$FW_FILE.tmp.$$"
+    : > "$_nat_tmp" || die "cannot write $_nat_tmp"
+    : > "$_fw_tmp" || die "cannot write $_fw_tmp"
+    printf '# generated by firewall-apply — do not edit by hand (source: %s)\n' "$CONF" >> "$_nat_tmp"
+    printf '# generated by firewall-apply — do not edit by hand (source: %s)\n' "$CONF" >> "$_fw_tmp"
+
+    _fwd_ifaces=""
+    while IFS= read -r _line; do
+        case "$_line" in
+            ""|\#*) continue ;;
+            enable\ *|protected\ *) continue ;;
+            snat\ *)
+                set -- $_line
+                # $1=snat $2=srcnet $3=to $4=target $5=out $6=if
+                [ "$#" -eq 6 ] || die "corrupt snat line: $_line"
+                if ! iface_present "$6"; then
+                    warn "SKIP (iface $6 missing): $_line"
+                    continue
+                fi
+                if [ "$4" = "masquerade" ]; then
+                    printf 'nat on %s from %s to any -> (%s)\n' "$6" "$2" "$6" >> "$_nat_tmp"
                 else
-                    echo "add rule inet titian postrouting$_t snat to $3" >> "$tmpadd"
+                    printf 'nat on %s from %s to any -> %s\n' "$6" "$2" "$4" >> "$_nat_tmp"
                 fi
                 ;;
-            dnat)
-                _t="iif \"$3\" $2 dport $4 dnat ip to $5"
-                [ "$6" != "same" ] && _t="$_t:$6"
-                echo "add rule inet titian prerouting $_t" >> "$tmpadd"
+            dnat\ *)
+                set -- $_line
+                # $1=dnat $2=proto $3=in $4=if $5=dport $6=n $7=to $8=addr
+                # $9=port ${10}=n|same
+                [ "$#" -eq 10 ] || die "corrupt dnat line: $_line"
+                if ! iface_present "$4"; then
+                    warn "SKIP (iface $4 missing): $_line"
+                    continue
+                fi
+                case " $_fwd_ifaces " in *" $4 "*) ;; *) _fwd_ifaces="$_fwd_ifaces $4" ;; esac
+                if [ "${10}" = "same" ]; then
+                    printf 'rdr on %s proto %s from any to any port %s -> %s\n' "$4" "$2" "$6" "$8" >> "$_nat_tmp"
+                else
+                    printf 'rdr on %s proto %s from any to any port %s -> %s port %s\n' "$4" "$2" "$6" "$8" "${10}" >> "$_nat_tmp"
+                fi
                 ;;
+            filter\ *)
+                set -- $_line
+                # $1=filter $2=chain $3=action $4=proto $5=p $6=src $7=a $8=dst
+                # $9=a $10=sport $11=s $12=dport $13=d $14=in $15=if $16=out $17=if
+                [ "$#" -eq 17 ] || die "corrupt filter line: $_line"
+                _chain="$2"; _action="$3"; _proto="$5"; _src="$7"; _dst="$9"
+                _sport="${11}"; _dport="${13}"; _in="${15}"; _out="${17}"
+                case "$_chain" in
+                    forward|input) _dir=in; _if="$_in" ;;
+                    output)        _dir=out; _if="$_out" ;;
+                    *) die "corrupt filter line (bad chain): $_line" ;;
+                esac
+                if ! iface_present "$_if"; then
+                    warn "SKIP (iface $_if missing): $_line"
+                    continue
+                fi
+                if [ "$_chain" = "forward" ]; then
+                    case " $_fwd_ifaces " in *" $_if "*) ;; *) _fwd_ifaces="$_fwd_ifaces $_if" ;; esac
+                fi
+                case "$_action" in
+                    permit) _act=pass ;;
+                    deny)   _act=block ;;
+                    *) die "corrupt filter line (bad action): $_line" ;;
+                esac
+                _t="$_act $_dir quick on $_if inet"
+                case "$_proto" in tcp|udp|icmp) _t="$_t proto $_proto" ;; esac
+                _t="$_t from $_src"
+                case "$_proto" in
+                    tcp|udp) [ "$_sport" != "any" ] && _t="$_t port $_sport" ;;
+                esac
+                _t="$_t to $_dst"
+                case "$_proto" in
+                    tcp|udp) [ "$_dport" != "any" ] && _t="$_t port $_dport" ;;
+                esac
+                printf '%s\n' "$_t" >> "$_fw_tmp"
+                ;;
+            *) die "unknown config line: $_line" ;;
         esac
-    done < "$RULES"
-    if [ "$exists" = "1" ]; then
-        # fail-closed selama refill: flush mempertahanankan chain +
-        # policy (forward drop), lalu tambah aturan.
-        nft flush table inet titian 2>/dev/null || { rm -f "$tmpfull" "$tmpadd"; return 1; }
-        if ! nft -c -f "$tmpadd" 2>/dev/null; then
-            warn "nft check gagal untuk aturan baru (live = tabel kosong ter-flush; jalankan apply-all lagi sesudah perbaiki netstate)"
-            rm -f "$tmpfull" "$tmpadd"; return 1
-        fi
-        nft -f "$tmpadd" 2>/dev/null || { rm -f "$tmpfull" "$tmpadd"; return 1; }
-    else
-        # tabel belum ada: gabung definisi + aturan jadi satu -f
-        {
-            echo "table inet titian {"
-            echo "  chain input { type filter hook input priority 0; policy accept;"
-            while IFS= read -r line; do
-                set -- $line
-                [ "${1:-}" = "filter" ] && [ "${2:-}" = "input" ] || continue
-                _act=accept; [ "$3" = "deny" ] && _act=drop
-                echo "    $(nft_filter_terms "$4" "$5" "$6" "$7" "$8" "$9" "${10}" | sed 's/^ //') $_act"
-            done < "$RULES"
-            echo "  }"
-            echo "  chain forward { type filter hook forward priority 0; policy drop;"
-            echo "    ct state established,related accept"
-            while IFS= read -r line; do
-                set -- $line
-                [ "${1:-}" = "filter" ] && [ "${2:-}" = "forward" ] || continue
-                _act=accept; [ "$3" = "deny" ] && _act=drop
-                echo "    $(nft_filter_terms "$4" "$5" "$6" "$7" "$8" "$9" "${10}" | sed 's/^ //') $_act"
-            done < "$RULES"
-            echo "  }"
-            echo "  chain output { type filter hook output priority 0; policy accept;"
-            while IFS= read -r line; do
-                set -- $line
-                [ "${1:-}" = "filter" ] && [ "${2:-}" = "output" ] || continue
-                _act=accept; [ "$3" = "deny" ] && _act=drop
-                echo "    $(nft_filter_terms "$4" "$5" "$6" "$7" "$8" "$9" "${10}" | sed 's/^ //') $_act"
-            done < "$RULES"
-            echo "  }"
-            echo "  chain prerouting { type nat hook prerouting priority -100; policy accept;"
-            while IFS= read -r line; do
-                set -- $line
-                [ "${1:-}" = "dnat" ] || continue
-                _t="iif \"$3\" $2 dport $4 dnat ip to $5"
-                [ "$6" != "same" ] && _t="$_t:$6"
-                echo "    $_t"
-            done < "$RULES"
-            echo "  }"
-            echo "  chain postrouting { type nat hook postrouting priority 100; policy accept;"
-            while IFS= read -r line; do
-                set -- $line
-                [ "${1:-}" = "snat" ] || continue
-                _t=""
-                [ "$2" != "any" ] && _t=" ip saddr $2"
-                if [ "$4" != "any" ]; then _t="$_t oif \"$4\""; fi
-                if [ "$3" = "masquerade" ]; then
-                    echo "    $_t masquerade" | sed 's/^ *//'
-                else
-                    echo "    $_t snat to $3" | sed 's/^ *//'
-                fi
-            done < "$RULES"
-            echo "  }"
-            echo "}"
-        } > "$tmpfull"
-        if ! nft -c -f "$tmpfull" 2>/dev/null; then
-            rm -f "$tmpfull" "$tmpadd"; return 1
-        fi
-        nft -f "$tmpfull" 2>/dev/null || { rm -f "$tmpfull" "$tmpadd"; return 1; }
+    done < "$CONF"
+
+    # --- trailing block per in-iface (forward default DENY) -----------------
+    for _f in $_fwd_ifaces; do
+        iface_present "$_f" || continue
+        printf 'block in quick on %s all\n' "$_f" >> "$_fw_tmp"
+    done
+
+    # --- parse-check BEFORE touching live state -----------------------------
+    if ! pfctl -a nat -n -f "$_nat_tmp" 2>/dev/null; then
+        warn "nat anchor FAILED parse-check — live not changed"
+        rm -f "$_nat_tmp" "$_fw_tmp"
+        exit 1
     fi
-    rm -f "$tmpfull" "$tmpadd"
-    return 0
-}
-
-# ---------------- generate + load: FreeBSD pf ----------------
-
-pf_filter_terms() {
-    # $1..$7 = proto src dst sport dport dir(if-in/out) — tidak, dir
-    # ditangani pemanggil; fungsi ini hanya from/to/proto/port.
-    # Dipakai inline di pf_apply (bukan fungsi terpisah) agar urutan
-    # kata pf tepat; fungsi ini TIDAK dipakai (lihat pf_apply).
-    :
-}
-
-pf_ensure_main() {
-    # pastikan blok marker anchor di /etc/pf.conf + pf_enable di rc.conf
-    local tmp
-    if [ ! -f /etc/pf.conf ] || ! grep -q '#-TITIAN-FW-#' /etc/pf.conf 2>/dev/null; then
-        [ -f /etc/pf.conf ] && cp -f /etc/pf.conf /etc/pf.conf.titian-fw-bak 2>/dev/null || true
-        {
-            [ -f /etc/pf.conf ] && cat /etc/pf.conf
-            echo ""
-            echo '#-TITIAN-FW-#'
-            echo 'nat-anchor "titian"'
-            echo 'rdr-anchor "titian"'
-            echo 'anchor "titian"'
-            echo '#-ENDTITIAN-FW-#'
-        } > /etc/pf.conf.tmp 2>/dev/null && mv -f /etc/pf.conf.tmp /etc/pf.conf
-        pfctl -n -f /etc/pf.conf 2>/dev/null || warn "pf.conf hasil edit GAGAL parse-check (anchor mungkin tidak dievaluasi — periksa manual)"
+    if ! pfctl -a firewall -n -f "$_fw_tmp" 2>/dev/null; then
+        warn "firewall anchor FAILED parse-check — live not changed"
+        rm -f "$_nat_tmp" "$_fw_tmp"
+        exit 1
     fi
-    if ! grep -q '#-TITIAN-FW-#' /etc/rc.conf 2>/dev/null; then
-        cp -f /etc/rc.conf /etc/rc.conf.titian-fw-bak 2>/dev/null || true
-        {
-            cat /etc/rc.conf 2>/dev/null
-            echo ""
-            echo '#-TITIAN-FW-#'
-            echo 'pf_enable="YES"'
-            echo '#-ENDTITIAN-FW-#'
-        } > /etc/rc.conf.tmp 2>/dev/null
-        if sh -n /etc/rc.conf.tmp 2>/dev/null; then
-            mv -f /etc/rc.conf.tmp /etc/rc.conf
+
+    # --- install + load live ------------------------------------------------
+    mv "$_nat_tmp" "$NAT_FILE" || die "cannot write $NAT_FILE"
+    mv "$_fw_tmp" "$FW_FILE" || die "cannot write $FW_FILE"
+    pfctl -a nat -f "$NAT_FILE" 2>/dev/null \
+        || die "pfctl failed to load nat anchor"
+    pfctl -a firewall -f "$FW_FILE" 2>/dev/null \
+        || die "pfctl failed to load firewall anchor"
+
+    # --- load main ruleset so the anchors are evaluated (Tes 12 retest) -----
+    # `pfctl -e` alone activates pf with an EMPTY main ruleset — the
+    # firewall/nat anchors above are loaded but never referenced, so no
+    # rule is ever evaluated (Tes 12 retest 18 Nov 2026: `pfctl -sr`
+    # EMPTY, filter counter 0, fetch RB3011->mesin tetap 200 padahal
+    # `commit: firewall enabled + applied`). $PF_CONF must reference
+    # anchor "firewall" + nat-anchor "nat" (warned above when absent);
+    # loading it here makes the anchors live. Parse-check first so a
+    # bad main ruleset never kills the running pf; on failure warn and
+    # continue (anchors stay loaded — fix $PF_CONF, then re-apply).
+    if [ -f "$PF_CONF" ]; then
+        if pfctl -n -f "$PF_CONF" 2>/dev/null; then
+            pfctl -f "$PF_CONF" 2>/dev/null \
+                || warn "pfctl -f $PF_CONF failed — anchors loaded but main ruleset not active"
         else
-            warn "rc.conf hasil edit GAGAL sh -n — tidak ditulis"
-            rm -f /etc/rc.conf.tmp
+            warn "$PF_CONF FAILED parse-check — anchors loaded but main ruleset not active (fix $PF_CONF, then re-apply)"
         fi
     fi
+
+    # --- enable pf if it is not running -------------------------------------
+    if ! pfctl -s Running >/dev/null 2>&1; then
+        pfctl -e 2>/dev/null || warn "pfctl -e failed (pf not running — check pf_enable)"
+    fi
+
+    exit 0
 }
 
-pf_apply() {
-    local tmp fwd_ifaces f line
-    if [ ! -s "$RULES" ]; then
-        pfctl -a titian -F rules 2>/dev/null || true
-        pfctl -a titian -F nat 2>/dev/null || true
-        return 0
-    fi
-    tmp=$(mktemp /tmp/titian-fw-pf.XXXXXX) || return 1
-    {
-        echo "# generated by titian-fw.sh — jangan edit manual (sumber: netstate/firewall.rules)"
-        # --- translation dulu (grup order pf: nat/rdr sebelum filter) ---
-        while IFS= read -r line; do
-            set -- $line
-            case "${1:-}" in
-                snat)
-                    if [ "$3" = "masquerade" ]; then
-                        echo "nat on $4 from $2 to any -> ($4)"
-                    else
-                        echo "nat on $4 from $2 to any -> $3"
-                    fi
-                    ;;
-                dnat)
-                    if [ "$6" = "same" ]; then
-                        echo "rdr on $3 proto $2 from any to any port $4 -> $5"
-                    else
-                        echo "rdr on $3 proto $2 from any to any port $4 -> $5 port $6"
-                    fi
-                    ;;
-            esac
-        done < "$RULES"
-        # --- filter (semua quick = menang-pertama, sama dengan nft) ---
-        while IFS= read -r line; do
-            set -- $line
-            [ "${1:-}" = "filter" ] || continue
-            _act=pass; [ "$3" = "deny" ] && _act=block
-            _dir=in; _if=$9
-            if [ "$2" = "output" ]; then _dir=out; _if=${10}; fi
-            # iface hilang -> lewati (pfctl gagal load bila nama tak ada)
-            if ! iface_exists "$_if"; then
-                echo "# LEWATI (iface $_if hilang): $line" >&2
-                continue
-            fi
-            _t="$_act $_dir quick on $_if inet"
-            case "$4" in tcp|udp|icmp) _t="$_t proto $4" ;; esac
-            _t="$_t from $5"
-            if [ "$4" = "tcp" ] || [ "$4" = "udp" ]; then
-                [ "$7" != "any" ] && _t="$_t port $7"
-            fi
-            _t="$_t to $6"
-            if [ "$4" = "tcp" ] || [ "$4" = "udp" ]; then
-                [ "$8" != "any" ] && _t="$_t port $8"
-            fi
-            echo "$_t"
-        done < "$RULES"
-        # --- trailing block per in-iface (default deny) ---
-        # In-iface dikumpulkan dari filter-forward DAN dnat: dnat saja (tanpa
-        # forward rule) sebelumnya tidak menutup iface -> koneksi DNAT lolos
-        # tanpa permit (bar2 FreeBSD FAIL 2 Nov). Filter-input TIDAK ikut:
-        # input-only harus berperilaku sama dengan nft (policy accept).
-        # Snat-only (tanpa in-iface) juga tidak menutup iface di pf —
-        # didokumentasikan sebagai batas per-OS (nft menutup via policy drop).
-        fwd_ifaces=""
-        while IFS= read -r line; do
-            set -- $line
-            if [ "${1:-}" = "filter" ] && [ "${2:-}" = "forward" ]; then _f=$9
-            elif [ "${1:-}" = "dnat" ]; then _f=$3
-            else continue; fi
-            case " $fwd_ifaces " in *" $_f "*) ;; *) fwd_ifaces="$fwd_ifaces $_f" ;; esac
-        done < "$RULES"
-        for f in $fwd_ifaces; do
-            iface_exists "$f" || continue
-            echo "block in quick on $f all"
-        done
-    } > "$tmp" 2>/tmp/titian-fw-pf.warn
-    if [ -s /tmp/titian-fw-pf.warn ]; then
-        # warning iface-hilang (stderr dari subshell di atas) diteruskan
-        cat /tmp/titian-fw-pf.warn >&2
-    fi
-    cp -f "$tmp" "$PF_ANCHOR_FILE" 2>/dev/null || { rm -f "$tmp"; return 1; }
-    pf_ensure_main
-    # modul pf + main ruleset + anchor, lalu enable
-    if ! kldstat -q -m pf 2>/dev/null; then kldload pf 2>/dev/null || true; fi
-    pfctl -f /etc/pf.conf 2>/dev/null || warn "pfctl -f /etc/pf.conf gagal (anchor mungkin tidak dievaluasi)"
-    if ! pfctl -a titian -n -f "$tmp" 2>/dev/null; then
-        warn "pf anchor GAGAL parse-check — live tidak diubah"
-        rm -f "$tmp"; return 1
-    fi
-    pfctl -a titian -f "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
-    if ! pfctl -s Running >/dev/null 2>&1; then pfctl -e 2>/dev/null || true; fi
-    rm -f "$tmp"
-    return 0
-}
-
-apply_live() {
-    if [ "$OS" = "FreeBSD" ]; then pf_apply; else nft_apply; fi
-}
-
-# ---------------- show / flush / teardown ----------------
-
-do_show() {
-    local n=0 line
-    echo "== firewall Titian (backend: $([ "$OS" = "FreeBSD" ] && echo "pf anchor titian" || echo "nftables inet titian")) =="
-    if [ "$OS" = "FreeBSD" ]; then
-        echo "-- forwarding: net.inet.ip.forwarding=$(sysctl -n net.inet.ip.forwarding 2>/dev/null) net.inet6.ip6.forwarding=$(sysctl -n net.inet6.ip6.forwarding 2>/dev/null) (pf TIDAK me-forward sendiri — butuh 1 untuk transit)"
-        echo "-- pf: $(pfctl -s Running 2>&1 | head -1)"
-    else
-        echo "-- forwarding: net.ipv4.ip_forward=$(sysctl -n net.ipv4.ip_forward 2>/dev/null) (butuh 1 untuk transit)"
-        if nft list table inet titian >/dev/null 2>&1; then echo "-- tabel inet titian: ADA"; else echo "-- tabel inet titian: TIDAK ADA (tanpa rule)"; fi
-    fi
-    echo "-- rules (urutan = prioritas; hapus dengan sintaks lengkap, bukan nomor):"
-    if [ ! -s "$RULES" ]; then
-        echo "   (belum ada rule)"
-    else
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            n=$((n + 1))
-            printf '   %d. %s\n' "$n" "$line"
-        done < "$RULES"
-    fi
-    if [ "$OS" = "FreeBSD" ]; then
-        echo "-- live anchor titian (filter):"
-        pfctl -a titian -sr 2>&1 | sed 's/^/   /'
-        echo "-- live anchor titian (nat/rdr):"
-        pfctl -a titian -sn 2>&1 | sed 's/^/   /'
-    else
-        echo "-- live nftables:"
-        nft list table inet titian 2>&1 | sed 's/^/   /'
-    fi
-    [ -f "$PROT" ] && { echo "-- iface terproteksi:"; sed 's/^/   /' "$PROT"; }
-}
-
-do_flush() {
-    # hapus SEMUA rule (netstate kosong + rebuild) — dipakai `no firewall`
-    rm -f "$RULES" "$RULES.bak"
-    apply_live || err "flush backend gagal"
-    echo "firewall: semua rule dihapus"
-}
-
-do_teardown() {
-    # teardown TOTAL (hanya untuk cleanup uji — TIDAK diekspos di CLI):
-    # kembalikan pf/nft ke keadaan sebelum fitur dipakai.
-    rm -f "$RULES" "$RULES.bak"
-    if [ "$OS" = "FreeBSD" ]; then
-        pfctl -a titian -F rules 2>/dev/null || true
-        pfctl -a titian -F nat 2>/dev/null || true
-        if [ -f /etc/pf.conf ]; then
-            awk '/^#-TITIAN-FW-#/{skip=1; next} /^#-ENDTITIAN-FW-#/{skip=0; next} !skip {print}' /etc/pf.conf > /etc/pf.conf.tmp 2>/dev/null && mv -f /etc/pf.conf.tmp /etc/pf.conf
-            if ! grep -q '[^[:space:]#]' /etc/pf.conf 2>/dev/null; then rm -f /etc/pf.conf; fi
-        fi
-        if [ -f /etc/rc.conf ]; then
-            awk '/^#-TITIAN-FW-#/{skip=1; next} /^#-ENDTITIAN-FW-#/{skip=0; next} !skip {print}' /etc/rc.conf > /etc/rc.conf.tmp 2>/dev/null && mv -f /etc/rc.conf.tmp /etc/rc.conf
-        fi
-        rm -f "$PF_ANCHOR_FILE" /etc/pf.conf.titian-fw-bak /etc/rc.conf.titian-fw-bak
-        pfctl -d 2>/dev/null || true
-        kldunload pf 2>/dev/null || true
-    else
-        nft delete table inet titian 2>/dev/null || true
-    fi
-    rm -f "$PROT"
-    echo "firewall: teardown selesai"
-}
-
-case "${1:-}" in
-    add-filter) shift; add_filter "$@" ;;
-    del-filter) shift; del_filter "$@" ;;
-    add-snat) shift; add_snat "$@" ;;
-    del-snat) shift; del_snat "$@" ;;
-    add-dnat) shift; add_dnat "$@" ;;
-    del-dnat) shift; del_dnat "$@" ;;
-    apply-all) apply_live || err "apply-all gagal" ;;
-    show) do_show ;;
-    flush) do_flush ;;
-    teardown) do_teardown ;;
-    *) echo "Usage: $0 {add-filter|del-filter|add-snat|del-snat|add-dnat|del-dnat|apply-all|show|flush|teardown} ..." >&2; exit 2 ;;
+# --- dispatch -----------------------------------------------------------
+op="${1:-}"; shift 2>/dev/null || true
+case "$op" in
+    check)           cmd_check ;;
+    show)            cmd_show ;;
+    show-filter)     cmd_show_filter ;;
+    show-nat)        cmd_show_nat ;;
+    status)          cmd_status ;;
+    set-enable)      cmd_set_enable "$@" ;;
+    add-filter)      cmd_add_filter "$@" ;;
+    del-filter)      cmd_del_filter "$@" ;;
+    add-snat)        cmd_add_snat "$@" ;;
+    del-snat)        cmd_del_snat "$@" ;;
+    add-dnat)        cmd_add_dnat "$@" ;;
+    del-dnat)        cmd_del_dnat "$@" ;;
+    add-protected)   cmd_add_protected "$@" ;;
+    del-protected)   cmd_del_protected "$@" ;;
+    flush)           cmd_flush ;;
+    apply)         cmd_apply "$@" ;;
+    apply-all)     cmd_apply ;;
+    *) echo "usage: $PROG <check|set-enable|add-filter|del-filter|add-snat|del-snat|add-dnat|del-dnat|add-protected|del-protected|flush|show|show-filter|show-nat|status|apply|apply-all> ..." >&2; exit 2 ;;
 esac
-exit 0

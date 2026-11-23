@@ -9,8 +9,9 @@
 # POSIX sh. Dipanggil dari bird-view sebagai ${RT_SBIN}/titian-redist.sh.
 DIR=$(dirname "$0")
 ROOT=$(dirname "$DIR")
-FILTER="$ROOT/etc/bird.d/filter.conf"
-DIRECT="$ROOT/etc/bird.d/direct.conf"
+STATE_ROOT=${TITIAN_STATE_ROOT:-/etc/titian}
+FILTER="$STATE_ROOT/bird.d/filter.conf"
+DIRECT="$STATE_ROOT/bird.d/direct.conf"
 BIRD_SH="$DIR/titian-bird.sh"
 err() { echo "Error: $*" >&2; exit 33; }
 [ -f "$FILTER" ] || err "filter.conf tidak ada: $FILTER"
@@ -80,8 +81,11 @@ direct_enable() {
         apply filter
     fi
     # 2) protokol direct (interface PtP lab; default per-OS bila tanpa argumen)
+    # B4: didaftarkan ke intent direct (titian-direct.sh) lalu generate —
+    # JANGAN tulis bird.d/direct.conf langsung: commit (apply_direct)
+    # me-render ulang section dari intent, tulisan langsung akan tertimpa.
     if [ -n "$1" ]; then iface=$1; elif [ "$(uname -s)" = "FreeBSD" ]; then iface=vtnet1; else iface=enp9s0; fi
-    printf 'protocol direct direct1 {\n    interface "%s";\n    ipv4;\n}\n' "$iface" > "$DIRECT" || err "gagal tulis $DIRECT"
+    sh "$DIR/titian-direct.sh" interface-add "$iface" || err "gagal catat interface direct $iface"
     apply direct
     echo "direct export: enabled (interface $iface)"
 }
@@ -93,6 +97,9 @@ direct_disable() {
     ' "$FILTER" > "$FILTER.tmp" || err "gagal edit $FILTER"
     mv "$FILTER.tmp" "$FILTER" || err "gagal tulis $FILTER"
     apply filter
+    # B4: kosongkan intent direct dulu — generate berikut menulis section
+    # comment-only (protocol direct tidak dibuat).
+    sh "$DIR/titian-direct.sh" clear || err "gagal kosongkan intent direct"
     printf '# TITIAN bird.d/direct.conf — protokol direct nonaktif.\n' > "$DIRECT" || err "gagal tulis $DIRECT"
     apply direct
     echo "direct export: disabled"

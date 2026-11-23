@@ -19,9 +19,39 @@
 #   bird.conf       — bird.conf live saat titik dibuat
 #   bird.d/         — fragmen sumber generate (*.conf saja; *.cli-bak
 #                     dan *.pkgsave TIDAK ikut — itu artefak backup)
+#   intent/         — file intent top-level (/etc/titian/*.conf:
+#                     bgp.conf, bfd.conf, static.conf, ... — daftar
+#                     yang sama dengan titian-cfg.sh; frr.conf
+#                     TIDAK ikut, dikelola vtysh). LAPIS 2 (20 Nov
+#                     2026): WAJIB — running-config hasil dump klish
+#                     TIDAK memuat semua atribut (import filter /
+#                     graceful-restart-time / validate off neighbor
+#                     10.99.40.2 hilang), sehingga replay membangun
+#                     ulang intent TANPA atribut itu (neighbor-add
+#                     menulis default `import all`). Intent adalah
+#                     sumber kebenaran generate; tanpa memulihkannya,
+#                     bird.conf hasil regenerasi kehilangan setting
+#                     (BGP 8/12, ping 100% loss). Checkpoint lama
+#                     (pra-perbaikan) tidak punya intent/ — rollback
+#                     ke titik lama fallback ke /cfg/titian
+#                     (best-effort, warning lantang).
 #   netstate/       — seluruh isi netstate (addr/managed/tuning/
 #                     tuning.prev/bond/vxlan) saat titik dibuat
 #   sysctl.titian (+ .prev) — sysctl global yang dikelola Titian
+#   startup-header  — blok stempel startup-config (perbaikan 23 Nov
+#                     2026, temuan Part 9): dump running-config TIDAK
+#                     memuat 3 baris header (`! version ...`,
+#                     ` ! last commit: ...`, `!` pemisah sesudahnya),
+#                     sehingga rollback lama selalu kehilangan ketiganya
+#                     (startup-config 409 -> 406 baris). File ini
+#                     menyimpan KEEMPAT baris blok stempel (`!` pembuka
+#                     + 3 baris itu) byte-persis, diambil dari
+#                     startup-config live saat titik dibuat — BUKAN
+#                     direkonstruksi (tanggal last commit tidak boleh
+#                     ditebak). Bila startup-config tidak ada / tanpa
+#                     stempel, file tidak ada (rollback fallback ke
+#                     perilaku lama + peringatan). Titik LAMA (dibuat
+#                     sebelum perbaikan ini) tidak punya file ini.
 #   meta            — nama + waktu dibuat (WIB) + waktu rollback terakhir
 #
 # Semantik rollback (BACA SEBELUM PAKAI — ditulis juga di help text):
@@ -33,6 +63,11 @@
 #   jalur boot yang sudah terbukti) + birdc configure untuk bird.conf.
 #   Alasan persistensi: "balik ke titik" harus berarti kembali
 #   sungguhan, bukan kembali sampai reboot berikutnya.
+#   (23 Nov 2026) startup-config dipulihkan BYTE-IDENTIK dari titik
+#   baru (blok stempel di startup-header + dump running-config) di
+#   KEDUA lokasi (/etc/titian + /cfg/titian); titik lama tanpa
+#   startup-header tetap memakai perilaku lama (kehilangan 3 baris
+#   header, /cfg tidak dipulihkan) + peringatan.
 #   Sebelum restart, rollback membersihkan (prune) objek live yang
 #   tidak ada di titik: interface buatan Titian yang mengendap,
 #   alamat ekstra, kunci tuning ekstra, sysctl ekstra, dan route
@@ -40,6 +75,12 @@
 #   menghapus. Prune bersifat best-effort per item (gagal satu item =
 #   peringatan, rollback tetap jalan; kegagalan fatal hanya bila
 #   service tidak kembali atau verifikasi diff gagal total).
+#   PENGECUALIAN (20 Nov 2026): bila dump config saat ini TIDAK BISA
+#   diambil sama sekali (batch clish gagal dari dalam sesi klish +
+#   tidak ada startup-config — mesin ter-wipe pasca-confirm),
+#   prune DILEWATI dengan peringatan lantang dan rollback TETAP
+#   JALAN (restore file + restart). Rollback tidak boleh gagal hanya
+#   karena tidak ada yang bisa di-prune.
 #
 # Rollback polos (tanpa nama) = kembali ke startup-config. Karena
 # `save` tidak pernah memotret bird.d/netstate/sysctl, perintah
@@ -82,6 +123,12 @@ SBIN=${RT_SBIN:-$ROOT/sbin}
 STATE_DIR=${TITIAN_STATE_DIR:-/etc/titian/netstate}
 CKPT_DIR=$STATE_ROOT/checkpoints
 SOCKFILE=/tmp/konfd.socket
+CFG_DIR=${TITIAN_CFG_DIR:-/cfg/titian}
+# Intent top-level yang dipersistenkan titian-cfg.sh (daftar yang sama
+# dengan titian-cfg.sh + titian-factory-reset.sh INTENT_FILES — bila
+# daftar di sana berubah, samakan di sini). frr.conf TIDAK ikut
+# (dikelola vtysh; titian-cfg sengaja tidak me-restore-nya).
+INTENT_FILES="terminal-length ipoe.conf bgp.conf bfd.conf static.conf rip.conf ospf.conf direct.conf pipe.conf kernel.conf device.conf rpki.conf radv.conf babel.conf bird-global.conf aggregator.conf bmp.conf l3vpn.conf mrt.conf"
 
 err() { echo "Error: $*" >&2; exit 33; }
 warn() {
@@ -99,6 +146,24 @@ valid_name() {
         *[!A-Za-z0-9_-]*) return 1 ;;
         *) return 0 ;;
     esac
+}
+
+avail_names() {
+    # Cetak nama checkpoint yang tersedia (satu baris, dipisah spasi),
+    # atau "(tidak ada checkpoint)" bila belum ada. Dipakai pesan error
+    # LOUD saat rollback/delete menyebut nama yang tidak dikenal —
+    # pola yang sama dengan filter-name (sebutkan yang tersedia).
+    local out="" d name
+    if [ -d "$CKPT_DIR" ]; then
+        for d in "$CKPT_DIR/"*/; do
+            [ -d "$d" ] || continue
+            name=${d%/}; name=${name##*/}
+            case "$name" in .*) continue ;; esac
+            out="$out $name"
+        done
+    fi
+    if [ -n "$out" ]; then printf '%s' "${out# }"
+    else printf '(tidak ada checkpoint)'; fi
 }
 
 now_wib() { TZ=Asia/Jakarta date '+%Y-%m-%d %H:%M:%S WIB'; }
@@ -181,6 +246,24 @@ snapshot_files() {
     # save (berstempel) — strip di sini membuatnya kanonis.
     grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$src" > "$d/running-config.tmp" 2>/dev/null && \
         mv "$d/running-config.tmp" "$d/running-config" || return 1
+    # Header stempel startup-config (perbaikan 23 Nov 2026 — rollback
+    # byte-identik, temuan Part 9): blok = baris-baris awal
+    # startup-config yang cocok pola stempel (`!`, `! version ...`,
+    # ` ! last commit: ...`), berhenti di baris pertama yang bukan
+    # stempel. Guard: file HANYA valid bila memuat baris `! version`
+    # dan paling banyak 5 baris (blok stempel = 4 baris; lebih dari itu
+    # berarti pola salah tangkap isi config) — bila guard gagal, file
+    # dibuang (rollback fallback ke perilaku lama).
+    if [ -f "$STATE_ROOT/startup-config" ]; then
+        awk '/^!$/ || /^! version/ || /^ ?! last commit/ {print; next} {exit}' \
+            "$STATE_ROOT/startup-config" > "$d/startup-header" 2>/dev/null || true
+        if grep -q '^! version' "$d/startup-header" 2>/dev/null && \
+           [ "$(wc -l < "$d/startup-header" 2>/dev/null | tr -d ' ')" -le 5 ]; then
+            chmod 600 "$d/startup-header" 2>/dev/null || true
+        else
+            rm -f "$d/startup-header"
+        fi
+    fi
     # GUARD (Temuan 4, 17 Nov 2026): JANGAN memotret bird.conf yang
     # bukan hasil generate titian (tanpa marker #-GLOBAL-# — mis.
     # file default BSDRP yang kembali sesudah reboot karena
@@ -211,7 +294,20 @@ snapshot_files() {
     fi
     [ -f "$STATE_ROOT/sysctl.titian" ] && cp -f "$STATE_ROOT/sysctl.titian" "$d/sysctl.titian"
     [ -f "$STATE_ROOT/sysctl.titian.prev" ] && cp -f "$STATE_ROOT/sysctl.titian.prev" "$d/sysctl.titian.prev"
-    chmod 700 "$d" "$d/bird.d" "$d/netstate" 2>/dev/null || true
+    # Intent top-level (lapis 2, 20 Nov 2026): simpan SEMUA file intent
+    # (bukan hanya yang ada di bird.d) — running-config hasil dump
+    # klish tidak memuat semua atribut, jadi intent adalah satu-satunya
+    # sumber lengkap untuk regenerasi bird.conf. Hanya file yang ada
+    # yang disalin; file yang tidak ada dilewati (restore juga
+    # melewatinya). Mode 600 seperti file intent live.
+    mkdir -p "$d/intent" || return 1
+    for _if in $INTENT_FILES; do
+        if [ -f "$STATE_ROOT/$_if" ]; then
+            cp -f "$STATE_ROOT/$_if" "$d/intent/" 2>/dev/null || true
+            chmod 600 "$d/intent/$_if" 2>/dev/null || true
+        fi
+    done
+    chmod 700 "$d" "$d/bird.d" "$d/netstate" "$d/intent" 2>/dev/null || true
     chmod 600 "$d/running-config" "$d/bird.conf" "$d/meta" 2>/dev/null || true
     return 0
 }
@@ -245,7 +341,7 @@ cmd_save() {
     rm -f "$tmp"
     write_meta "$d" "$name" "running" || warn "gagal tulis meta (checkpoint tetap tersimpan)"
     echo "checkpoint $name dibuat: $(grep '^created_wib=' "$d/meta" 2>/dev/null | cut -d= -f2-)"
-    echo "  isi: running-config + bird.conf + bird.d + netstate + sysctl (beku; 'save' biasa not mengubah point ini)"
+    echo "  isi: running-config + startup-header + bird.conf + bird.d + intent + netstate + sysctl (beku; 'save' biasa not mengubah point ini)"
 }
 
 cmd_snapshot_last_save() {
@@ -301,7 +397,7 @@ cmd_delete() {
     local name=$1 d
     valid_name "$name" || err "nama checkpoint tidak valid: '$name'"
     d="$CKPT_DIR/$name"
-    [ -d "$d" ] || err "checkpoint tidak ada: $name — tidak ada yang dihapus"
+    [ -d "$d" ] || err "checkpoint tidak ada: $name — tidak ada yang dihapus (yang tersedia: $(avail_names))"
     rm -rf "$d" || err "gagal hapus checkpoint $name"
     echo "checkpoint $name deleted"
 }
@@ -499,7 +595,35 @@ restore_files() {
     # netstate + sysctl dari titik (menimpa penuh)
     local d=$1 conf f
     conf=$(bird_conf_path)
-    cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
+    # Startup-config: pulihkan BYTE-IDENTIK (perbaikan 23 Nov 2026,
+    # temuan Part 9). Titik BARU menyimpan blok stempel di
+    # startup-header; gabungkan dengan dump running-config: dump
+    # diawali baris `!` (pemisah klish = baris pertama
+    # startup-config), jadi baris pertama dump DIGANTI blok header
+    # utuh — bukan ditempel di depan (itu akan menduplikasi `!`).
+    # Bila dump tidak diawali `!` (config kosong / bentuk lain),
+    # header ditempel di depan. Titik LAMA (tanpa startup-header):
+    # perilaku lama (dump polos) — 3 baris header tetap hilang di
+    # titik lama (peringatan di cmd_rollback).
+    if [ -s "$d/startup-header" ]; then
+        if [ "$(head -n 1 "$d/running-config" 2>/dev/null)" = "!" ]; then
+            { cat "$d/startup-header"; tail -n +2 "$d/running-config"; } > "$STATE_ROOT/startup-config.tmp.$$" || return 1
+        else
+            { cat "$d/startup-header"; cat "$d/running-config"; } > "$STATE_ROOT/startup-config.tmp.$$" || return 1
+        fi
+        mv "$STATE_ROOT/startup-config.tmp.$$" "$STATE_ROOT/startup-config" || return 1
+    else
+        cp -f "$d/running-config" "$STATE_ROOT/startup-config" || return 1
+    fi
+    # Cerminkan ke /cfg agar rollback bertahan melewati reboot
+    # (temuan Part 9: /cfg dulu TIDAK dipulihkan sama sekali).
+    # HANYA bila restore byte-identik (ada startup-header): untuk
+    # titik lama, /cfg dibiarkan apa adanya — menimpa salinan /cfg
+    # yang bagus dengan file 3-baris-pendek justru merusak.
+    if [ -s "$d/startup-header" ] && [ -d "$CFG_DIR" ]; then
+        cp -f "$STATE_ROOT/startup-config" "$CFG_DIR/startup-config" 2>/dev/null || \
+            warn "gagal mencerminkan startup-config ke $CFG_DIR/startup-config (rollback tetap berlaku di sesi ini, tapi TIDAK bertahan melewati reboot — jalankan 'save' sesudah rollback)"
+    fi
     # MODE FILE LIVE (perbaikan 2 Nov 2026): cp FreeBSD MENULAR mode
     # sumber ke tujuan yang sudah ada (terbukti di lab: cp -f src600
     # dst644 -> dst 600), sementara file snapshot sengaja 600
@@ -544,6 +668,38 @@ restore_files() {
     else rm -f "$STATE_ROOT/sysctl.titian"; fi
     if [ -f "$d/sysctl.titian.prev" ]; then cp -f "$d/sysctl.titian.prev" "$STATE_ROOT/sysctl.titian.prev";
     else rm -f "$STATE_ROOT/sysctl.titian.prev"; fi
+    # Intent top-level (lapis 2, 20 Nov 2026): pulihkan intent dari
+    # titik — ini yang membuat rollback memulihkan bird.conf lengkap.
+    # Replay startup-config HANYA meng-upsert kunci yang ada di
+    # startup-config (per-key, additive) + neighbor-add hanya menulis
+    # default `import all` bila kunci import BELUM ADA — jadi intent
+    # yang dipulihkan di sini BERTAHAN melewati replay, dan commit
+    # apply-all meregenerasi bird.conf dari intent lengkap.
+    # Persistensikan juga ke /cfg agar titian-cfg restore saat boot
+    # tidak menimpa dengan versi basi + agar rollback bertahan
+    # melewati reboot (best-effort; gagal = lewati diam, bukan fatal).
+    if [ -d "$d/intent" ]; then
+        for _if in "$d/intent/"*; do
+            [ -e "$_if" ] || continue
+            _base=$(basename "$_if")
+            cp -f "$_if" "$STATE_ROOT/" 2>/dev/null || true
+            chmod 600 "$STATE_ROOT/$_base" 2>/dev/null || true
+            [ -d "$CFG_DIR" ] && cp -f "$_if" "$CFG_DIR/" 2>/dev/null || true
+        done
+    else
+        # Checkpoint lama (pra-perbaikan, tanpa intent/): fallback ke
+        # intent persisten /cfg/titian (best-effort). PERINGATAN:
+        # /cfg adalah state TERAKHIR yang di-save (bisa lebih baru
+        # dari titik) — untuk titik lama ini yang terbaik yang bisa
+        # dilakukan tanpa mengubah titik; checkpoint BARU (dibuat
+        # sesudah perbaikan ini) mandiri (intent tertanam di titik).
+        warn "titik $(basename "$d") tidak menyimpan intent (checkpoint lama, pra-20 Nov 2026) — fallback ke intent persisten /cfg/titian (bila ada); bila /cfg juga kosong, bird.conf hasil regenerasi bisa kehilangan setting (import filter / graceful-restart-time / validate)"
+        if [ -d "$CFG_DIR" ]; then
+            for _if in $INTENT_FILES; do
+                [ -f "$CFG_DIR/$_if" ] && cp -f "$CFG_DIR/$_if" "$STATE_ROOT/" 2>/dev/null || true
+            done
+        fi
+    fi
     return 0
 }
 
@@ -586,13 +742,20 @@ cmd_rollback() {
     if [ -n "$name" ]; then
         valid_name "$name" || err "nama checkpoint tidak valid: '$name'"
         d="$CKPT_DIR/$name"
-        [ -d "$d" ] || err "checkpoint tidak ada: $name — TIDAK ADA PERUBAHAN (buat dulu dengan 'checkpoint save $name')"
+        [ -d "$d" ] || err "checkpoint tidak ada: $name — TIDAK ADA PERUBAHAN (yang tersedia: $(avail_names); buat dulu dengan 'checkpoint save $name')"
     else
         d="$CKPT_DIR/.last-save"
         [ -d "$d" ] || err "belum pernah save (tidak ada titik .last-save) — TIDAK ADA PERUBAHAN (jalankan 'save' dulu atau buat checkpoint)"
         name="(startup-config)"
     fi
     [ -f "$d/running-config" ] || err "checkpoint rusak: $d/running-config tidak ada — TIDAK ADA PERUBAHAN"
+    # Titik lama (pra-23 Nov 2026, tanpa startup-header): rollback
+    # tetap jalan dengan perilaku lama — startup-config hasil rollback
+    # kehilangan 3 baris header stempel + /cfg TIDAK dipulihkan
+    # (jalankan 'save' sesudah rollback untuk menyinkronkan /cfg).
+    if [ ! -s "$d/startup-header" ]; then
+        warn "titik $name dibuat sebelum perbaikan header 23 Nov 2026 (tanpa startup-header) — startup-config hasil rollback kehilangan 3 baris header stempel + /cfg TIDAK dipulihkan; jalankan 'save' sesudah rollback untuk menyinkronkan /cfg"
+    fi
     # parse check bird.conf titik SEBELUM mengganti apa pun
     if [ -f "$d/bird.conf" ]; then
         bird=$(bird_bin)
@@ -602,8 +765,21 @@ cmd_rollback() {
     fi
     cur=$(mktemp /tmp/titian-ckpt-rb.XXXXXX) || err "gagal mktemp"
     if ! dump_running "$cur"; then
-        rm -f "$cur"
-        err "gagal membuang running-config saat ini (konfd tidak terjangkau?) — TIDAK ADA PERUBAHAN"
+        # Rollback TIDAK BOLEH gagal hanya karena dump config saat ini
+        # tidak bisa diambil (akar error "konfd tidak terjangkau" saat
+        # rollback, 20 Nov 2026): dari DALAM sesi klish, batch clish
+        # tidak bisa terhubung ke konfd (dipegang sesi luar) DAN tidak
+        # ada startup-config untuk fallback (mesin ter-wipe pasca
+        # factory-reset confirm). Dump saat ini HANYA dipakai prune_all
+        # (bersihkan objek live yang tidak ada di titik). Bila tidak
+        # bisa diambil, tidak ada yang bisa di-prune — perlakukan
+        # sebagai config kosong dan LANJUTKAN ke restore_files +
+        # restart (itu inti rollback). Peringatan lantang agar
+        # transparan; bukan silent success. Catatan: dump hanya bisa
+        # gagal total bila startup-config pun tidak ada (mesin ter-wipe)
+        # — dalam keadaan itu tidak ada objek live Titian untuk di-prune.
+        warn "tidak bisa membuang running-config saat ini (konfd tidak terjangkau + tidak ada startup-config) — prune objek live DILEWATI, lanjut memulihkan file dari titik $name"
+        : > "$cur"
     fi
     echo "rollback to $name — prune objek live that no  at point..."
     prune_all "$cur" "$d"
