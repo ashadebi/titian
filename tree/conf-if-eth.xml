@@ -67,6 +67,10 @@
             help="Disable the selected interface">
         <CONFIG operation="unset" pattern="^enable"/>
         <ACTION>
+            ChildUp=`ip -o link show type vlan 2>/dev/null | awk -v parent="${iface}" '{ split($2, a, "@"); name = a[1]; par = a[2]; sub(/:$/, "", par); if (par == parent) { if ($0 ~ /state UP/) print name; } }' | tr '\n' ' '`
+            if test -n "$ChildUp"; then
+                printf "%s \n" "peringatan: ${iface} punya child vlan aktif: $ChildUp - disable ${iface} ikut mematikan child tersebut."
+            fi
             ip link set ${iface} down
         </ACTION>
     </COMMAND>

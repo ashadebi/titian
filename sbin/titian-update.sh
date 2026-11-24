@@ -10,8 +10,13 @@
 #   update install         ARM: tampilkan versi baru + ringkasan + perintah
 #                          konfirmasi. TIDAK download / install / restart.
 #   update install confirm EKSEKUSI: download .pkg -> verifikasi sha256 ->
-#                          pkg add -f -> restart service -> verifikasi
-#                          config. Tanpa konfirmasi TIDAK ADA yang berubah.
+#                          pkg add -f -> sinkronisasi DB paket (persistensi
+#                          reboot) -> restart service -> verifikasi config.
+#                          Tanpa konfirmasi TIDAK ADA yang berubah.
+#   update sync-pkg-db     Sinkronisasi DB paket live ke salinan boot
+#                          (/conf/base/var/db/pkg) — untuk jalur install
+#                          manual (`pkg add` langsung); di alur
+#                          install-confirm langkah ini otomatis.
 #
 # Sumber: GitHub API publik (tanpa auth):
 #   https://api.github.com/repos/ashadebi/titian/releases/latest
@@ -192,7 +197,12 @@ http_get() {
 
 json_tag() {
     # $1 = file JSON -> tag_name (atau kosong).
-    sed -n 's/^[[:space:]]*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" 2>/dev/null | head -1
+    # Ambil kemunculan PERTAMA "tag_name" (awk split pada separator
+    # "tag_name": — field $2 adalah nilai tag). API GitHub
+    # mengembalikan JSON kompak satu baris; pola sed ^... gagal di situ
+    # (23 Nov 2026: "tag: ?"), dan pola sed tanpa ^ menyisakan prefix
+    # baris (substitusi hanya mengganti bagian yang cocok).
+    awk -F'"tag_name"[[:space:]]*:[[:space:]]*"' 'NF > 1 { sub(/".*/, "", $2); print $2; exit }' "$1" 2>/dev/null | head -1
 }
 
 json_body_sha() {
@@ -205,10 +215,14 @@ json_body_sha() {
 json_asset_field() {
     # $1 = file JSON, $2 = nama asset, $3 = field
     # (browser_download_url|size) -> nilai (atau kosong).
-    # Parser awk atas respons API pretty-printed (format standar
+    # Parser awk berasumsi satu field per baris (format pretty-printed
     # api.github.com): objek asset dimulai baris "    {", field "name"
-    # muncul sebelum field lain di objek yang sama.
-    awk -v name="$2" -v field="$3" '
+    # muncul sebelum field lain di objek yang sama. API mengembalikan
+    # JSON kompak satu baris (23 Nov 2026: parser gagal total) — maka
+    # normalisasi dulu dengan sed (sisipkan baris baru sesudah { } ,)
+    # sebelum diumpankan ke awk. Teks body boleh ikut terpotong (parser
+    # berhenti begitu asset ketemu, sebelum mencapai body).
+    sed -e 's/{/{\n/g' -e 's/}/\n}/g' -e 's/,/,\n/g' "$1" 2>/dev/null | awk -v name="$2" -v field="$3" '
         /^[ \t]*{$/ { cur = "" }
         /"name"[ \t]*:/ {
             line = $0
@@ -228,7 +242,7 @@ json_asset_field() {
                 print line; exit
             }
         }
-    ' "$1" 2>/dev/null
+    ' 2>/dev/null
 }
 
 installed_version() {
@@ -257,6 +271,45 @@ service_restart() {
         return 1
     fi
     return 0
+}
+
+sync_pkg_db() {
+    # Sinkronisasi DB paket live (/var/db/pkg) -> salinan boot
+    # (/conf/base/var/db/pkg) agar perubahan paket bertahan melewati
+    # reboot BSDRP (live /var/db/pkg adalah tmpfs yang dirakit saat
+    # boot dari /conf/base/var/db/pkg — tanpa sync ini, install yang
+    # baru saja sukses hilang sesudah reboot; temuan uji guest
+    # 23 Nov 2026). Dipanggil otomatis sesudah `pkg add` berhasil di
+    # cmd_install_confirm; tersedia juga sebagai subcommand
+    # `sync-pkg-db` untuk jalur install manual (`pkg add` langsung).
+    # rc 0 = tersinkron + terverifikasi sha256; rc 1 = gagal.
+    if is_hermetic; then
+        echo "sync-pkg-db: mode uji (hermetik) — dilewati."
+        return 0
+    fi
+    [ "$OS" = "FreeBSD" ] || { echo "sync-pkg-db: hanya FreeBSD/BSDRP (OS=$OS) — dilewati."; return 0; }
+    [ -d /conf/base ] || { echo "sync-pkg-db: /conf/base tidak ada (bukan BSDRP diskless) — tidak ada yang disinkronkan."; return 0; }
+    _live="/var/db/pkg"
+    _base="/conf/base/var/db/pkg"
+    [ -f "$_live/local.sqlite" ] || { echo "sync-pkg-db: $_live/local.sqlite tidak ada — tidak ada yang disinkronkan." >&2; return 1; }
+    mount -uw / 2>/dev/null || true
+    mkdir -p "$_base" 2>/dev/null || { echo "sync-pkg-db: gagal mkdir $_base — DB tidak tersinkron." >&2; return 1; }
+    _fail=0
+    for _f in "$_live"/local.sqlite "$_live"/repo-*.sqlite; do
+        [ -e "$_f" ] || continue
+        _b=$(basename "$_f")
+        cp -p "$_f" "$_base/$_b" 2>/dev/null || { echo "sync-pkg-db: gagal salin $_f — DB tidak tersinkron." >&2; _fail=1; break; }
+        _s1=$(file_sha256 "$_f"); _s2=$(file_sha256 "$_base/$_b")
+        if [ "$_s1" != "$_s2" ] || [ -z "$_s1" ]; then
+            echo "sync-pkg-db: verifikasi sha256 gagal untuk $_b — DB tidak tersinkron." >&2; _fail=1; break
+        fi
+    done
+    mount -u -o ro / 2>/dev/null || true
+    if [ "$_fail" = "0" ]; then
+        echo "sync-pkg-db: OK — DB paket tersinkron ke $_base (bertahan melewati reboot)."
+        return 0
+    fi
+    return 1
 }
 
 fetch_release() {
@@ -428,6 +481,9 @@ cmd_install_confirm() {
     [ -n "$_new" ] || err "pkg info gagal sesudah install — keadaan tidak pasti, LAPORKAN (file baru mungkin sudah ter-install)"
     [ "$_new" = "$REL_VER" ] || err "versi sesudah install ($_new) != rilis ($REL_VER) — setengah upgrade, LAPORKAN"
     echo "update install: paket ter-install ($_new)."
+    # Persistensi DB paket (BSDRP: /var/db/pkg tmpfs) — sinkronkan ke
+    # /conf/base/var/db/pkg agar install ini bertahan melewati reboot.
+    sync_pkg_db || err "sinkronisasi DB paket GAGAL — paket baru sudah ter-install ($_new) tapi TIDAK akan bertahan melewati reboot; LAPORKAN, jangan lanjutkan pekerjaan lain"
     # Restart + verifikasi.
     echo "update install: restart service titian..."
     service_restart || err "service titian restart GAGAL sesudah install — file baru sudah ter-install ($_new), service masih jalan dengan konfd lama; jalankan 'service titian restart' manual, lalu verifikasi config"
@@ -443,6 +499,7 @@ case "$1" in
     check)           cmd_check ;;
     install)         cmd_install ;;
     install-confirm) cmd_install_confirm ;;
-    *) echo "usage: $PROG <check|install|install-confirm>" >&2; exit 2 ;;
+    sync-pkg-db)     sync_pkg_db ;;
+    *) echo "usage: $PROG <check|install|install-confirm|sync-pkg-db>" >&2; exit 2 ;;
 esac
 exit 0

@@ -66,6 +66,22 @@
             help="Disable the selected interface">
         <CONFIG operation="unset" pattern="^enable"/>
         <ACTION>
+            ChildList=`ifconfig -l 2>/dev/null`
+            for VlanIf in $ChildList; do
+                case "$VlanIf" in
+                    vlan[0-9]*)
+                        VlanParent=`ifconfig "$VlanIf" 2>/dev/null | grep 'parent interface:' | awk '{print $NF}'`
+                        if [ "$VlanParent" = "${iface}" ]; then
+                            if ifconfig "$VlanIf" 2>/dev/null | sed -n '1p' | grep -qw 'UP'; then
+                                ChildUp="$ChildUp $VlanIf"
+                            fi
+                        fi
+                        ;;
+                esac
+            done
+            if [ -n "$ChildUp" ]; then
+                printf "%s \n" "peringatan: ${iface} punya child vlan aktif:$ChildUp - disable ${iface} ikut mematikan child tersebut."
+            fi
             ifconfig ${iface} down
         </ACTION>
     </COMMAND>

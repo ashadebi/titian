@@ -35,6 +35,19 @@
                 fi
                 ${RT_SBIN}/titian-persist.sh mark-if "${iface_vlan}"
             fi
+            # PR 23 Nov 2026 (parent DOWN bikin VLAN diam): naikkan
+            # parent + vlan TANPA SYARAT — menutup juga replay sesudah
+            # restart service (vlan sudah ada, blok create dilewati).
+            if ip link show dev "$Chkif" 2>/dev/null | grep -q 'state UP'; then
+                ParentWasUp=1
+            else
+                ParentWasUp=0
+            fi
+            ip link set dev "$Chkif" up
+            ip link set dev "${iface_vlan}" up
+            if test "$ParentWasUp" = "0"; then
+                printf "%s \n" "catatan: parent $Chkif tadinya DOWN, dinaikkan (matikan lagi: interface ethernet $Chkif -&gt; disable)"
+            fi
         </ACTION>
     </COMMAND>
 
@@ -96,6 +109,10 @@
           help="Disable the selected interface">
         <CONFIG operation="unset" pattern="^enable"/>
         <ACTION>
+            ChildUp=`ip -o link show type vlan 2>/dev/null | awk -v parent="${iface}" '{ split($2, a, "@"); name = a[1]; par = a[2]; sub(/:$/, "", par); if (par == parent) { if ($0 ~ /state UP/) print name; } }' | tr '\n' ' '`
+            if test -n "$ChildUp"; then
+                printf "%s \n" "peringatan: ${iface} punya child vlan aktif: $ChildUp - disable ${iface} ikut mematikan child tersebut."
+            fi
             ip link set ${iface} down
         </ACTION>
     </COMMAND>
@@ -125,6 +142,9 @@
         </PARAM>
         <CONFIG pattern="ip address ${ip}" splitter="false"/>
         <ACTION>
+            if ! ip link show dev "${iface}" 2>/dev/null | grep -q 'state UP'; then
+                printf "%s \n" "interface ${iface} masih DOWN (enable dulu)"
+            fi
             ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
         </ACTION>
     </COMMAND>

@@ -191,48 +191,157 @@ bird_conf_path() {
     if [ "$OS" = "FreeBSD" ]; then echo "/usr/local/etc/bird.conf"; else echo "/etc/bird/bird.conf"; fi
 }
 
-# --- dump running-config lewat batch clish (read-only) ---
-dump_running() {
+# --- normalisasi terminator dump (fix012b, 24 Nov 2026) ---
+ensure_end_terminator() {
+    # $1=file dump (sudah dipangkas baris kosong akhir). Tambahkan baris
+    # `end` bila belum ada; JANGAN gagal hanya karena `end` tidak ada.
+    #
+    # ALASAN (terbukti, bukan tebakan): klish 2.2.5 TIDAK PERNAH menulis
+    # baris `end` sendiri — konf/tree/tree.c hanya mencetak baris yang
+    # ada di tree konfd. `end` masuk tree HANYA bila diketik di
+    # configure-mode: configure-mode.xml memberi perintah `end` sebuah
+    # <CONFIG priority="0x9999"/> tanpa operation, dan default op di
+    # klish (shell_xml.c) adalah SET bila operation tak disebut — jadi
+    # tiap `end` yang diketik tersimpan di tree (prioritas tertinggi =
+    # tercetak terakhir). Config yang dibangun skrip (pakai `exit`,
+    # bukan `end` — semua alur uji guest) sah tapi tanpa `end`, sehingga
+    # guard lama `grep -q '^end$'` menolak dump yang sah dan
+    # `checkpoint save` selalu gagal (rc=33) — padahal batch clish-nya
+    # BERHASIL (rc=0, dump 26 baris). Bukti guest 014: sesudah `end`
+    # diketik sekali, `checkpoint save` langsung berhasil dan `save`
+    # berikutnya menulis startup-config yang diakhiri `end`.
+    #
+    # Menambahkan `end` aman untuk replay: `end` keluar dari
+    # configure-mode lalu tersimpan lagi (self-healing), dan cocok
+    # dengan format anchor mesin asli (409 baris, diakhiri `end`).
+    # Dump KOSONG tetap gagal (diperiksa pemanggil / di sini).
+    [ -s "$1" ] || return 1
+    grep -q '^end$' "$1" && return 0
+    printf '%s\n' "end" >> "$1" || return 1
+    return 0
+}
+
+# --- bandingkan dua dump sebagai KONFIGURASI (abaikan pemisah `!`) ---
+dump_norm() {
+    # $1=file -> cetak bentuk kanonis ke stdout (tanpa baris `!`
+    # semata dan baris kosong).
+    grep -v -e '^!$' -e '^$' "$1" 2>/dev/null
+}
+dump_same() {
+    # $1 $2 = dua file dump -> 0 bila isi konfigurasinya sama.
+    # Baris `!` semata adalah pemisah cetakan klish
+    # (konf_tree_fprintf) — posisinya TIDAK stabil melewati
+    # save -> restore -> replay (bukti uji 017: diff verifikasi
+    # rollback hanya `!` di baris 2 dan 12, isi konfigurasi sama
+    # persis; `*` di `show checkpoints` pun hilang karenanya).
+    # Bandingkan tanpa `!`/kosong; `end` sudah dinormalisasi
+    # ensure_end_terminator di kedua sisi, stempel sudah dibuang
+    # saat dump. Baris `!` tidak membawa info konfigurasi.
+    _a=$(mktemp /tmp/titian-ckpt-cmpa.XXXXXX) || return 1
+    _b=$(mktemp /tmp/titian-ckpt-cmpb.XXXXXX) || { rm -f "$_a"; return 1; }
+    dump_norm "$1" > "$_a"; dump_norm "$2" > "$_b"
+    cmp -s "$_a" "$_b"; _rc=$?
+    rm -f "$_a" "$_b"
+    return $_rc
+}
+dump_diff() {
+    # $1 $2 = dua file dump -> cetak diff bentuk kanonis (tanpa `!`).
+    _a=$(mktemp /tmp/titian-ckpt-difa.XXXXXX) || return 1
+    _b=$(mktemp /tmp/titian-ckpt-difb.XXXXXX) || { rm -f "$_a"; return 1; }
+    dump_norm "$1" > "$_a"; dump_norm "$2" > "$_b"
+    diff "$_a" "$_b" 2>/dev/null | head -40
+    rm -f "$_a" "$_b"
+}
+
+# --- dump running-config lewat konf (jalur live, dari DALAM sesi klish) ---
+dump_via_konf() {
     # $1=file-tujuan (ditulis penuh, bukan append)
-    local tmp cmd
-    tmp=$(mktemp /tmp/titian-ckpt-dump.XXXXXX) || return 1
-    cmd=$(mktemp /tmp/titian-ckpt-cmd.XXXXXX) || { rm -f "$tmp"; return 1; }
-    printf 'show running-config\n' > "$cmd"
-    if ! "$BIN/clish" -x "$ROOT/etc/clish-en" -w enable-view "$cmd" > "$tmp" 2>&1; then
-        rm -f "$tmp" "$cmd"
-        # FALLBACK (akar bug checkpoint pra-reset, 21 Nov 2026): batch
-        # clish gagal bila dump_running dipanggil dari DALAM sesi klish
-        # (factory-reset confirm / checkpoint save via klish) — klish
-        # luar memegang koneksi konfd (/tmp/konfd.socket) eksklusif,
-        # batch clish di dalam tidak bisa terhubung ("konfd tidak
-        # terjangkau?") sehingga checkpoint TIDAK PERNAH dibuat dan
-        # wipe menghapus semuanya. Fallback: pakai startup-config
-        # (config terakhir yang di-save/di-commit). Untuk pra-reset ini
-        # SAMA dengan running-config (anchor sudah commit+save).
-        # Peringatan lantang agar transparan: perubahan yang di-commit
-        # tapi BELUM di-save tidak ikut.
-        warn "batch clish dump gagal (dipanggil dari dalam sesi klish — konfd dipegang sesi luar); fallback ke startup-config (config terakhir yang di-save)"
-        if [ -s "$STATE_ROOT/startup-config" ]; then
-            grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$STATE_ROOT/startup-config" | \
-                awk '{lines[NR]=$0} END {last=NR; while (last>0 && lines[last]=="") last--; for (i=1;i<=last;i++) print lines[i]}' > "$1"
-            [ -s "$1" ] || return 1
-            grep -q '^end$' "$1" || return 1
-            return 0
-        fi
-        return 1
+    #
+    # Mekanisme yang SAMA dengan `show running-config` (CONFIG dump di
+    # plugins/clish/hook_config.c): kirim query `-d -f <file>` ke
+    # konfd lewat klien `konf`. Beda dengan batch clish: `konf` hanya
+    # membuka SATU koneksi query ke socket yang sama dengan sesi luar
+    # — cara yang dipakai ACTION `save` untuk SET (enable-mode.xml),
+    # jadi BISA jalan dari DALAM sesi klish dan mengembalikan tree
+    # LIVE (termasuk perubahan yang di-commit tapi BELUM di-save).
+    # Itu persis yang dibutuhkan prune saat rollback: dump lama
+    # (batch clish gagal dari dalam sesi + fallback startup-config)
+    # HANYA berisi yang sudah di-save, sehingga objek live yang
+    # belum di-save (mis. vlan101/102 di uji 016) lolos dari prune
+    # dan rollback "berhasil" palsu. Bukti sumber (klish 2.2.5):
+    # konfd melayani BANYAK klien sekaligus (select loop,
+    # bin/konfd.c) — bukan eksklusif satu koneksi; parser query
+    # menerima `-d` + `-f` (konf/query/query.c).
+    local tmp
+    [ -x "$BIN/konf" ] || return 1
+    [ -S "$SOCKFILE" ] || return 1
+    tmp=$(mktemp /tmp/titian-ckpt-konf.XXXXXX) || return 1
+    if ! "$BIN/konf" -s "$SOCKFILE" -- -d -f "$tmp" >/dev/null 2>&1; then
+        rm -f "$tmp"; return 1
     fi
-    rm -f "$cmd"
-    # buang banner sesi + baris prompt-echo; sisakan dump mulai
-    # baris setelah `# show running-config`. Buang baris kosong
-    # di akhir agar diff byte-persis stabil. Buang juga baris
-    # stempel (metadata save, bukan konfigurasi — lihat header).
-    awk '/# show running-config$/ {dump=1; next} dump {print}' "$tmp" | \
-        grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' | \
+    [ -s "$tmp" ] || { rm -f "$tmp"; return 1; }
+    # Buang baris stempel (metadata save, bukan konfigurasi) +
+    # baris kosong akhir agar diff byte-persis stabil (sama
+    # dengan jalur batch clish di bawah).
+    grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$tmp" | \
         awk '{lines[NR]=$0} END {last=NR; while (last>0 && lines[last]=="") last--; for (i=1;i<=last;i++) print lines[i]}' > "$1"
     rm -f "$tmp"
     [ -s "$1" ] || return 1
-    grep -q '^end$' "$1" || return 1
+    ensure_end_terminator "$1" || return 1
     return 0
+}
+
+# --- dump running-config (tiga tingkat, dari yang paling live) ---
+dump_running() {
+    # $1=file-tujuan (ditulis penuh, bukan append)
+    # DUMP_FALLBACK (global): 1 bila dump berasal dari startup-config
+    # (tingkat 3, bukan tree live) — dipakai cmd_rollback untuk
+    # memperingatkan bahwa prune buta terhadap perubahan belum di-save.
+    DUMP_FALLBACK=0
+    local tmp cmd
+    # Tingkat 1 — konf (tree LIVE, dari dalam sesi klish pun bisa).
+    if dump_via_konf "$1"; then return 0; fi
+    # Tingkat 2 — batch clish (tree live, hanya dari shell).
+    tmp=$(mktemp /tmp/titian-ckpt-dump.XXXXXX) || return 1
+    cmd=$(mktemp /tmp/titian-ckpt-cmd.XXXXXX) || { rm -f "$tmp"; return 1; }
+    printf 'show running-config\n' > "$cmd"
+    if "$BIN/clish" -x "$ROOT/etc/clish-en" -w enable-view "$cmd" > "$tmp" 2>&1; then
+        rm -f "$cmd"
+        # buang banner sesi + baris prompt-echo; sisakan dump mulai
+        # baris setelah `# show running-config`. Buang baris kosong
+        # di akhir agar diff byte-persis stabil. Buang juga baris
+        # stempel (metadata save, bukan konfigurasi — lihat header).
+        awk '/# show running-config$/ {dump=1; next} dump {print}' "$tmp" | \
+            grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' | \
+            awk '{lines[NR]=$0} END {last=NR; while (last>0 && lines[last]=="") last--; for (i=1;i<=last;i++) print lines[i]}' > "$1"
+        rm -f "$tmp"
+        if [ -s "$1" ]; then
+            ensure_end_terminator "$1" || return 1
+            return 0
+        fi
+        # Dump kosong dari batch clish JANGAN langsung gagal (uji
+        # 016: batch bisa "berhasil" dengan dump kosong bila konfd
+        # sibuk sesaat sesudah save) — jatuh ke fallback
+        # startup-config di bawah, bukan return 1.
+    else
+        rm -f "$tmp" "$cmd"
+    fi
+    # Tingkat 3 — FALLBACK startup-config (config terakhir yang
+    # di-save). Peringatan lantang agar transparan: perubahan yang
+    # di-commit tapi BELUM di-save tidak ikut — karena itu tingkat
+    # ini TIDAK BOLEH dipakai untuk prune (prune memakai dump
+    # tingkat 1/2; bila keduanya gagal, prune dilewati — lihat
+    # cmd_rollback).
+    DUMP_FALLBACK=1
+    warn "dump live gagal (konf + batch clish) — fallback ke startup-config (config terakhir yang di-save)"
+    if [ -s "$STATE_ROOT/startup-config" ]; then
+        grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$STATE_ROOT/startup-config" | \
+            awk '{lines[NR]=$0} END {last=NR; while (last>0 && lines[last]=="") last--; for (i=1;i<=last;i++) print lines[i]}' > "$1"
+        [ -s "$1" ] || return 1
+        ensure_end_terminator "$1" || return 1
+        return 0
+    fi
+    return 1
 }
 
 # --- snapshot file-file state ke direktori titik (sudah ada) ---
@@ -246,6 +355,11 @@ snapshot_files() {
     # save (berstempel) — strip di sini membuatnya kanonis.
     grep -v -e '^! version' -e '^ ! last commit' -e '^! last commit' "$src" > "$d/running-config.tmp" 2>/dev/null && \
         mv "$d/running-config.tmp" "$d/running-config" || return 1
+    # Normalisasi terminator (fix012b): sumber .last-save adalah
+    # startup-config, yang juga bisa tanpa `end` (lihat
+    # ensure_end_terminator) — samakan dengan dump_running agar
+    # verifikasi rollback (cmp vs dump sesudah rollback) konsisten.
+    ensure_end_terminator "$d/running-config" || return 1
     # Header stempel startup-config (perbaikan 23 Nov 2026 — rollback
     # byte-identik, temuan Part 9): blok = baris-baris awal
     # startup-config yang cocok pola stempel (`!`, `! version ...`,
@@ -332,7 +446,7 @@ cmd_save() {
     tmp=$(mktemp /tmp/titian-ckpt-save.XXXXXX) || { rmdir "$d" 2>/dev/null; err "gagal mktemp"; }
     if ! dump_running "$tmp"; then
         rm -rf "$d" "$tmp"
-        err "gagal membuang running-config (konfd tidak terjangkau?) — checkpoint TIDAK dibuat, tidak ada perubahan"
+        err "gagal membuang running-config (dump kosong / konfd tidak terjangkau?) — checkpoint TIDAK dibuat, tidak ada perubahan"
     fi
     if ! snapshot_files "$d" "$tmp"; then
         rm -rf "$d" "$tmp"
@@ -384,7 +498,7 @@ cmd_list() {
         echo "$created|$name"
     done | LC_ALL=C sort | while IFS='|' read -r created name; do
         line=""
-        if [ -n "$tmp" ] && [ -f "$CKPT_DIR/$name/running-config" ] && cmp -s "$CKPT_DIR/$name/running-config" "$tmp"; then
+        if [ -n "$tmp" ] && [ -f "$CKPT_DIR/$name/running-config" ] && dump_same "$CKPT_DIR/$name/running-config" "$tmp"; then
             line="*"
         fi
         printf '%-24s %-22s %s\n' "$name" "$created" "$line"
@@ -572,7 +686,20 @@ prune_all() {
     while IFS= read -r line; do
         grep -qxF "$line" "$d/running-config" 2>/dev/null && continue
         type=$(echo "$line" | awk '{print $2}'); name=$(echo "$line" | awk '{print $3}')
-        prune_iface "$name" "$type"
+        # Nama interface OS: untuk vlan/vxlan, $3 adalah ID numerik
+        # (baris dump `interface vlan 101 vtnet0`) dan nama OS-nya
+        # adalah tipe+ID (`vlan101`, `vxlan101` — FreeBSD menamai
+        # begitu; bukti: `unit=${iface#vxlan}` di titian-vxlan.sh).
+        # Mengirim "101" mentah ke prune_iface berarti `ifconfig
+        # 101 destroy` — interface tidak ada, prune diam-diam
+        # tidak melakukan apa-apa (bukti uji 016/017: vlan101/102
+        # bertahan hidup sesudah rollback). lagg/loopback/bonding
+        # memakai $3 sebagai nama penuh (lagg0/lo1/bond0).
+        case "$type" in
+            vlan|vxlan) iface="${type}${name}" ;;
+            *) iface="$name" ;;
+        esac
+        prune_iface "$iface" "$type"
     done < "$tmpf"
     rm -f "$tmpf"
 }
@@ -767,19 +894,27 @@ cmd_rollback() {
     if ! dump_running "$cur"; then
         # Rollback TIDAK BOLEH gagal hanya karena dump config saat ini
         # tidak bisa diambil (akar error "konfd tidak terjangkau" saat
-        # rollback, 20 Nov 2026): dari DALAM sesi klish, batch clish
-        # tidak bisa terhubung ke konfd (dipegang sesi luar) DAN tidak
-        # ada startup-config untuk fallback (mesin ter-wipe pasca
-        # factory-reset confirm). Dump saat ini HANYA dipakai prune_all
-        # (bersihkan objek live yang tidak ada di titik). Bila tidak
-        # bisa diambil, tidak ada yang bisa di-prune — perlakukan
-        # sebagai config kosong dan LANJUTKAN ke restore_files +
-        # restart (itu inti rollback). Peringatan lantang agar
-        # transparan; bukan silent success. Catatan: dump hanya bisa
-        # gagal total bila startup-config pun tidak ada (mesin ter-wipe)
-        # — dalam keadaan itu tidak ada objek live Titian untuk di-prune.
+        # rollback, 20 Nov 2026): dump live (konf + batch clish)
+        # gagal DAN tidak ada startup-config untuk fallback (mesin
+        # ter-wipe pasca factory-reset confirm). Dump saat ini HANYA
+        # dipakai prune_all (bersihkan objek live yang tidak ada di
+        # titik). Bila tidak bisa diambil, tidak ada yang bisa
+        # di-prune — perlakukan sebagai config kosong dan LANJUTKAN
+        # ke restore_files + restart (itu inti rollback). Peringatan
+        # lantang agar transparan; bukan silent success. Catatan:
+        # dump hanya bisa gagal total bila startup-config pun tidak
+        # ada (mesin ter-wipe) — dalam keadaan itu tidak ada objek
+        # live Titian untuk di-prune.
         warn "tidak bisa membuang running-config saat ini (konfd tidak terjangkau + tidak ada startup-config) — prune objek live DILEWATI, lanjut memulihkan file dari titik $name"
         : > "$cur"
+    fi
+    if [ "${DUMP_FALLBACK:-0}" = "1" ]; then
+        # Dump prune dari startup-config (bukan tree live): prune
+        # buta terhadap perubahan yang di-commit tapi BELUM di-save
+        # (uji 016: vlan101/102 lolos). File tetap dipulihkan dari
+        # titik + restart jalan; verifikasi cmp di akhir akan
+        # menangkap selisihnya (diff tidak kosong) — bukan silent.
+        warn "dump prune dari startup-config (bukan tree live) — perubahan yang di-commit tapi BELUM di-save TIDAK TERLIHAT prune dan bisa bertahan hidup sesudah rollback; verifikasi di akhir akan menangkapnya"
     fi
     echo "rollback to $name — prune objek live that no  at point..."
     prune_all "$cur" "$d"
@@ -804,11 +939,11 @@ cmd_rollback() {
     fi
     tmp=$(mktemp /tmp/titian-ckpt-rb2.XXXXXX) || tmp=""
     if [ -n "$tmp" ] && dump_running "$tmp"; then
-        if cmp -s "$tmp" "$d/running-config"; then
+        if dump_same "$tmp" "$d/running-config"; then
             echo "rollback OK: running-config sama persis with point $name"
         else
-            echo "Warning: running-config after rollback Differs from point $name (diff at below):" >&2
-            diff "$d/running-config" "$tmp" 2>/dev/null | head -40 >&2
+            echo "Warning: running-config after rollback Differs from point $name (diff at below, tanpa pemisah '!'):" >&2
+            dump_diff "$d/running-config" "$tmp" >&2
             warn "verifikasi diff tidak kosong — periksa manual"
         fi
         rm -f "$tmp"

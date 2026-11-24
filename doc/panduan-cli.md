@@ -436,6 +436,11 @@ Perhatian:
   wajib ditulis.
 - Kreasi VLAN di FreeBSD kadang gagal intermiten (`SIOCIFCREATE2`); bila
   terjadi, ulangi perintahnya — guard create mencegah konfigurasi korup.
+- `interface vlan` otomatis menaikkan parent + VLAN-nya (sejak 0.1.1);
+  bila parent tadinya DOWN, Titian mencetak catatan. `disable` pada
+  parent memperingatkan bila ada child VLAN aktif yang ikut gelap.
+  `ip address` pada interface yang masih DOWN mencetak peringatan
+  (tanpa mengubah state — pre-stage beralamat tetap boleh).
 
 ### 2.2 Route dan gateway global (mode configure)
 

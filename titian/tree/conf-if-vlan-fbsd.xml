@@ -34,6 +34,25 @@
                 fi
                 ${RT_SBIN}/titian-persist.sh mark-if "vlan${vlan_id}"
             fi
+            # PR 23 Nov 2026 (parent DOWN bikin VLAN diam): naikkan
+            # parent + vlan TANPA SYARAT — menutup juga replay sesudah
+            # restart service (vlan sudah ada, blok create dilewati).
+            if ifconfig "${parent}" 2>/dev/null | sed -n '1p' | grep -qw 'UP'; then
+                ParentWasUp=1
+            else
+                ParentWasUp=0
+            fi
+            ifconfig "${parent}" up
+            ifconfig "vlan${vlan_id}" up
+            # FIX 24 Nov 2026 (fix012b): JANGAN pakai ${ParentWasUp} di
+            # sini. klish 2.2.5 mengekspansi ${VAR} tak dikenal menjadi
+            # string kosong SEBELUM shell menjalankan ACTION, sehingga
+            # kondisi selalu FALSE dan note tidak pernah tampil.
+            # Bare $ParentWasUp lolos ke shell apa adanya (terbukti di
+            # guest vlan 103, fix012). Jangan "perbaiki" kembali ke ${...}.
+            if [ "$ParentWasUp" = "0" ]; then
+                printf "%s \n" "catatan: parent ${parent} tadinya DOWN, dinaikkan (matikan lagi: interface ethernet ${parent} -&gt; disable)"
+            fi
         </ACTION>
     </COMMAND>
 
@@ -94,6 +113,22 @@
           help="Disable the selected interface">
         <CONFIG operation="unset" pattern="^enable"/>
         <ACTION>
+            ChildList=`ifconfig -l 2>/dev/null`
+            for VlanIf in $ChildList; do
+                case "$VlanIf" in
+                    vlan[0-9]*)
+                        VlanParent=`ifconfig "$VlanIf" 2>/dev/null | grep 'parent interface:' | awk '{print $NF}'`
+                        if [ "$VlanParent" = "${iface}" ]; then
+                            if ifconfig "$VlanIf" 2>/dev/null | sed -n '1p' | grep -qw 'UP'; then
+                                ChildUp="$ChildUp $VlanIf"
+                            fi
+                        fi
+                        ;;
+                esac
+            done
+            if [ -n "$ChildUp" ]; then
+                printf "%s \n" "peringatan: ${iface} punya child vlan aktif:$ChildUp - disable ${iface} ikut mematikan child tersebut."
+            fi
             ifconfig ${iface} down
         </ACTION>
     </COMMAND>
@@ -123,6 +158,9 @@
         </PARAM>
         <CONFIG pattern="ip address ${ip}" splitter="false"/>
         <ACTION>
+            if ! ifconfig "${iface}" 2>/dev/null | sed -n '1p' | grep -qw 'UP'; then
+                printf "%s \n" "interface ${iface} masih DOWN (enable dulu)"
+            fi
             ${RT_SBIN}/titian-if.sh addr-add "${iface}" "${ip}" "${peer_ip}" &amp;&amp; ${RT_SBIN}/titian-persist.sh sync-if "${iface}"
         </ACTION>
     </COMMAND>

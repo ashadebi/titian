@@ -319,6 +319,19 @@ setelah `mount -uw /` bila perlu):
 pkg add titian-bsdrp-0.1.0.pkg
 ```
 
+Sesudah `pkg add` langsung (jalur manual), sinkronkan DB paket agar
+install bertahan melewati reboot — live `/var/db/pkg` adalah tmpfs
+yang dirakit saat boot dari `/conf/base/var/db/pkg` (temuan uji guest
+23 Nov 2026):
+
+```
+/opt/titian/sbin/titian-update.sh sync-pkg-db
+```
+
+(Jalur `update install confirm` menjalankan langkah ini otomatis.
+Tanpa sync, `pkg info titian` kosong sesudah reboot meski file
+ter-install utuh.)
+
 Post-install otomatis: mkdir `/var/log/bird` (tidak berbahaya di
 BSDRP, tapi bukan andalan — andalannya path log §4.3); konversi
 seed `bird.conf` HANYA bila marker belum ada (PRIMARY dari ifconfig

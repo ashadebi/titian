@@ -433,6 +433,11 @@ Notes:
 - VLAN creation on FreeBSD sometimes fails intermittently
   (`SIOCIFCREATE2`); if it happens, repeat the command — the create
   guard prevents corrupt configuration.
+- `interface vlan` automatically brings up the parent + the VLAN itself
+  (since 0.1.1); if the parent was DOWN, Titian prints a note.
+  `disable` on a parent warns if active child VLANs go dark with it.
+  `ip address` on an interface that is still DOWN prints a warning
+  (without changing state — addressed pre-staging stays allowed).
 
 ### 2.2 Global route and gateway (configure mode)
 
