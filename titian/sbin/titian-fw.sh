@@ -34,6 +34,10 @@ set -u
 
 CONF="${FW_CONF:-/usr/local/etc/firewall.conf}"
 DIRTY=/var/run/firewall.dirty
+# Isolir (titian-api, 24 Nov 2026): state persisten, satu baris per IP:
+#   isolate <ip> <web-ip> <web-port>
+# Aturan live dibuat ulang oleh cmd_apply dari file ini (bertahan reboot).
+ISOLATED_CONF="${ISOLATED_CONF:-/usr/local/etc/isolated.conf}"
 # Pager global: output show >1 layar lewat less (titian-page.sh).
 # Prologue dipanggil SESUDAH setup warna/TTY bila ada, SEBELUM output pertama.
 SBIN_DIR=$(dirname "$0")
@@ -325,6 +329,63 @@ cmd_flush() {
     exit 0
 }
 
+# --- isolir (titian-api, 24 Nov 2026; semantik diubah 24 Nov 2026 21:47 WIB) --
+# Isolir = dst-nat trafik web user (TCP 80 DAN TCP 443) ke web isolir
+# (port web server, 80). TIDAK ADA blokir 443 — HTTPS juga dialihkan
+# ke web server, jadi klien HTTPS menerima respons HTTP polos (bukan
+# TLS): konsekuensi desain yang diminta user, bukan bug.
+# State: $ISOLATED_CONF (persisten, satu baris per IP):
+#   isolate <ip> <web-ip> <web-port>
+# Aturan live dibuat ulang oleh cmd_apply dari state ini (jadi isolir
+# bertahan melewati reboot: apply jalan saat boot via rc.d/firewall).
+# Dummynet TIDAK disentuh — kapasitas bandwidth user tetap profil paket.
+# Syarat: firewall harus enable (`firewall enable` + commit) — tanpa itu
+# anchor nat/firewall tidak dimuat dan isolir tidak berpengaruh.
+isolate_fw_enabled() {
+    grep -q '^enable yes' "$CONF" 2>/dev/null
+}
+
+cmd_isolate() {
+    _ip="$1"; _web="$2"; _port="$3"
+    valid_v4 "$_ip" || die "isolate: IP user harus IPv4: $_ip"
+    valid_v4 "$_web" || die "isolate: IP web isolir harus IPv4: $_web"
+    valid_port "$_port" || die "isolate: port web isolir 1-65535: $_port"
+    touch_conf
+    isolate_fw_enabled || die "isolate: firewall belum di-enable (jalankan 'firewall enable' + commit dulu — tanpa itu rule isolir tidak dimuat)"
+    _tmp="$ISOLATED_CONF.tmp.$$"
+    if [ -f "$ISOLATED_CONF" ]; then grep -v "^isolate $_ip " "$ISOLATED_CONF" > "$_tmp" 2>/dev/null || true; else : > "$_tmp"; fi
+    printf 'isolate %s %s %s\n' "$_ip" "$_web" "$_port" >> "$_tmp"
+    mv "$_tmp" "$ISOLATED_CONF" || die "cannot write $ISOLATED_CONF"
+    chmod 600 "$ISOLATED_CONF" 2>/dev/null || true
+    cmd_apply
+    echo "firewall: $_ip diisolir (web 80+443 -> $_web:$_port; bandwidth tetap)"
+    exit 0
+}
+
+cmd_unisolate() {
+    _ip="$1"
+    valid_v4 "$_ip" || die "unisolate: IP user harus IPv4: $_ip"
+    if ! grep -q "^isolate $_ip " "$ISOLATED_CONF" 2>/dev/null; then
+        echo "firewall: $_ip tidak ada di daftar isolir (nothing to do)"
+        exit 0
+    fi
+    _tmp="$ISOLATED_CONF.tmp.$$"
+    grep -v "^isolate $_ip " "$ISOLATED_CONF" > "$_tmp" || true
+    mv "$_tmp" "$ISOLATED_CONF" || die "cannot write $ISOLATED_CONF"
+    cmd_apply
+    echo "firewall: isolir $_ip dicabut (trafik kembali normal)"
+    exit 0
+}
+
+cmd_show_isolated() {
+    if ! grep -q '^isolate ' "$ISOLATED_CONF" 2>/dev/null; then
+        echo "(no isolated users)"
+        exit 0
+    fi
+    grep '^isolate ' "$ISOLATED_CONF" 2>/dev/null | sort -u
+    exit 0
+}
+
 # firewall-apply — apply /usr/local/etc/firewall.conf to pf anchors
 # BSDRP_klish, prepared 2026-11-08 ~19:15 WIB.
 # POSIX sh, no bashisms. Generation logic follows Titian's proven
@@ -492,6 +553,28 @@ cmd_apply() {
         esac
     done < "$CONF"
 
+    # --- isolate rules (titian-api, 24 Nov 2026; semantik 21:47 WIB) -------
+    # Dari $ISOLATED_CONF: per IP terisolir, rdr TCP 80 DAN rdr TCP 443
+    # ke web isolir (port web server). TIDAK ADA block 443. Dummynet
+    # tidak disentuh. Aturan dibuat ulang di setiap apply (bertahan
+    # melewati reboot via rc.d/firewall).
+    if [ -f "$ISOLATED_CONF" ]; then
+        while IFS= read -r _iline; do
+            case "$_iline" in
+                isolate\ *)
+                    set -- $_iline
+                    [ "$#" -eq 4 ] || die "corrupt isolate line: $_iline"
+                    # $1=isolate $2=ip $3=web-ip $4=web-port
+                    valid_v4 "$2" || die "corrupt isolate line (bad IP): $_iline"
+                    valid_v4 "$3" || die "corrupt isolate line (bad web IP): $_iline"
+                    valid_port "$4" || die "corrupt isolate line (bad port): $_iline"
+                    printf 'rdr proto tcp from %s to any port 80 -> %s port %s\n' "$2" "$3" "$4" >> "$_nat_tmp"
+                    printf 'rdr proto tcp from %s to any port 443 -> %s port %s\n' "$2" "$3" "$4" >> "$_nat_tmp"
+                    ;;
+            esac
+        done < "$ISOLATED_CONF"
+    fi
+
     # --- trailing block per in-iface (forward default DENY) -----------------
     for _f in $_fwd_ifaces; do
         iface_present "$_f" || continue
@@ -562,8 +645,11 @@ case "$op" in
     del-dnat)        cmd_del_dnat "$@" ;;
     add-protected)   cmd_add_protected "$@" ;;
     del-protected)   cmd_del_protected "$@" ;;
+    isolate)         cmd_isolate "$@" ;;
+    unisolate)       cmd_unisolate "$@" ;;
+    show-isolated)   cmd_show_isolated ;;
     flush)           cmd_flush ;;
     apply)         cmd_apply "$@" ;;
     apply-all)     cmd_apply ;;
-    *) echo "usage: $PROG <check|set-enable|add-filter|del-filter|add-snat|del-snat|add-dnat|del-dnat|add-protected|del-protected|flush|show|show-filter|show-nat|status|apply|apply-all> ..." >&2; exit 2 ;;
+    *) echo "usage: $PROG <check|set-enable|add-filter|del-filter|add-snat|del-snat|add-dnat|del-dnat|add-protected|del-protected|isolate|unisolate|show-isolated|flush|show|show-filter|show-nat|status|apply|apply-all> ..." >&2; exit 2 ;;
 esac

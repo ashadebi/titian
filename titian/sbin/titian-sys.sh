@@ -1,6 +1,8 @@
 #!/bin/sh
 # TITIAN Fase 1 — perintah system/service/ssh/show-hw (cabang OS).
 # POSIX sh.
+# Subcommand `storage` (25 Nov 2026, API D1): `df -h` pipe-delimited,
+# satu baris per filesystem — lihat case `storage` di bawah.
 OS=$(uname -s)
 BIN=${TITIAN_BIN:-/opt/titian/bin}
 # Pager global: output show >1 layar lewat less (titian-page.sh).
@@ -9,7 +11,7 @@ SBIN_DIR=$(dirname "$0")
 . "$SBIN_DIR/titian-page.sh"
 # Hanya subcommand baca yang dipager: set/generate/commit TIDAK —
 # output-nya harus tetap streaming/langsung, bukan tertahan sampai EXIT.
-case "${1:-}" in services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|summary|port-in-use|ssh-check) titian_page_begin ;; esac
+case "${1:-}" in services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|summary|storage|port-in-use|ssh-check) titian_page_begin ;; esac
 
 err() { echo "Error: $*" >&2; exit 33; }
 
@@ -277,6 +279,18 @@ case "${1:-}" in
             if command -v ss >/dev/null 2>&1; then ss -tunap 2>/dev/null; elif command -v netstat >/dev/null 2>&1; then netstat -en; else echo "ss/netstat tidak tersedia"; fi
         fi
         ;;
+    storage)
+        # API JSON D1 (25 Nov 2026, subcommand baru, MINIMAL, read-only):
+        # satu baris per filesystem, pipe-delimited, TANPA header:
+        #   filesystem|size|used|avail|use_pct|mounted_on
+        # size/used/avail = string `df -h` (mis. 7.9G); use_pct = angka
+        # tanpa `%`; mounted_on = kolom 6 s.d. akhir (boleh berspasi).
+        # Hanya menjalankan `df -h` — tidak membaca/menulis state apa pun.
+        # Dipakai: GET /api/v1/system/storage (daemon mem-parse baris ini;
+        # baris gagal parse -> raw + warning, bukan dibuang).
+        df -h 2>/dev/null | awk 'NR>1 {pct=$5; sub(/%$/, "", pct); mnt=$6; for (i=7;i<=NF;i++) mnt=mnt" "$i; print $1"|"$2"|"$3"|"$4"|"pct"|"mnt}' \
+            || err "df gagal"
+        ;;
     summary)
         # Ringkasan sistem lengkap untuk `show system` (OS, kernel, versi, hw ringkas).
         # Label 14 kolom + ": " supaya titik dua lurus.
@@ -396,5 +410,5 @@ case "${1:-}" in
             sys_sed_del_blank /etc/resolv.conf
         fi
         ;;
-    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|ssh-port-del|port-in-use|services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {hostname|timezone|ssh-check|ssh-restart|ssh-port-del|port-in-use|services|service-status|service-ssh|process|memory|cpu|pci|dmi|connections|storage|sed-replace|sed-del-blank|dns-domain|dns-domain-clear|dns-ns-add|dns-ns-del} ..." >&2; exit 2 ;;
 esac

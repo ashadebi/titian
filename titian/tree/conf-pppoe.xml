@@ -318,6 +318,14 @@
             ${RT_SBIN}/titian-pppoe.sh show-sessions
         </ACTION>
     </COMMAND>
+    <COMMAND name="show pppoe-server sessions detail"
+        help="Active PPPoE sessions, machine-parseable (user|framed-ip|link) for titian-api" help-id="Sesi PPPoE aktif, machine-parseable (user|framed-ip|link) for titian-api"
+        lock="false"
+        interrupt="true">
+        <ACTION>
+            ${RT_SBIN}/titian-pppoe.sh sessions-detail
+        </ACTION>
+    </COMMAND>
 
     <!-- Disconnect sesi PPPoE aktif via console mpd5 (20 Nov 2026,
          Opsi A — keputusan user 20 Nov 12:26). mpd5 TIDAK mendengarkan

@@ -1,0 +1,58 @@
+/* TITIAN web — desain v2 (disetujui): pink tipis, aksen pink, teks plum */
+:root {
+  --bg: #fffafc; --surface: #ffffff; --accent: #f6c2da; --accent2: #efa9c8;
+  --text: #4a2b3d; --muted: #8a6a7d; --border: #f3d7e6; --warn-bg: #fff3e0;
+  --err-bg: #fde8ef;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; }
+header { display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap; padding: 12px 20px; background: var(--surface);
+  border-bottom: 2px solid var(--accent); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800;
+  letter-spacing: 2px; font-size: 20px; }
+.brand small { font-weight: 400; letter-spacing: 0; font-size: 13px; color: var(--muted); }
+nav { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+nav a { padding: 7px 12px; border-radius: 8px; text-decoration: none; color: var(--text); }
+nav a.on, nav a:hover { background: var(--accent); }
+nav .who { color: var(--muted); margin-left: 8px; font-size: 13px; }
+main { max-width: 1080px; margin: 0 auto; padding: 20px; }
+footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
+h1 { font-size: 24px; margin: 4px 0 14px; }
+h2 { font-size: 18px; margin: 22px 0 8px; }
+a { color: #b23a7d; }
+table { width: 100%; border-collapse: collapse; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: #fdeef6; font-size: 13px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; margin: 12px 0; }
+.card.err { background: var(--err-bg); }
+.stats { display: flex; gap: 12px; margin: 12px 0; flex-wrap: wrap; }
+.stats div { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 20px; min-width: 150px; }
+.stats b { display: block; font-size: 28px; }
+.stats span { color: var(--muted); font-size: 13px; }
+.btn { display: inline-block; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; font-size: 14px; }
+.btn.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+.btn.kick { background: #fde8ef; border-color: #efa9c8; }
+.btn.iso { background: #fff3e0; border-color: #e8b04b; }
+.btn.uniso { background: #e8f5e9; border-color: #81c784; }
+.tag.iso { background: #fde8ef; color: #b23a7d; border-radius: 6px; padding: 1px 7px; font-size: 12px; }
+.muted { color: var(--muted); }
+.warn { background: var(--warn-bg); border: 1px solid #e8b04b; border-radius: 8px; padding: 10px 12px; }
+.notice { background: #fdeef6; border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; }
+label { display: block; margin: 10px 0; font-size: 14px; }
+label.chk { display: inline-block; margin: 4px 12px 4px 0; }
+input, select, textarea { width: 100%; padding: 9px 10px; margin-top: 4px;
+  border: 1px solid var(--border); border-radius: 8px; font: inherit; background: #fff; }
+input[type=checkbox] { width: auto; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.row label { margin: 0; }
+.modal { position: fixed; inset: 0; background: rgba(74, 43, 61, .45);
+  display: flex; align-items: center; justify-content: center; }
+.modal .box { background: #fff; border-radius: 14px; padding: 22px; width: min(480px, 92vw); }
+.modal h3 { margin-top: 0; }

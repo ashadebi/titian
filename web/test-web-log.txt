@@ -1,0 +1,41 @@
+PASS  mock gentoken ok
+PASS  fingerprint TLS mock terhitung (bukan hash kosong)
+PASS  create-admin CLI ok
+PASS  web check OK
+PASS  halaman login 200
+PASS  login salah -> 401
+PASS  login benar -> 303 ke /
+PASS  cookie sesi HttpOnly diset
+PASS  tambah NAS via UI -> 303
+PASS  nas-tokens.conf mode 600
+PASS  halaman NAS 200 + token TIDAK tampil di browser
+PASS  halaman NAS tanpa token di HTML
+PASS  dashboard 200
+PASS  dashboard tampil jumlah sesi
+PASS  sesi aktif 200 + agus tampil
+PASS  sesi aktif tampil bps (800000 -> 800.00 Kbps)
+PASS  sesi aktif urut usage desc (data-total menurun)
+PASS  sessions.json ok + 3 sesi
+PASS  kick tanpa reason -> 400
+PASS  kick pppoe-titian-test -> 303
+PASS  titian-test hilang dari sesi aktif
+PASS  audit 200 + kick tercatat (titian-test, alasan)
+PASS  isolir ipoe -> 303
+PASS  sesi terisolir tampil ISOLIR
+PASS  buka isolir -> 303
+PASS  audit: isolir + unisolir tercatat
+PASS  tidak ada endpoint hapus audit (bukan 200/303 sukses)
+PASS  klien 200 + pemberitahuan radacct ditunda jujur
+PASS  tambah operator op1 -> 303
+PASS  tambah NAS kedua -> 303
+PASS  login operator 303
+PASS  operator ditolak halaman Pengguna (403)
+PASS  operator ditolak halaman NAS (403)
+PASS  operator bisa lihat sesi NAS tugasnya
+PASS  operator di luar NAS tugasnya -> 403
+PASS  operator bisa lihat audit
+PASS  logout -> 303 ke /login
+PASS  sesudah logout dashboard redirect ke login
+PASS  stderr mock daemon tanpa Traceback
+
+HASIL WEB MOCK: PASS=39 FAIL=0

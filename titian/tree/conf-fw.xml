@@ -358,6 +358,43 @@
             </ACTION>
         </COMMAND>
 
+        <COMMAND name="isolate"
+                help="Isolate one user IP: redirect its web traffic (TCP 80 and TCP 443) to the isolir web portal (web server port). No HTTPS blocking — HTTPS is redirected too. Bandwidth (dummynet) is NOT changed" help-id="Isolir satu IP user: alihkan trafik web-nya (TCP 80 dan TCP 443) ke web isolir (port web server). Tanpa blokir HTTPS — HTTPS ikut dialihkan. Bandwidth (dummynet) TIDAK diubah">
+            <PARAM name="Ip"
+                help="user IPv4 address" help-id="alamat IPv4 user"
+                ptype="IP_ADDR"/>
+            <PARAM name="to"
+                help="to"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+                <PARAM name="to_val"
+                    help="isolir web IPv4 address" help-id="alamat IPv4 web isolir"
+                    ptype="IP_ADDR"/>
+            </PARAM>
+            <PARAM name="port"
+                help="port"
+                mode="subcommand"
+                ptype="SUBCOMMAND">
+                <PARAM name="port_val"
+                    help="isolir web port 1-65535" help-id="port web isolir 1-65535"
+                    ptype="DSTPORT"/>
+            </PARAM>
+            <CONFIG pattern="^${__line}$"/>
+            <ACTION>
+                ${RT_SBIN}/titian-fw.sh isolate "${Ip}" "${to_val}" "${port_val}"
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="no isolate"
+                help="Remove isolation for one user IP (traffic back to normal)" help-id="Cabut isolir satu IP user (trafik kembali normal)">
+            <PARAM name="Ip"
+                help="user IPv4 address" help-id="alamat IPv4 user"
+                ptype="IP_ADDR"/>
+            <CONFIG operation="unset" pattern="^isolate ${Ip} "/>
+            <ACTION>
+                ${RT_SBIN}/titian-fw.sh unisolate "${Ip}"
+            </ACTION>
+        </COMMAND>
+
         <COMMAND name="protect-interface"
                 help="Add an interface to the protected list (rules may not use this iface as in/out — anti-lockout guard)" help-id="Add interface to list protected (rule not boleh memakai iface ini sebagai in/out — guard anti-lockout)">
             <PARAM name="If"
@@ -413,6 +450,14 @@
                 interrupt="true">
             <ACTION>
                 ${RT_SBIN}/titian-fw.sh show-nat
+            </ACTION>
+        </COMMAND>
+        <COMMAND name="show firewall isolated"
+                help="List isolated user IPs (dst-nat to isolir web)" help-id="List IP user yang diisolir (dst-nat ke web isolir)"
+                lock="false"
+                interrupt="true">
+            <ACTION>
+                ${RT_SBIN}/titian-fw.sh show-isolated
             </ACTION>
         </COMMAND>
 

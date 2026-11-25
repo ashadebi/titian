@@ -1,0 +1,36 @@
+# titian-api.conf -- contoh konfigurasi titian-api.
+# Salin ke /usr/local/etc/titian-api.conf (mode 600), lalu buat token:
+#   service titian-api gentoken --name myraddash
+# Token yang dihasilkan TERCETAK SEKALI -- simpan ke record NAS myRadDASH.
+# (Token juga tersimpan di file ini, mode 600, root-only.)
+#
+# bind: IP yang di-listen API. HARUS IP manajemen / 127.0.0.1.
+# 0.0.0.0 DITOLAK di startup (daemon menolak jalan).
+bind 127.0.0.1
+#
+# port: port HTTPS API.
+port 8443
+#
+# isolir-web <ip>:<port> -- alamat web isolir (portal bayar), tujuan
+# dst-nat saat operator menekan Isolir. WAJIB diisi sebelum memakai
+# endpoint isolate (bila kosong, isolate mengembalikan 400).
+# Alamat ini = myradash-isolir-web di host 84 (103.50.129.84:80):
+# container myradash-isolir-web (172.30.0.22:8080 internal, dipublish
+# 0.0.0.0:8080) dijangkau lewat NPM di host 84 — NPM menjawab halaman
+# isolir untuk Host apa pun (default server,
+# /root/NPM/data/nginx/custom/http_top.conf). Diputuskan user
+# 25 Nov 2026 ("ok webisolir ngikut").
+isolir-web 103.50.129.84:80
+#
+# rate-limit: request per menit per token (429 rate_limited bila lewat).
+rate-limit 60
+#
+# cert / key: sertifikat TLS. Bila file belum ada, daemon membuat
+# self-signed via openssl saat pertama jalan. Produksi: ganti dengan
+# sertifikat proper, lalu restart service.
+# cert /etc/titian/titian-api-cert.pem
+# key /etc/titian/titian-api-key.pem
+#
+# token <nama> <hex> -- dibuat via gentoken, satu baris per pemanggil.
+# Contoh (JANGAN pakai nilai ini -- hasil gentoken yang berlaku):
+# token myraddash <64-hex-dari-gentoken>

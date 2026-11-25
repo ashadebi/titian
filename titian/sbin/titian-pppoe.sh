@@ -226,6 +226,74 @@ cmd_show_sessions() {
     exit 0
 }
 
+# --- sessions-detail (titian-api, 24 Nov 2026) ---
+# Daftar sesi PPPoE aktif dalam format machine-parseable untuk titian-api
+# (dan `show pppoe-server sessions detail` di klish).
+# Output: satu baris per sesi:  user|framed_ip|link
+#   user      = username PPPoE (dari console mpd5)
+#   framed_ip = Framed-IP-Address sesi
+#   link      = interface ng* sesi itu (peer IP cocok), atau "-" bila
+#               tidak ketemu ng* (sesi di console tapi interface hilang).
+# Sumber: console mpd5 `show sessions` (SEMUA sesi) — username dijangkar
+# ke user yang terdaftar di pppoe.conf (bukan tebak posisi kolom, karena
+# format tabel console mpd5 bisa berubah antar versi). IP dijangkar ke
+# token IPv4 pada baris yang sama dengan username itu.
+# Exit 0 bila console menjawab (walau 0 sesi — output kosong); exit 1
+# bila console tidak bisa dihubungi / auth gagal / console belum enable.
+cmd_sessions_detail() {
+    _co=$(sed -n 's/^console //p' "$CONF" | head -1)
+    [ "$_co" = "yes" ] || { echo "Error: console mpd5 belum di-enable (jalankan 'console' + commit dulu)" >&2; exit 1; }
+    [ -s "$CONSOLE_PW_FILE" ] || { echo "Error: file password console tidak ada ($CONSOLE_PW_FILE)" >&2; exit 1; }
+    command -v "${MPD_NC:-nc}" >/dev/null 2>&1 || { echo "Error: nc tidak tersedia (butuh netcat untuk console mpd5)" >&2; exit 1; }
+    _out=$(mpd_console "show sessions") || { echo "Error: tidak bisa terhubung ke console mpd5 (mpd5 jalan? console listen 5005?)" >&2; exit 1; }
+    case "$_out" in
+        *"Welcome!"*) ;;
+        *) echo "Error: auth console mpd5 gagal (periksa password console / mpd5 jalan?)" >&2; exit 1 ;;
+    esac
+    # Peta peer-IP -> interface ng* (dari ifconfig; peer ada sesudah "-->").
+    _ngmap=$(mktemp /tmp/titian-ngmap.XXXXXX) || die "gagal buat temp file"
+    for _if in $(ifconfig -l 2>/dev/null); do
+        case "$_if" in
+            ng*)
+                _peer=$(ifconfig "$_if" 2>/dev/null | sed -n 's/.*--> \([0-9.]*\).*/\1/p' | head -1)
+                [ -n "$_peer" ] && printf '%s %s\n' "$_peer" "$_if" >> "$_ngmap"
+                ;;
+        esac
+    done
+    # Parse output console: hapus baris echo perintah + banner/prompt.
+    # Username dijangkar ke daftar user di $CONF; IPv4 di baris yang sama.
+    printf '%s\n' "$_out" \
+        | grep -v "show sessions" \
+        | grep -v "Welcome" \
+        | grep -v "^mpd5" \
+        | awk -v users="$(grep '^user ' "$CONF" 2>/dev/null | awk '{print $2}' | tr '\n' ' ')" -v ngmap="$_ngmap" '
+        BEGIN {
+            n = split(users, u, " ");
+            while ((getline line < ngmap) > 0) { split(line, a, " "); ng[a[1]] = a[2]; }
+        }
+        {
+            # cari token IPv4 pada baris ini
+            ip = "";
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) { ip = $i; break; }
+            }
+            if (ip == "") next;
+            # cari username (whole-word) dari daftar user
+            for (j = 1; j <= n; j++) {
+                if (u[j] == "") continue;
+                for (i = 1; i <= NF; i++) {
+                    if ($i == u[j]) {
+                        link = (ip in ng) ? ng[ip] : "-";
+                        print u[j] "|" ip "|" link;
+                        next;
+                    }
+                }
+            }
+        }' | sort -u
+    rm -f "$_ngmap"
+    exit 0
+}
+
 # --- console mpd5: client (20 Nov 2026) ---
 # Jalankan perintah console mpd5 via nc (127.0.0.1:5005). Arg = satu
 # perintah console per argumen. Auth: user titian-console + password
@@ -648,6 +716,7 @@ case "${1:-}" in
     show) cmd_show ;;
     show-users) cmd_show_users ;;
     show-sessions) cmd_show_sessions ;;
+    sessions-detail) cmd_sessions_detail ;;
     set-enable) cmd_set_enable "${2:-}" ;;
     set-interface) cmd_set_interface "${2:-}" ;;
     del-interface) cmd_del_interface ;;
@@ -673,5 +742,5 @@ case "${1:-}" in
     flush) cmd_flush ;;
     apply) cmd_apply ;;
     apply-all) cmd_apply ;;
-    *) echo "Usage: $0 {check|show|show-users|show-sessions|set-enable|set-interface|del-interface|set-pool|del-pool|user-add|user-del|user-set-password|user-set-ip|user-del-ip|set-radius-server|del-radius-server|set-radius-secret|del-radius-secret|set-radius-acct|del-radius-acct|set-radius-nas-ip|del-radius-nas-ip|set-console|del-console|set-console-password|disconnect <user> <framed-ip>|flush|apply} ..." >&2; exit 2 ;;
+    *) echo "Usage: $0 {check|show|show-users|show-sessions|sessions-detail|set-enable|set-interface|del-interface|set-pool|del-pool|user-add|user-del|user-set-password|user-set-ip|user-del-ip|set-radius-server|del-radius-server|set-radius-secret|del-radius-secret|set-radius-acct|del-radius-acct|set-radius-nas-ip|del-radius-nas-ip|set-console|del-console|set-console-password|disconnect <user> <framed-ip>|flush|apply} ..." >&2; exit 2 ;;
 esac

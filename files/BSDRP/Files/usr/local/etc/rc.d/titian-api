@@ -1,0 +1,59 @@
+#!/bin/sh
+# PROVIDE: titian-api
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+#
+# titian-api (Titian Fase 2) -- HTTP+JSON API untuk operator BRAS.
+# Daemon: /opt/titian/sbin/titian-api.py (Python stdlib, TLS).
+# Config: /usr/local/etc/titian-api.conf (mode 600 -- berisi token bearer).
+# Enable: titian_api_enable="YES" di rc.conf.
+# Token: service titian-api gentoken --name <nama>
+#   (token TERCETAK SEKALI ke terminal admin root -- simpan ke record
+#   NAS myRadDASH; sesudah itu baca dari file config sebagai root).
+#   Rotasi: gentoken --name <nama> yang sama (token lama tertimpa).
+# Log daemon: /var/log/titian-api.log (stdout+stderr via daemon -o).
+#
+# PERBAIKAN rc.d 24 Nov 2026 (3 bug, ditemukan di verifikasi guest bhyve):
+#  1. run_rc_command "$@" (dulu "$1") -- argumen ekstra (--name X)
+#     kini diteruskan ke fungsi gentoken; dulu dibuang.
+#  2. start: stdio supervisor daemon dialihkan dari sesi pemanggil
+#     (`</dev/null >>/var/log/titian-api.log 2>&1` di command_args).
+#     daemon(8) TIDAK keluar sesudah fork -- proses supervisor
+#     `daemon: ... (daemon)` tetap hidup dan memompa output anak ke
+#     file -o; supervisor mewarisi stdio pemanggil, sehingga tanpa
+#     redirect ini `service start` via SSH menggantungkan sesi.
+#     Terbukti di kopler (fstat): anak memegang pipe ke supervisor,
+#     supervisor memegang stdio pemanggil; -o SAJA tidak cukup
+#     (re-test guest 20:28 WIB: start tetap gantung 60 dtk).
+#     Redirect terbukti di kopler: SSH kembali ~3 dtk, output anak
+#     tetap masuk log via -o. titian_api_umask="077" menjaga file log
+#     yang dibuat redirect bermode 600 (daemon -o sendiri 0600).
+#  3. procname="/usr/local/bin/python3" -- pidfile berisi PID proses
+#     python (bukan daemon); rc.subr check_pidfile membandingkan
+#     arg0 proses dengan procname, dan default procname=command
+#     (/usr/sbin/daemon) tak pernah cocok sehingga status salah
+#     "not running" padahal daemon listen.
+#
+. /etc/rc.subr
+
+name="titian_api"
+rcvar="titian_api_enable"
+
+command="/usr/sbin/daemon"
+command_args="-o /var/log/titian-api.log -p /var/run/titian-api.pid /usr/local/bin/python3 /opt/titian/sbin/titian-api.py serve </dev/null >>/var/log/titian-api.log 2>&1"
+pidfile="/var/run/titian-api.pid"
+procname="/usr/local/bin/python3"
+titian_api_umask="077"
+
+extra_commands="gentoken"
+gentoken_cmd="titian_api_gentoken"
+titian_api_gentoken()
+{
+    /usr/local/bin/python3 /opt/titian/sbin/titian-api.py gentoken "$@"
+}
+
+load_rc_config $name
+
+: ${titian_api_enable:="NO"}
+
+run_rc_command "$@"
