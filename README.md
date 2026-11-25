@@ -1,16 +1,22 @@
 # BSDRP + Titian — branch `bsdrp`
 
-Patch + file tambahan untuk memasang **Titian/klish** ke image **BSDRP resmi**.
-Branch ini BUKAN fork BSDRP — isinya hanya perubahan (patch) dan file baru
-yang diperlukan supaya checkout BSDRP resmi bisa di-build jadi image
-BSDRP+Titian. Hanya code/teks, **tanpa binary** (tanpa `.img`, `.img.xz`,
+Patch + file tambahan untuk memasang **Titian/klish** ke image **BSDRP resmi**
+(FreeBSD). Branch ini BUKAN fork BSDRP — isinya hanya perubahan (patch) dan
+file baru yang diperlukan supaya checkout BSDRP resmi bisa di-build jadi
+image BSDRP+Titian. Hanya code/teks, **tanpa binary** (tanpa `.img`, `.img.xz`,
 `.pkg` hasil build).
+
+> **FreeBSD/BSDRP saja.** Varian Linux/Debian (`.deb`) ditunda — keputusan
+> 24 Nov 2026, dikerjakan nanti. Jangan cari `.deb` di branch ini.
 
 - BSDRP resmi: https://github.com/ocochard/BSDRP (HEAD yang dipakai patch
   ini: `c3d134a`, 23 Okt 2026, BSDRP 2.4 WIP)
-- Titian/klish: klish upstream **2.2.5**, paket Titian **0.1.0**
+- Titian/klish: klish upstream **2.2.5**, paket Titian **0.1.1**
+  (rilis 24 Nov 2026, tag `titian-bsdrp-0.1.1`)
 - Status: **terverifikasi build ke-10** (11 Nov 2026, image bird2 + bird3
-  selesai, dd ke UFD + sha256 read-back cocok, CLI teruji di kopler)
+  selesai, dd ke UFD + sha256 read-back cocok, CLI teruji di kopler);
+  image 0.1.1 di-rebuild 24 Nov 2026 (n314296, sha256 `db67b1ce…`) dan
+  di-burn ulang ke UFD dengan read-back cocok.
 
 ## Cara pakai (ringkas)
 
@@ -49,8 +55,8 @@ di-skip, file disalin ulang dengan isi yang sama). Setelah apply,
 | `files/BSDRP/Files/usr/local/share/info/.keep` | Direktori kosong penahan (fix indexinfo post-install) |
 | `files/poudriere.etc/poudriere.d/BSDRP-pkglist.bird2` / `.bird3` | Pkglist per varian BIRD (switch `BIRD_VERSION`, default 2) |
 | `titian/` | **Sumber Titian CLI sebagai file mandiri** (bukan hanya di dalam shar) |
-| `titian/tree/` | 36 file XML definisi perintah klish → `/opt/titian/etc/clish-en/` |
-| `titian/sbin/` | 24 script backend → `/opt/titian/sbin/` |
+| `titian/tree/` | 59 file XML definisi perintah klish → `/opt/titian/etc/clish-en/` |
+| `titian/sbin/` | 67 script backend → `/opt/titian/sbin/` |
 | `titian/README.md` | Catatan sumber + hubungan dengan shar port |
 | `docs/INSTALL.md` | Panduan install/deploy lengkap (dari pengalaman build ke-10) |
 | `docs/titian-bsdRP-feature-list.md` | Daftar fitur Titian untuk BSDRP (spesifikasi port) |
@@ -84,7 +90,8 @@ di-skip, file disalin ulang dengan isi yang sama). Setelah apply,
   keras saat commit (terverifikasi dua arah).
 - **VPP SKIP** — tidak jalan normal di FreeBSD (baris `#net/vpp` dihapus).
 - **wg-easy TIDAK BISA** (butuh Docker) — WireGuard native via klish.
-- **Web dashboard Titian TIDAK termasuk** (komponen terpisah, ditahan).
+- **API HTTP+JSON + web dashboard operator TIDAK termasuk di branch ini**
+  — ada di branch `titian-api` (calon rilis 0.1.2).
 - **VXLAN multicast end-to-end BELUM TERBUKTI** — jangan diklaim.
 - Port `net/titian` resmi **tidak ada** — ini port lokal. MAINTAINER masih
   placeholder (`titian@bsdrp.local`), jangan submit ke FreeBSD sebelum diganti.
@@ -100,5 +107,17 @@ di-skip, file disalin ulang dengan isi yang sama). Setelah apply,
 - DD ke UFD (SanDisk Cruzer Blade 15,6 GB) + sha256 read-back **cocok persis**.
 - Boot bhyve terverifikasi (konfd+sshd start, em0 10.9.8.7, ping OK).
   CLI interaktif di guest BELUM teruji — perlu uji di hardware nyata.
+
+## Rilis 0.1.1 (24 Nov 2026)
+
+- Tag: `titian-bsdrp-0.1.1` — https://github.com/ashadebi/titian/releases/tag/titian-bsdrp-0.1.1
+- Paket: `titian-bsdrp-0.1.1.pkg`, 873.139 byte,
+  sha256 `a043c8b4270890aa586b91436bcdee75b57f03187c43e12821bccb7a9e0eb334`
+- Isi: fix checkpoint (`end` terminator + rollback prune), updater tahan
+  JSON compact GitHub, VLAN parent auto-up, nama paket `titian`.
+- Image di-rebuild dari rilis ini (n314296): full `.img.xz`
+  sha256 `09604f47db6a0aa48995a89a497c8740110295dec65520b50fc8a111978a8699`,
+  image tanpa kompresi sha256 `db67b1ce9d51ffa39e3311b930270c70ca76abb937e9d78cf48e3a803ad53dec`,
+  read-back UFD cocok persis.
 
 Detail lengkap: `docs/INSTALL.md` · fitur: `docs/titian-bsdRP-feature-list.md`.
