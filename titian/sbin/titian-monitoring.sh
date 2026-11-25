@@ -176,7 +176,9 @@ _live_bandwidth() {
         rm -f "$_tmp"
     }
     trap _cleanup_live EXIT INT TERM
-    bwm-ng -o csv -c 0 -t 1000 > "$_tmp" 2>/dev/null &
+    # _BWM_BIN diisi cmd_bandwidth (resolusi PATH + absolut); fungsi
+    # ini hanya dipanggil dari sana.
+    "$_BWM_BIN" -o csv -c 0 -t 1000 > "$_tmp" 2>/dev/null &
     _bwm_pid=$!
     # terminal ke mode non-canonical supaya 'q' terbaca tanpa Enter (hanya bila ada tty).
     # Bila tidak ada controlling terminal (/dev/tty tak bisa dibuka), lewati diam-diam.
@@ -210,6 +212,64 @@ _live_bandwidth() {
     exit 0
 }
 
+_netstat_snapshot() {
+    # Cetak "iface rx_bytes tx_bytes" (satu baris per interface).
+    # FreeBSD: netstat -ib — header: Name(1) Mtu(2) Network(3)
+    # Address(4) Ipkts(5) Ierrs(6) Idrop(7) Ibytes(8) Opkts(9)
+    # Oerrs(10) Obytes(11) Coll(12). Ibytes = kolom 8, Obytes =
+    # kolom 11 (BUKAN 7/10 — itu Idrop/Oerrs, hampir selalu 0; bug
+    # T3b, guest r8 25 Nov 2026: fallback mengembalikan 0 diam-diam).
+    # Nilai kumulatif per interface, diulang tiap baris alamat —
+    # ambil kemunculan PERTAMA per interface, jangan dijumlah. Nama
+    # bisa berakhiran `*` (mis. enc0*) — kupas dulu bintangnya.
+    # Linux: /proc/net/dev (rx_bytes kolom 1, tx_bytes kolom 9
+    # sesudah ':').
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        netstat -ib 2>/dev/null | awk '
+            $1 == "Name" { next }
+            { n = $1; sub(/\*$/, "", n) }
+            n !~ /^[a-z0-9]+$/ { next }
+            !seen[n]++ && $8 ~ /^[0-9]+$/ && $11 ~ /^[0-9]+$/ { print n, $8, $11 }'
+    elif [ -r /proc/net/dev ]; then
+        awk -F'[: ]+' '$2 ~ /^[a-zA-Z0-9_.-]+$/ && $3 ~ /^[0-9]+$/ \
+            && $11 ~ /^[0-9]+$/ { print $2, $3, $11 }' /proc/net/dev
+    else
+        return 1
+    fi
+}
+
+_netstat_bandwidth() {
+    # $1 = durasi detik. Fallback bila bwm-ng BENAR-BENAR tidak ada
+    # (bukan sekadar tidak ketemu di PATH — lihat resolusi _BWM_BIN
+    # di cmd_bandwidth). Sampling counter interface 2x, hitung
+    # byte/detik, cetak tabel yang SAMA formatnya dengan jalur bwm-ng
+    # (parser daemon tidak berubah). Untuk update live per detik yang
+    # halus, pasang bwm-ng (FreeBSD: pkg install net-mgmt/bwm-ng;
+    # Debian: apt install bwm-ng).
+    _secs=$1
+    _snap1=$(mktemp /tmp/titian-nb1.XXXXXX) || die "gagal buat temp file"
+    _snap2=$(mktemp /tmp/titian-nb2.XXXXXX) || { rm -f "$_snap1"; die "gagal buat temp file"; }
+    _netstat_snapshot > "$_snap1" || { rm -f "$_snap1" "$_snap2"; die "tidak bisa membaca counter interface (netstat -ib / /proc/net/dev)"; }
+    sleep "$_secs"
+    _netstat_snapshot > "$_snap2" || { rm -f "$_snap1" "$_snap2"; die "tidak bisa membaca counter interface (netstat -ib / /proc/net/dev)"; }
+    {
+        _tot_rx=0; _tot_tx=0
+        while read -r _if2 _rx2 _tx2; do
+            _old=$(awk -v i="$_if2" '$1 == i { print $2, $3; exit }' "$_snap1")
+            [ -n "$_old" ] || continue
+            set -- $_old; _rx1=$1; _tx1=$2
+            _drx=$((_rx2 - _rx1)); [ "$_drx" -lt 0 ] && _drx=0
+            _dtx=$((_tx2 - _tx1)); [ "$_dtx" -lt 0 ] && _dtx=0
+            _rxps=$((_drx / _secs)); _txps=$((_dtx / _secs))
+            _tot_rx=$((_tot_rx + _rxps)); _tot_tx=$((_tot_tx + _txps))
+            printf '0;%s;%s;%s;%s\n' "$_if2" "$_rxps" "$_txps" "$((_rxps + _txps))"
+        done < "$_snap2"
+        printf '0;total;%s;%s;%s\n' "$_tot_rx" "$_tot_tx" "$((_tot_rx + _tot_tx))"
+    } | _print_bw_table "Bandwidth (netstat fallback, snapshot $_secs detik, bps — bwm-ng tidak terpasang):"
+    rm -f "$_snap1" "$_snap2"
+    exit 0
+}
+
 cmd_bandwidth() {
     # $1 = durasi detik (opsional, default 1 = satu snapshot)
     _secs=${1:-1}
@@ -218,11 +278,25 @@ cmd_bandwidth() {
     esac
     if [ "$_secs" -lt 1 ]; then die "waktu harus >= 1 detik"; fi
     if [ "$_secs" -gt 3600 ]; then die "waktu maksimal 3600 detik (1 jam)"; fi
-    if ! command -v bwm-ng >/dev/null 2>&1; then
-        die "bwm-ng tidak terpasang (FreeBSD: pkg install net-mgmt/bwm-ng; Debian: apt install bwm-ng)"
+    # Cari bwm-ng di PATH ATAU lokasi absolut umum. Alasan (T3a,
+    # guest r3+r8 25 Nov 2026): bwm-ng-0.6.3_1 ADA di image 0.1.1
+    # (/usr/local/bin/bwm-ng), tapi daemon yang jalan via rc.d/boot
+    # punya PATH minimal tanpa /usr/local/bin — `command -v` saja
+    # gagal dan backend dulu mati dengan "bwm-ng tidak terpasang".
+    # Resolusi absolut membuat jalur bwm-ng tetap dipakai bila
+    # binernya ada; fallback netstat hanya bila benar-benar tak ada.
+    _BWM_BIN=$(command -v bwm-ng 2>/dev/null) || _BWM_BIN=""
+    if [ -z "$_BWM_BIN" ]; then
+        for _p in /usr/local/bin/bwm-ng /usr/bin/bwm-ng; do
+            if [ -x "$_p" ]; then _BWM_BIN="$_p"; break; fi
+        done
+    fi
+    if [ -z "$_BWM_BIN" ]; then
+        # Bukan gagal: fallback sampling counter interface.
+        _netstat_bandwidth "$_secs"
     fi
     if [ "$_secs" -eq 1 ]; then
-        _out=$(bwm-ng -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
+        _out=$("$_BWM_BIN" -o csv -c 1 -t 1000 2>/dev/null) || die "bwm-ng gagal dijalankan"
         if [ -z "$_out" ]; then die "bwm-ng tidak mengembalikan data"; fi
         printf '%s\n' "$_out" | _print_bw_table "Bandwidth (bwm-ng, snapshot 1 detik, bps):"
         exit 0

@@ -6,8 +6,13 @@
 > DIRILIS.** Rilis 0.1.2 baru dilakukan atas perintah user terpisah
 > (perintah 25 Nov 12:00: jangan dirilis dulu sampai API lengkap
 > selesai). API lengkap (semua menu CLI) SUDAH masuk di bawah ini
-> (25 Nov 2026); yang masih menunggu sebelum rilis: verifikasi guest
-> bhyve endpoint-endpoint baru + keputusan user untuk merilis.
+> (25 Nov 2026); verifikasi guest bhyve sweep penuh SUDAH selesai
+> (25 Nov 2026, 101/121 HTTP 200 — lihat `doc/titian-api.md` §13);
+> verifikasi guest ulang SELESAI (ronde 8: T2/T5/T4 + regresi LOLOS;
+> ronde 9: fallback bandwidth T3a/T3b TERBUKTI); yang masih menunggu
+> sebelum rilis: diagnosis flap sesi PPPoE (T1 — diagnosis r7
+> terblokir cek keamanan, butuh persetujuan eksplisit user) +
+> keputusan user untuk merilis.
 
 Rilis titian-api: paket yang sama dengan 0.1.1 ditambah daemon API
 HTTPS+JSON v1 untuk operator BRAS (Fase 2). Versi ini adalah versi
@@ -66,11 +71,26 @@ titian-api sendiri, bukan versi titian 0.1.1 kemarin.
   paginasi, cap 2000 baris, `raw`+`warnings` untuk baris gagal-parse;
   subsistem down → 200 `available: false`, bukan 500). Satu-satunya
   backend baru: subcommand `titian-sys.sh storage`. Mock gabungan
-  (daemon asli + backend stub + HTTPS asli) **212/212 PASS**; verifikasi
-  guest bhyve dengan backend klish asli masih berjalan saat entri ini
-  ditulis. Endpoint tulis tetap yang lama (disconnect/isolate/unisolate);
-  usulan tulis baru dicatat di `doc/titian-api.md` §13, tidak
-  diimplementasikan.
+  (daemon asli + backend stub + HTTPS asli) **213/213 PASS** (sesudah
+  perbaikan pasca-guest di bawah); verifikasi guest bhyve sweep penuh
+  SUDAH selesai 25 Nov 2026 (101/121 HTTP 200 — rincian di
+  `doc/titian-api.md` §13). Endpoint tulis tetap yang lama
+  (disconnect/isolate/unisolate); usulan tulis baru dicatat di
+  `doc/titian-api.md` §13, tidak diimplementasikan.
+
+- **Perbaikan pasca-verifikasi guest (25 Nov 2026)** — `/config/running`
+  tanpa save → 200 `available: false` (bukan 500); `monitoring/bandwidth`
+  fallback sampling counter netstat bila `bwm-ng` tidak terpasang
+  (image 0.1.1); entri ARP `permanent`/`expired` FreeBSD kini ter-parse
+  di `/neighbors`; `/bird/protocols/:name` → 200 `available: false` bila
+  BIRD down (diputuskan, bukan bug), 404 bila BIRD up + nama tak ada.
+  Koreksi lanjutan (commit `40ae9d3`, teruji guest ronde 9): `bwm-ng`
+  ternyata ADA di image (`bwm-ng-0.6.3_1`) — 500 di ronde 3 adalah
+  deteksi PATH-dependent, bukan biner hilang; backend kini meresolusi
+  `bwm-ng` via PATH + lokasi absolut; kolom fallback diperbaiki
+  ($7/$10 → $8/$11 Ibytes/Obytes + kupas `*` enc0) — fallback
+  TERBUKTI: judul fallback + em0 ~71–74 Kbps saat trafik ping, cocok
+  dengan `netstat -ib`.
 
 ### Dokumen (di repo, tidak ikut ter-install paket)
 

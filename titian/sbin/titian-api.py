@@ -1500,9 +1500,22 @@ def ep_config(cfg, which):
                 [sbin("titian-checkpoint.sh"), "dump-running", tmp.name],
                 timeout=30)
             if rc != 0:
-                raise ApiError(500, "internal_error",
-                               "config running gagal: %s"
-                               % sanitize_backend_text(err or out))
+                # dump-running rc != 0 HANYA bila dump live (konf +
+                # batch clish) gagal DAN tidak ada startup-config yang
+                # bisa jadi fallback — yakni router belum pernah
+                # di-save. Itu keadaan, bukan error internal: 200
+                # available false (pola subsystem-down), bukan 500
+                # (T2, guest 25 Nov 2026: fresh guest tanpa save).
+                return 200, {"config_text": "", "lines": 0,
+                             "source": "show running-config",
+                             "available": False,
+                             "note": "dump running-config gagal (live + "
+                                     "fallback startup-config); kemungkinan "
+                                     "belum ada konfigurasi tersimpan — "
+                                     "jalankan commit + save dulu"}, \
+                    {"warnings": [sanitize_backend_text(err or out)]
+                     if (err or out) else [], "truncated": False,
+                     "lines_total": 0, "redacted_lines": 0}
             if "fallback ke startup-config" in (err or ""):
                 warnings.append("dump live gagal — isi dari "
                                 "startup-config (config terakhir yang "
@@ -1923,7 +1936,8 @@ def _parse_neighbors(lines):
         if not s:
             continue
         m = re.match(r"^\?\s+\(([^)]+)\)\s+at\s+(\S+)\s+on\s+(\S+)"
-                     r"\s+expires in\s+(\d+)\s+seconds\s+\[(\w+)\]", s)
+                     r"\s+(?:expires in\s+(\d+)\s+seconds|permanent|expired)"
+                     r"\s+\[(\w+)\]", s)
         if m:
             ip, mac, iface, exp = m.group(1), m.group(2), m.group(3), m.group(4)
             try:
@@ -1931,12 +1945,20 @@ def _parse_neighbors(lines):
                        else "ipv4")
             except ValueError:
                 fam = None
+            if mac == "(incomplete)":
+                state = "incomplete"
+            elif exp is not None:
+                state = "complete"
+            elif "permanent" in s:
+                state = "permanent"
+            else:
+                state = "expired"
             items.append({"ip": ip,
                           "mac": None if mac == "(incomplete)" else mac.lower(),
                           "interface": iface,
-                          "state": ("incomplete" if mac == "(incomplete)"
-                                    else "complete"),
-                          "expires_seconds": int(exp), "family": fam})
+                          "state": state,
+                          "expires_seconds": int(exp) if exp is not None else None,
+                          "family": fam})
             continue
         toks = s.split()
         if len(toks) >= 3 and toks[1] == "dev":

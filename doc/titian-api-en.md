@@ -694,7 +694,10 @@ startup-config fallback); verified read-only from the
 passes). Note: this dump drops stamp lines (`! version` / `! last commit`)
 and ensures the `end` terminator — same as a checkpoint. When the live
 dump fails and falls back to startup-config, `meta.warnings` carries that
-warning.
+warning. When the live dump fails AND there is no startup-config (the
+router has never been saved): 200 with `data.available: false`,
+`config_text: ""`, `lines: 0`, and a `note` telling the operator to run
+commit + save — not a 500 (post-guest-verification fix, 25 Nov 2026, T2).
 
 Redaction MANDATORY: every line matching `/password|secret|token|passwd/i`
 is replaced with `# <redacted>` BEFORE entering the response. Cap 5000 lines
@@ -950,7 +953,7 @@ One neighbor (object):
 | `ip` | string\|null | neighbor IP address |
 | `mac` | string\|null | MAC (`null` for `(incomplete)` / FAILED without lladdr) |
 | `interface` | string\|null | interface |
-| `state` | string\|null | FreeBSD: `complete` \| `incomplete`; Linux: `reachable` \| `stale` \| `delay` \| `probe` \| `failed` \| `incomplete` \| `permanent` \| `noarp` |
+| `state` | string\|null | FreeBSD: `complete` \| `incomplete` \| `permanent` \| `expired`; Linux: `reachable` \| `stale` \| `delay` \| `probe` \| `failed` \| `incomplete` \| `permanent` \| `noarp` |
 | `expires_seconds` | int\|null | remaining ARP entry lifetime (FreeBSD only; Linux `null`) |
 | `family` | string\|null | `ipv4` \| `ipv6` |
 | `raw` | string | only when a line fails to parse |
@@ -1313,6 +1316,11 @@ Schema of `data`: `{"available": true, "protocols": [...],
 
 CLI: `show protocol neighbors`. Backend: `titian-birdc.sh
 show-protocols <name>`. `:name` must be `[A-Za-z0-9_]{1,64}`.
+
+When BIRD is not running: 200 `available: false` for any name (the
+protocol's existence cannot be established — the subsystem-down pattern;
+not a 404). When BIRD is running and the name does not exist: 404
+`not_found` (decision after guest verification, 25 Nov 2026, T4).
 
 Schema of `data.protocol`: the protocol-table fields above +
 
@@ -2043,17 +2051,18 @@ for `pool`/`-`). Pagination applies. Empty → `[]`.
 **IPoE.**
 
 ### 6.90 `GET /api/v1/ipoe` — Tier S
-ASSUMPTION (flagged): `titian-ipoe-acct.py` does NOT exist in sbin-ref
-(only referenced by comments in `titian-dhcp.sh`/`titian-pppoe.sh`), so
-this endpoint is built from `ipoe.conf` (non-secret fields only —
-`radius-secret`/`omapi-key` are never read) + `titian-dhcp.sh
+CONFIRMED (25 Nov 2026): `titian-ipoe-acct.py` EXISTS in repo-root
+`sbin/` (not `titian/sbin/` — the same pattern as the 3 pre-existing
+verify.py errors), installed in the guest at `/opt/titian/sbin/`; the
+daemon's `read_active_leases` is a faithful copy of that script's
+function. This endpoint is built from `ipoe.conf` (non-secret fields
+only — `radius-secret`/`omapi-key` are never read) + `titian-dhcp.sh
 server-status` + the lease file (the same parser as the daemon).
 `data`: `{available: bool, reason: string|null, enabled, interface, pool, dhcpd_running: bool|null, active_leases: int, radius_server, nas_ip, radius_mac_auth: bool, radius_mac_count: int, blocked_mac_count: int}`.
 When `ipoe.conf` is missing → 200 `{"available": false, "reason": "IPoE belum dikonfigurasi (ipoe.conf tidak ada)", ...}`.
-Guest verification required: confirm `ipoe.conf` + `server-status` behave
-the same on a live machine; if `titian-ipoe-acct.py status` turns out to
-exist on kopler, the coordinator may switch the session-status source
-(its format is not yet known).
+Guest verification: `ipoe.conf` + `server-status` behaved the same in
+the guest (HTTP 200); parsing a real lease is still OPEN (needs a real
+DHCP lease).
 
 ### 6.91 `GET /api/v1/ipoe/leases` — Tier S
 Backend: `titian-dhcp.sh list-leases`. `data.leases[]`:
@@ -2082,8 +2091,19 @@ The `total` row is included as interface `"total"`. Live mode (>1 second)
 prints the table repeatedly — the daemon takes the LAST table. bps values
 are decimal (1 Mbps = 1,000,000 bps, per the backend's `fmt_bps`).
 NOTE: a large `seconds` (e.g. 3600) holds the request for that long
-(backend timeout = seconds+10); the web UI should use 1–10 seconds. When
-`bwm-ng` is not installed, the backend fails → 500 `internal_error`.
+(backend timeout = seconds+10); the web UI should use 1–10 seconds.
+`bwm-ng` IS in image 0.1.1 (`bwm-ng-0.6.3_1`, `/usr/local/bin/bwm-ng`);
+the backend resolves bwm-ng via PATH + absolute locations
+(`/usr/local/bin`, `/usr/bin`), so the bwm-ng path is still used even
+when the daemon's PATH (rc.d/boot) lacks `/usr/local/bin` (the root
+cause of the round-3 500 — previously only `command -v` was used).
+When `bwm-ng` is genuinely absent, the backend falls back to sampling
+interface counters (`netstat -ib` on FreeBSD — Ibytes column 8, Obytes
+column 11 — / `/proc/net/dev` on Linux) twice over `seconds` seconds —
+the returned table has the same format (its title marks it "netstat
+fallback"). The fallback is PROVEN in guest round 9 (bwm-ng moved
+aside: fallback title + em0 ~71–74 Kbps under ping traffic, matching
+`netstat -ib`; bwm-ng restored → bwm-ng path again).
 
 **Common errors.**
 401 `unauthorized` (no token) · 403 `forbidden` (wrong token) ·
@@ -2103,13 +2123,16 @@ NOTE: a large `seconds` (e.g. 3600) holds the request for that long
   `kick`/`unblock`; risk: dhcpd restart on kick),
   `POST /api/v1/monitoring/:service` (enable/disable a monitoring intent —
   only records intent + dirty, takes effect on commit; low risk).
-- Verification still waiting on the coordinator (guest bhyve, real backend):
-  the `ipfw pipe/sched/queue show` table format in `statistics` (currently
-  text sections, not parsed columns); `titian-ipoe-acct.py status`
-  (not in sbin-ref — confirm whether it exists on kopler);
+- Guest bhyve verification (25 Nov 2026, real backend) — all 15 D4b
+  endpoints returned HTTP 200 in the full sweep;
+  `traffic-shape/profiles/uji` MATCHED `show traffic-shape profile uji`.
+  Still OPEN: the `ipfw pipe/sched/queue show` table format in
+  `statistics` (currently text sections, not parsed columns);
   `monitoring bandwidth` live mode >1 second (mock only tested a 1-second
-  snapshot); `show-profile` for a profile with a CIDR IP bind (slug
-  contains `-`).
+  snapshot; the netstat fallback's FreeBSD branch is PROVEN in guest
+  round 9 — fallback title + counters ~71–74 Kbps matching `netstat -ib`); `show-profile` for a profile with
+  a CIDR IP bind (slug contains `-`). CONFIRMED: `titian-ipoe-acct.py`
+  EXISTS in repo-root `sbin/` (not `titian/sbin/`).
 
 
 ## 7. Isolation — important notes
@@ -2222,6 +2245,10 @@ removing its line from the config and restarting the service.
   (Phase 2 steps 3+), not part of this document.
 - **PPPoE uptime** is unavailable (`null`) — see §9.
 
-- **Read-all-CLI-menus expansion (25 Nov 2026)** — 87 new GET endpoints (§6.8–6.94): D1 system/config/checkpoints (15), D2 interfaces/IP/routes (10), D3 BIRD/routing-protocols (41), D4a firewall/WireGuard (6), D4b traffic-shape/BRAS/monitoring (15). The API now has 94 endpoints in total (7 old + 87 new). The only new backend is the `titian-sys.sh storage` subcommand. Combined mock suite (real daemon + stub backends + real HTTPS): **212/212 PASS**. Guest bhyve verification with the real klish backend: *awaiting the guest round result — this part will be updated afterwards*.
+- **Read-all-CLI-menus expansion (25 Nov 2026)** — 87 new GET endpoints (§6.8–6.94): D1 system/config/checkpoints (15), D2 interfaces/IP/routes (10), D3 BIRD/routing-protocols (41), D4a firewall/WireGuard (6), D4b traffic-shape/BRAS/monitoring (15). The API now has 94 endpoints in total (7 old + 87 new). The only new backend is the `titian-sys.sh storage` subcommand. Combined mock suite (real daemon + stub backends + real HTTPS): **213/213 PASS** (212 initial + 1 new T2 check; 3 neighbors checks updated for permanent entries).
+- **Guest bhyve verification (25 Nov 2026, real klish backend, daemon `38b84dd9…` = commit `68d32c2`)** — full round-3 sweep: **121 calls, 101×200, 2×400, 1×401, 1×403, 13×404, 3×500**; 93 of 94 route patterns tested directly. 94/94 route patterns are PROVEN tested — the "1 pattern not mapped" in the r3 report was a counting artifact: a literal diff of the test list vs §6 of the doc shows 83 fixed patterns + 8 parametric patterns (tested with concrete values) + 3 POSTs (disconnect/isolate/unisolate, 404) all tested. 401/403/200 smoke checks PASSED every round; the daemon log has no Traceback. The 500s: 1× `/config/running` before save (T2, fixed) + 2× `/monitoring/bandwidth` (T3, fixed — root cause: PATH detection, not a missing binary). Correct 404s: unknown interface/vxlan/wireguard/traffic-profile/service, nonexistent session. BGP Established CANNOT be verified in a standalone guest (needs a live peer — expected). Logs: `guest-verify-full-api-r3.log` (sha256 `5b83f6c3…`), 121 raw bodies in `api-bodies-r3/api-bodies-full/`, report `laporan-akhir-verifikasi-full-api.md` (all under `~/workspace/titian-api-work/`).
+- **Post-guest-verification fixes (commit `ad2a287`, 25 Nov 2026).** T2: `/config/running` with no save → 200 `available: false` (not 500). T3: `monitoring/bandwidth` falls back to netstat counter sampling when bwm-ng is not installed. T5: FreeBSD ARP `permanent`/`expired` entries now parse (`state: permanent`, `expires_seconds: null`) — previously they came back as unparsed `raw`. T4 (decided NOT a bug): `/bird/protocols/:name` → 200 `available: false` when BIRD is down, 404 when BIRD is up and the name is unknown. Mock after the fixes: **213/213 PASS**; verify.py still shows the same 3 pre-existing errors, 0 new. **Repeat guest verification (round 8, 25 Nov ~14:37): T2 ✅** (200 `available: false` when fresh; 200 + redaction after save), **T5 ✅** (permanent parsed, no warning), **T4 ✅** (200 `available: false`, decision confirmed), regression 6/6 ✅, smoke ✅; T1 repeated (see below). **Follow-up fix, commit `40ae9d3` (T3a/T3b):** bwm-ng turned out to BE in the image (`bwm-ng-0.6.3_1`) — the r3 500 was PATH-dependent detection, not a missing binary; the backend now resolves bwm-ng via PATH + absolute locations. Fallback columns fixed ($7/$10 → $8/$11 Ibytes/Obytes + strip the `*` on enc0). **Guest verification round 9 (25 Nov ~15:05): T3a ✅ + T3b ✅ PROVEN** — direct backend run with minimal PATH → bwm-ng title; bwm-ng moved aside → "netstat fallback" title + em0 ~71–74 Kbps under ping traffic (three independent measurements agree; `enc0` now appears in the table); API fallback em0 rx_bps=71740, tx_bps=72490; bwm-ng restored → bwm-ng path again. 20/22 CHECK PASS (2 FAILs are harness grep artifacts, proven not backend).
+- **OPEN — PPPoE session flap in the guest (T1, outside the API daemon).** In the 25 Nov 2026 guest round, a userland `ppp` PPPoE session lived ~2 seconds before the mpd5 server sent Terminate-Request (CCP → IPCP → LCP); `show sessions` was empty, `ngctl` showed no `ppp`/`iface` nodes, and the server emitted no syslog at all. `/sessions` → 200 `[]` is the CORRECT answer (the daemon is exonerated). Consequence: `disconnect`/`isolate`/`unisolate` via the API have NEVER been tested SUCCESSFULLY in this round (always 404 `not_found`) — all three WERE proven successful on 24 Nov 2026 (isolir round, when the session was stable). Targeted diagnosis round 7 was BLOCKED by an execution-risk check before the guest started (explicit user approval is needed to continue running the bhyve/kopler verification scripts); T1 repeated exactly in round 8 (flap ~1–2 s, `Connect time` 34→36). New clues from the r6 log: client syslog `ipcp_InterfaceUp: unable to set ip address` and the server rejecting IPV6CP (`Protocol 0x8057 was rejected`) just before terminate — possible triggers, unproven. Hypotheses H1 (disable bundle compression), H2 (`set iface up`), H3 (direct IPCP ranges) remain UNTESTED. The mpd5 client in a vnet jail also never connected in this round (T7, cause undetermined).
+- **`titian-ipoe-acct.py` — location CONFIRMED (25 Nov 2026).** The file lives in repo-root `sbin/` (not `titian/sbin/` — the same pattern as the 3 pre-existing verify.py errors), installed in the guest at `/opt/titian/sbin/`. The daemon's `read_active_leases` is a faithful copy of the same function in that script (same "last block per IP" logic + lease-block parsing). IPoE lease parsing itself is UNPROVEN (T6 — needs a real DHCP lease in the guest).
+- **Format assumptions still needing guest evidence.** D2: the `titian-show.sh interfaces`/`terse` table format and FreeBSD `netstat -rn`, vxlan FDB lines; the Linux parser branches were only unit-tested (mock §17b), not over HTTP; ARP `permanent`/`expired` entries are PROVEN in the guest (T5). D3: `show route stats`, `show symbols`, OSPF/RIP/LSADB blocks, `show bfd sessions`, the 5-column `show ip bgp`. D4a: the standard `wg show` format. D4b: `traffic-shape statistics` is currently text sections (ipfw columns not parsed — no ipfw format in the reference + the BKT counter quirk); `monitoring/bandwidth` live mode >1 second was only tested as a 1-second snapshot in mock; the netstat fallback's Linux branch was tested directly in the VM, its FreeBSD branch is PROVEN in guest round 9 (fallback title + counters ~71–74 Kbps matching `netstat -ib`).
 - **Proposed write endpoints (OPEN — not implemented in this GET round).** D1: `POST /api/v1/system/sysctl`, `POST /api/v1/checkpoints` (+ rollback/delete), `POST /api/v1/services/:name/restart`. D2: `POST /api/v1/interfaces/:name/tuning`, `POST /api/v1/vxlan*`, `POST /api/v1/bridges*`, `POST /api/v1/routing/static/routes`. D3: `POST /api/v1/bird/protocols/:name/restart|enable|disable`, `POST /api/v1/bird/reload`, `POST /api/v1/frr/reload` (HIGH risk — BIRD/FRR mutual exclusion). D4a: `POST /api/v1/firewall/enable`, `POST /api/v1/firewall/filter|nat` (needs anti-lockout + reason + audit), `POST /api/v1/wireguard/:name/peers` (the private key must never enter a response/log). D4b: `POST /api/v1/traffic-shape/profiles/:name/bind`, `POST|DELETE /api/v1/ipoe/blocked[/:mac]`, `POST /api/v1/monitoring/:service`. All need a reason + audit like disconnect/isolate; config writes stay in klish until decided otherwise.
-- **Format assumptions still needing guest evidence.** D2: the `titian-show.sh interfaces`/`terse` table format, FreeBSD `arp -a` and `netstat -rn`, vxlan FDB lines; the Linux parser branches were only unit-tested (mock §17b), not over HTTP. D3: `show route stats`, `show symbols`, OSPF/RIP/LSADB blocks, `show bfd sessions`, the 5-column `show ip bgp`. D4a: the standard `wg show` format. D4b: `traffic-shape statistics` is currently text sections (ipfw columns not parsed — no ipfw format in the reference + the BKT counter quirk); `/api/v1/ipoe` is built from `ipoe.conf` + `server-status` + the lease file because `titian-ipoe-acct.py` is not in `titian/sbin/` (confirm its location on kopler/guest); `monitoring/bandwidth` live mode >1 second was only tested as a 1-second snapshot in mock.

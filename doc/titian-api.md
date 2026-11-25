@@ -686,7 +686,10 @@ fallback startup-config); sudah diverifikasi read-only dari sumber
 Catatan: dump ini membuang baris stempel (`! version` / `! last commit`)
 dan memastikan terminator `end` — sama seperti checkpoint. Bila dump live
 gagal dan fallback ke startup-config, `meta.warnings` berisi peringatan
-itu.
+itu. Bila dump live gagal DAN tidak ada startup-config (router belum
+pernah di-save): 200 dengan `data.available: false`, `config_text: ""`,
+`lines: 0`, dan `note` berisi arahan commit + save — bukan 500
+(perbaikan pasca-verifikasi guest 25 Nov 2026, T2).
 
 Redaksi WAJIB: tiap baris cocok `/password|secret|token|passwd/i`
 diganti `# <redacted>` SEBELUM masuk respons. Cap 5000 baris
@@ -942,7 +945,7 @@ Satu neighbor (objek):
 | `ip` | string\|null | alamat IP tetangga |
 | `mac` | string\|null | MAC (`null` bila `(incomplete)` / FAILED tanpa lladdr) |
 | `interface` | string\|null | interface |
-| `state` | string\|null | FreeBSD: `complete` \| `incomplete`; Linux: `reachable` \| `stale` \| `delay` \| `probe` \| `failed` \| `incomplete` \| `permanent` \| `noarp` |
+| `state` | string\|null | FreeBSD: `complete` \| `incomplete` \| `permanent` \| `expired`; Linux: `reachable` \| `stale` \| `delay` \| `probe` \| `failed` \| `incomplete` \| `permanent` \| `noarp` |
 | `expires_seconds` | int\|null | sisa umur entri ARP (FreeBSD saja; Linux `null`) |
 | `family` | string\|null | `ipv4` \| `ipv6` |
 | `raw` | string | hanya bila baris gagal di-parse |
@@ -1304,6 +1307,11 @@ Skema `data`: `{"available": true, "protocols": [...],
 
 CLI: `show protocol neighbors`. Backend: `titian-birdc.sh
 show-protocols <nama>`. `:name` harus `[A-Za-z0-9_]{1,64}`.
+
+Bila BIRD tidak jalan: 200 `available: false` untuk nama apa pun
+(keberadaan protokol tidak bisa dipastikan — pola subsystem-down; bukan
+404). Bila BIRD jalan dan nama tidak ada: 404 `not_found` (keputusan
+pasca-verifikasi guest 25 Nov 2026, T4).
 
 Skema `data.protocol`: field tabel protokol di atas +
 
@@ -2033,15 +2041,18 @@ bila `pool`/`-`). Paginasi berlaku. Kosong → `[]`.
 **IPoE.**
 
 ### 6.90 `GET /api/v1/ipoe` — Tier S
-ASUMSI (tandai): `titian-ipoe-acct.py` TIDAK ADA di sbin-ref (hanya dirujuk
-komentar di `titian-dhcp.sh`/`titian-pppoe.sh`), jadi endpoint ini dibangun
-dari `ipoe.conf` (field non-rahasia saja — `radius-secret`/`omapi-key` tidak
-pernah dibaca) + `titian-dhcp.sh server-status` + lease file (parser yang
-sama dengan daemon). `data`: `{available: bool, reason: string|null, enabled, interface, pool, dhcpd_running: bool|null, active_leases: int, radius_server, nas_ip, radius_mac_auth: bool, radius_mac_count: int, blocked_mac_count: int}`.
+TERKONFIRMASI (25 Nov 2026): `titian-ipoe-acct.py` ADA di repo-root
+`sbin/` (bukan `titian/sbin/` — pola yang sama dengan 3 error
+pre-existing verify.py), terpasang di guest di `/opt/titian/sbin/`;
+fungsi `read_active_leases` daemon adalah salinan setia dari fungsi
+yang sama di script itu. Endpoint ini dibangun dari `ipoe.conf` (field
+non-rahasia saja — `radius-secret`/`omapi-key` tidak pernah dibaca) +
+`titian-dhcp.sh server-status` + lease file (parser yang sama dengan
+daemon). `data`: `{available: bool, reason: string|null, enabled, interface, pool, dhcpd_running: bool|null, active_leases: int, radius_server, nas_ip, radius_mac_auth: bool, radius_mac_count: int, blocked_mac_count: int}`.
 Bila `ipoe.conf` tidak ada → 200 `{"available": false, "reason": "IPoE belum dikonfigurasi (ipoe.conf tidak ada)", ...}`.
-Verifikasi guest wajib: pastikan `ipoe.conf` + `server-status` di mesin live
-berperilaku sama; bila `titian-ipoe-acct.py status` ternyata ada di kopler,
-koordinator boleh mengganti sumber status sesi (formatnya belum diketahui).
+Verifikasi guest: `ipoe.conf` + `server-status` berperilaku sama di
+guest (HTTP 200); parsing lease nyata masih TERBUKA (butuh lease DHCP
+nyata).
 
 ### 6.91 `GET /api/v1/ipoe/leases` — Tier S
 Backend: `titian-dhcp.sh list-leases`. `data.leases[]`:
@@ -2070,8 +2081,19 @@ Baris `total` ikut sebagai interface `"total"`. Mode live (>1 detik)
 mencetak tabel berulang — daemon mengambil tabel TERAKHIR. Nilai bps
 dihitung desimal (1 Mbps = 1.000.000 bps, sesuai `fmt_bps` backend).
 CATATAN: `seconds` besar (mis. 3600) menahan request selama itu (timeout
-backend = seconds+10); web UI disarankan memakai 1–10 detik. Bila `bwm-ng`
-tidak terpasang, backend gagal → 500 `internal_error`.
+backend = seconds+10); web UI disarankan memakai 1–10 detik. `bwm-ng` ADA
+di image 0.1.1 (`bwm-ng-0.6.3_1`, `/usr/local/bin/bwm-ng`); backend
+meresolusi bwm-ng via PATH + lokasi absolut (`/usr/local/bin`,
+`/usr/bin`), jadi jalur bwm-ng tetap dipakai walau PATH daemon (rc.d/boot)
+tanpa `/usr/local/bin` (akar 500 di ronde 3 — dulu hanya `command -v`).
+Bila `bwm-ng` benar-benar tak ada, backend memakai fallback sampling
+counter interface (`netstat -ib` di FreeBSD — Ibytes kolom 8, Obytes
+kolom 11 — / `/proc/net/dev` di Linux) 2x selama `seconds` detik — tabel
+yang dikembalikan sama formatnya (judul tabel menandai "netstat
+fallback"). Fallback TERBUKTI di guest ronde 9 (bwm-ng dipindah
+sementara: judul fallback + em0 ~71–74 Kbps saat trafik ping, cocok
+dengan `netstat -ib`; bwm-ng dikembalikan → jalur bwm-ng lagi). Untuk
+update live per detik yang halus, pasang `net-mgmt/bwm-ng`.
 
 **Error umum.**
 401 `unauthorized` (tanpa token) · 403 `forbidden` (token salah) ·
@@ -2091,13 +2113,16 @@ tidak terpasang, backend gagal → 500 `internal_error`.
   sesi; risiko: restart dhcpd saat kick),
   `POST /api/v1/monitoring/:service` (enable/disable intent monitoring —
   hanya mencatat intent + dirty, berlaku saat commit; risiko rendah).
-- Verifikasi yang masih menunggu koordinator (guest bhyve, backend asli):
-  format tabel `ipfw pipe/sched/queue show` di `statistics` (saat ini
-  seksi-teks, bukan kolom ter-parse); `titian-ipoe-acct.py status`
-  (tidak ada di sbin-ref — konfirmasi ada/tidaknya di kopler);
-  `monitoring bandwidth` mode live >1 detik (mock hanya menguji snapshot
-  1 detik); `show-profile` untuk profile dengan bind IP CIDR (slug
-  mengandung `-`).
+- Verifikasi guest bhyve (25 Nov 2026, backend asli) — 15/15 endpoint
+  D4b HTTP 200 di sweep penuh; `traffic-shape/profiles/uji` COCOK dengan
+  `show traffic-shape profile uji`. Masih TERBUKA: format tabel
+  `ipfw pipe/sched/queue show` di `statistics` (saat ini seksi-teks,
+  bukan kolom ter-parse); `monitoring bandwidth` mode live >1 detik
+  (mock hanya menguji snapshot 1 detik; fallback netstat cabang FreeBSD
+  TERBUKTI di guest ronde 9 — judul fallback + counter ~71–74 Kbps
+  cocok dengan `netstat -ib`); `show-profile` untuk
+  profile dengan bind IP CIDR (slug mengandung `-`). TERKONFIRMASI:
+  `titian-ipoe-acct.py` ADA di repo-root `sbin/` (bukan `titian/sbin/`).
 
 
 ## 7. Isolir — catatan penting
@@ -2206,6 +2231,10 @@ menghapus barisnya dari config lalu restart service.
   (Fase 2 langkah 3+), bukan bagian dokumen ini.
 - **Uptime PPPoE** tidak tersedia (`null`) — lihat §9.
 
-- **Perluasan semua-menu CLI (25 Nov 2026)** — 87 endpoint GET baru (§6.8–6.94): D1 system/config/checkpoints (15), D2 interfaces/IP/routes (10), D3 BIRD/routing-protocols (41), D4a firewall/WireGuard (6), D4b traffic-shape/BRAS/monitoring (15). Total API kini 94 endpoint (7 lama + 87 baru). Satu-satunya backend baru: subcommand `titian-sys.sh storage`. Mock gabungan (daemon asli + backend stub + HTTPS asli): **212/212 PASS**. Verifikasi guest bhyve dengan backend klish asli: *menunggu hasil ronde guest — bagian ini diperbarui sesudahnya*.
+- **Perluasan semua-menu CLI (25 Nov 2026)** — 87 endpoint GET baru (§6.8–6.94): D1 system/config/checkpoints (15), D2 interfaces/IP/routes (10), D3 BIRD/routing-protocols (41), D4a firewall/WireGuard (6), D4b traffic-shape/BRAS/monitoring (15). Total API kini 94 endpoint (7 lama + 87 baru). Satu-satunya backend baru: subcommand `titian-sys.sh storage`. Mock gabungan (daemon asli + backend stub + HTTPS asli): **213/213 PASS** (212 awal + 1 check baru T2; 3 check neighbors diperbarui untuk entri permanent).
+- **Verifikasi guest bhyve (25 Nov 2026, backend klish asli, daemon `38b84dd9…` = commit `68d32c2`)** — sweep penuh ronde 3: **121 pemanggilan, 101×200, 2×400, 1×401, 1×403, 13×404, 3×500**; 93 dari 94 pola rute teruji langsung. 94/94 pola rute TERBUKTI teruji — "1 pola belum terpetakan" di laporan r3 adalah artefak hitung: diff literal daftar uji vs §6 dokumen menunjukkan 83 pola fixed + 8 pola parametrik (diuji dengan nilai konkret) + 3 POST (disconnect/isolate/unisolate, 404) semua teruji. Smoke 401/403/200 LOLOS semua ronde; log daemon tanpa Traceback. Yang 500: 1× `/config/running` sebelum save (T2, sudah diperbaiki) + 2× `/monitoring/bandwidth` (T3, sudah diperbaiki — akar: deteksi PATH, bukan biner hilang). 404 yang benar: interface/vxlan/wireguard/traffic-profile/service tak dikenal, sesi tak ada. BGP Established TIDAK bisa diverifikasi di guest standalone (butuh peer live — expected). Log: `guest-verify-full-api-r3.log` (sha256 `5b83f6c3…`), 121 body mentah di `api-bodies-r3/api-bodies-full/`, laporan `laporan-akhir-verifikasi-full-api.md` (semua di `~/workspace/titian-api-work/`).
+- **Perbaikan pasca-verifikasi guest (commit `ad2a287`, 25 Nov 2026).** T2: `/config/running` tanpa save → 200 `available: false` (bukan 500). T3: `monitoring/bandwidth` fallback sampling counter netstat bila bwm-ng tidak terpasang. T5: entri ARP `permanent`/`expired` FreeBSD kini ter-parse (`state: permanent`, `expires_seconds: null`) — sebelumnya jadi `raw`. T4 (diputuskan BUKAN bug): `/bird/protocols/:name` → 200 `available: false` bila BIRD down, 404 bila BIRD up + nama tak ada. Mock sesudah perbaikan: **213/213 PASS**; verify.py tetap 3 error pre-existing yang sama, 0 baru. **Verifikasi guest ulang (ronde 8, 25 Nov ~14:37): T2 ✅** (200 `available: false` fresh; 200 + redaksi sesudah save), **T5 ✅** (permanent ter-parse, tanpa warning), **T4 ✅** (200 `available: false`, keputusan dikonfirmasi), regresi 6/6 ✅, smoke ✅; T1 terulang (lihat di bawah). **Perbaikan lanjutan commit `40ae9d3` (T3a/T3b):** bwm-ng ternyata ADA di image (`bwm-ng-0.6.3_1`) — 500 di r3 adalah deteksi PATH-dependent, bukan biner hilang; backend kini meresolusi bwm-ng via PATH + lokasi absolut. Kolom fallback diperbaiki ($7/$10 → $8/$11 Ibytes/Obytes + kupas `*` enc0). **Verifikasi guest ronde 9 (25 Nov ~15:05): T3a ✅ + T3b ✅ TERBUKTI** — backend langsung PATH minimal → judul bwm-ng; bwm-ng dipindah sementara → judul "netstat fallback" + em0 ~71–74 Kbps saat trafik ping (tiga pengukuran independen sepakat; `enc0` kini muncul di tabel); API fallback em0 rx_bps=71740, tx_bps=72490; bwm-ng dikembalikan → jalur bwm-ng lagi. 20/22 CHECK PASS (2 FAIL artefak grep harness, terbukti bukan backend).
+- **TERBUKA — sesi PPPoE flap di guest (T1, di luar daemon API).** Di ronde guest 25 Nov 2026, sesi PPPoE klien userland `ppp` hidup ~2 detik lalu server mpd5 mengirim Terminate-Request (CCP → IPCP → LCP); `show sessions` kosong, `ngctl` tanpa node `ppp`/`iface`, server tidak mengeluarkan syslog sama sekali. `/sessions` → 200 `[]` adalah jawaban BENAR (daemon dibebaskan). Akibat: `disconnect`/`isolate`/`unisolate` via API BELUM PERNAH teruji BERHASIL di ronde ini (selalu 404 `not_found`) — ketiganya SUDAH terbukti berhasil 24 Nov 2026 (ronde isolir, sesi stabil waktu itu). Diagnosis terarah r7 TERBLOKIR cek keamanan eksekusi sebelum guest dimulai (butuh persetujuan eksplisit user untuk melanjutkan eksekusi skrip verifikasi bhyve/kopler); T1 terulang persis di ronde 8 (flap ~1–2 dtk, `Connect time` 34→36). Petunjuk baru dari log r6: syslog klien `ipcp_InterfaceUp: unable to set ip address` dan server menolak IPV6CP (`Protocol 0x8057 was rejected`) sesaat sebelum terminate — kemungkinan pemicu, belum terbukti. Hipotesis H1 (matikan kompresi bundle), H2 (`set iface up`), H3 (IPCP ranges langsung) tetap BELUM diuji.
+- **`titian-ipoe-acct.py` — lokasi TERKONFIRMASI (25 Nov 2026).** File ini hidup di repo-root `sbin/` (bukan `titian/sbin/` — pola yang sama dengan 3 error pre-existing verify.py), terpasang di `/opt/titian/sbin/` guest. Fungsi `read_active_leases` daemon adalah salinan setia dari fungsi yang sama di script itu (logika "last block per IP" + parsing lease-block sama). Parsing lease IPoE sendiri BELUM terbukti (T6 — butuh lease DHCP nyata di guest).
+- **Asumsi format yang masih butuh bukti guest.** D2: format tabel `titian-show.sh interfaces`/`terse` dan `netstat -rn` FreeBSD, baris FDB vxlan; cabang parser Linux hanya diuji unit (mock §17b), bukan lewat HTTP; entri ARP `permanent`/`expired` SUDAH terbukti di guest (T5). D3: format `show route stats`, `show symbols`, blok OSPF/RIP/LSADB, `show bfd sessions`, `show ip bgp` 5 kolom. D4a: format `wg show` standar. D4b: `traffic-shape statistics` saat ini seksi-teks (kolom ipfw tidak di-parse — format ipfw tidak ada di referensi + quirk counter BKT); `monitoring/bandwidth` mode live >1 detik hanya diuji snapshot 1 detik di mock; fallback netstat cabang Linux diuji langsung di VM, cabang FreeBSD TERBUKTI di guest ronde 9 (judul fallback + counter ~71–74 Kbps cocok dengan `netstat -ib`).
 - **Usulan endpoint tulis (TERBUKA — tidak diimplementasikan di ronde GET ini).** D1: `POST /api/v1/system/sysctl`, `POST /api/v1/checkpoints` (+ rollback/delete), `POST /api/v1/services/:name/restart`. D2: `POST /api/v1/interfaces/:name/tuning`, `POST /api/v1/vxlan*`, `POST /api/v1/bridges*`, `POST /api/v1/routing/static/routes`. D3: `POST /api/v1/bird/protocols/:name/restart|enable|disable`, `POST /api/v1/bird/reload`, `POST /api/v1/frr/reload` (risiko TINGGI — mutual exclusion BIRD/FRR). D4a: `POST /api/v1/firewall/enable`, `POST /api/v1/firewall/filter|nat` (butuh anti-lockout + reason + audit), `POST /api/v1/wireguard/:name/peers` (private key tidak boleh masuk respons/log). D4b: `POST /api/v1/traffic-shape/profiles/:name/bind`, `POST|DELETE /api/v1/ipoe/blocked[/:mac]`, `POST /api/v1/monitoring/:service`. Semua butuh alasan + audit seperti disconnect/isolate; tulis konfigurasi tetap lewat klish sampai diputuskan.
-- **Asumsi format yang masih butuh bukti guest.** D2: format tabel `titian-show.sh interfaces`/`terse`, `arp -a` dan `netstat -rn` FreeBSD, baris FDB vxlan; cabang parser Linux hanya diuji unit (mock §17b), bukan lewat HTTP. D3: format `show route stats`, `show symbols`, blok OSPF/RIP/LSADB, `show bfd sessions`, `show ip bgp` 5 kolom. D4a: format `wg show` standar. D4b: `traffic-shape statistics` saat ini seksi-teks (kolom ipfw tidak di-parse — format ipfw tidak ada di referensi + quirk counter BKT); `/api/v1/ipoe` dibangun dari `ipoe.conf` + `server-status` + lease file karena `titian-ipoe-acct.py` tidak ada di `titian/sbin/` (perlu konfirmasi lokasi di kopler/guest); `monitoring/bandwidth` mode live >1 detik hanya diuji snapshot 1 detik di mock.
