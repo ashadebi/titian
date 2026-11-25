@@ -2,17 +2,14 @@
 
 ## 0.1.2 — 2026-11-25
 
-> **Status: masih terbuka (work in progress) — BELUM FINAL, BELUM
-> DIRILIS.** Rilis 0.1.2 baru dilakukan atas perintah user terpisah
-> (perintah 25 Nov 12:00: jangan dirilis dulu sampai API lengkap
-> selesai). API lengkap (semua menu CLI) SUDAH masuk di bawah ini
-> (25 Nov 2026); verifikasi guest bhyve sweep penuh SUDAH selesai
-> (25 Nov 2026, 101/121 HTTP 200 — lihat `doc/titian-api.md` §13);
-> verifikasi guest ulang SELESAI (ronde 8: T2/T5/T4 + regresi LOLOS;
-> ronde 9: fallback bandwidth T3a/T3b TERBUKTI); yang masih menunggu
-> sebelum rilis: diagnosis flap sesi PPPoE (T1 — diagnosis r7
-> terblokir cek keamanan, butuh persetujuan eksplisit user) +
-> keputusan user untuk merilis.
+> **Status: FINAL — DIRILIS 25 Nov 2026.** API lengkap (semua menu
+> CLI) SUDAH masuk di bawah ini (25 Nov 2026); verifikasi guest
+> bhyve sweep penuh SUDAH selesai (25 Nov 2026, 101/121 HTTP 200 —
+> lihat `doc/titian-api.md` §13); verifikasi guest ulang SELESAI
+> (ronde 8: T2/T5/T4 + regresi LOLOS; ronde 9: fallback bandwidth
+> T3a/T3b TERBUKTI). Catatan jujur: T1 (flap sesi PPPoE di guest)
+> masih TERBUKA saat rilis — diagnosis berjalan terpisah, bukan
+> blocker rilis karena sesi stabil di produksi 24 Nov.
 
 Rilis titian-api: paket yang sama dengan 0.1.1 ditambah daemon API
 HTTPS+JSON v1 untuk operator BRAS (Fase 2). Versi ini adalah versi
